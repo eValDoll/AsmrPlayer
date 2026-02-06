@@ -1,0 +1,402 @@
+package com.asmr.player.ui.library
+
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ElevatedCard
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.material3.SuggestionChip
+import androidx.compose.material3.SuggestionChipDefaults
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.dp
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import com.asmr.player.domain.model.Album
+import com.asmr.player.data.remote.NetworkHeaders
+import com.asmr.player.ui.common.rememberDominantColor
+
+import com.asmr.player.ui.theme.AsmrTheme
+
+@Composable
+@OptIn(ExperimentalFoundationApi::class)
+fun AlbumItem(
+    album: Album,
+    onClick: () -> Unit,
+    onLongClick: (() -> Unit)? = null,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    val colorScheme = AsmrTheme.colorScheme
+    val data = album.coverThumbPath.ifBlank { album.coverPath }.ifEmpty { album.coverUrl }
+    val imageModel = remember(data) {
+        if (data.startsWith("http", ignoreCase = true) && data.contains("dlsite", ignoreCase = true)) {
+            ImageRequest.Builder(context)
+                .data(data)
+                .addHeader("Referer", NetworkHeaders.REFERER_DLSITE)
+                .addHeader("User-Agent", NetworkHeaders.USER_AGENT)
+                .addHeader("Accept-Language", NetworkHeaders.ACCEPT_LANGUAGE)
+                .build()
+        } else {
+            data
+        }
+    }
+    val coverSize = 92.dp
+
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 4.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(colorScheme.surface.copy(alpha = 0.5f))
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick
+            )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = coverSize),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(coverSize)
+                    .clip(RoundedCornerShape(16.dp))
+            ) {
+                AsyncImage(
+                    model = imageModel,
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
+                )
+            }
+
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(top = 8.dp, bottom = 8.dp, end = 12.dp),
+                verticalArrangement = Arrangement.Center
+            ) {
+                val rj = album.rjCode.ifBlank { album.workId }
+                Text(
+                    text = album.title,
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                    color = colorScheme.textPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (rj.isNotBlank()) {
+                        Text(
+                            text = rj,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = colorScheme.primary,
+                            modifier = Modifier
+                                .background(colorScheme.primaryContainer, RoundedCornerShape(4.dp))
+                                .padding(horizontal = 4.dp, vertical = 2.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                    }
+                    if (album.circle.isNotBlank()) {
+                        Text(
+                            text = album.circle,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = colorScheme.primary.copy(alpha = 0.8f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+
+                if (album.cv.isNotBlank()) {
+                    Text(
+                        text = "CV：${album.cv}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = colorScheme.textSecondary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+
+                val statsText = buildString {
+                    val rv = album.ratingValue
+                    if (rv != null && rv > 0.0) {
+                        append("★")
+                        append(String.format("%.1f", rv))
+                        if (album.ratingCount > 0) append("(${album.ratingCount})")
+                    }
+                    if (album.dlCount > 0) {
+                        if (isNotEmpty()) append(" · ")
+                        append("DL ${album.dlCount}")
+                    }
+                    if (album.priceJpy > 0) {
+                        if (isNotEmpty()) append(" · ")
+                        append("¥${album.priceJpy}")
+                    }
+                    if (album.releaseDate.isNotBlank()) {
+                        if (isNotEmpty()) append(" · ")
+                        append(album.releaseDate)
+                    }
+                }
+                if (statsText.isNotBlank()) {
+                    Text(
+                        text = statsText,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = colorScheme.textTertiary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+
+                if (album.tags.isNotEmpty()) {
+                    Row(
+                        modifier = Modifier
+                            .padding(top = 4.dp)
+                            .fillMaxWidth()
+                            .clipToBounds()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        album.tags.forEach { tag ->
+                            Text(
+                                text = tag,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = colorScheme.primary.copy(alpha = 0.7f),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier
+                                    .widthIn(max = 200.dp)
+                                    .background(colorScheme.primary.copy(alpha = 0.08f), RoundedCornerShape(4.dp))
+                                    .padding(horizontal = 4.dp, vertical = 1.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        
+        if (album.hasAsmrOne) {
+            CollectedStamp(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(8.dp)
+            )
+        }
+    }
+}
+
+@Composable
+@OptIn(ExperimentalLayoutApi::class, ExperimentalFoundationApi::class)
+fun AlbumGridItem(
+    album: Album,
+    onClick: () -> Unit,
+    onLongClick: (() -> Unit)? = null,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    val colorScheme = AsmrTheme.colorScheme
+    val data = album.coverThumbPath.ifBlank { album.coverPath }.ifEmpty { album.coverUrl }
+    val imageModel = remember(data) {
+        if (data.startsWith("http", ignoreCase = true) && data.contains("dlsite", ignoreCase = true)) {
+            ImageRequest.Builder(context)
+                .data(data)
+                .addHeader("Referer", "https://www.dlsite.com/")
+                .addHeader(
+                    "User-Agent",
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                )
+                .addHeader("Accept-Language", NetworkHeaders.ACCEPT_LANGUAGE)
+                .build()
+        } else {
+            data
+        }
+    }
+
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(20.dp))
+            .background(colorScheme.surface.copy(alpha = 0.3f))
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick
+            )
+    ) {
+        Box(modifier = Modifier.fillMaxWidth().aspectRatio(1f)) {
+            AsyncImage(
+                model = imageModel,
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(20.dp)),
+                contentScale = ContentScale.Crop
+            )
+            
+            val rj = album.rjCode.ifBlank { album.workId }
+            if (rj.isNotBlank()) {
+                Text(
+                    text = rj,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.White,
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(8.dp)
+                        .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(4.dp))
+                        .padding(horizontal = 4.dp, vertical = 2.dp)
+                )
+            }
+
+            if (album.releaseDate.isNotBlank()) {
+                Text(
+                    text = album.releaseDate,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.White,
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(8.dp)
+                        .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(4.dp))
+                        .padding(horizontal = 4.dp, vertical = 2.dp)
+                )
+            }
+
+            if (album.hasAsmrOne) {
+                CollectedStamp(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(8.dp)
+                )
+            }
+        }
+        
+        Column(
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text(
+                text = album.title,
+                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                color = colorScheme.textPrimary,
+                overflow = TextOverflow.Clip
+            )
+            
+            if (album.circle.isNotBlank()) {
+                Text(
+                    text = album.circle,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = colorScheme.primary.copy(alpha = 0.8f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            if (album.cv.isNotBlank()) {
+                Text(
+                    text = "CV：${album.cv}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = colorScheme.textSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            val statsText = buildString {
+                val rv = album.ratingValue
+                if (rv != null && rv > 0.0) {
+                    append("★")
+                    append(String.format("%.1f", rv))
+                    if (album.ratingCount > 0) append("(${album.ratingCount})")
+                }
+                if (album.priceJpy > 0) {
+                    if (isNotEmpty()) append(" · ")
+                    append("¥${album.priceJpy}")
+                }
+            }
+            if (statsText.isNotBlank()) {
+                Text(
+                    text = statsText,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = colorScheme.textTertiary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            if (album.tags.isNotEmpty()) {
+                FlowRow(
+                    modifier = Modifier.padding(top = 2.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    album.tags.forEach { tag ->
+                        Text(
+                            text = tag,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = colorScheme.primary.copy(alpha = 0.7f),
+                            modifier = Modifier
+                                .background(colorScheme.primary.copy(alpha = 0.08f), RoundedCornerShape(4.dp))
+                                .padding(horizontal = 4.dp, vertical = 1.dp)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CollectedStamp(modifier: Modifier = Modifier) {
+    val dangerColor = AsmrTheme.colorScheme.danger
+    Box(
+        modifier = modifier
+            .rotate(15f)
+            .background(dangerColor.copy(alpha = 0.85f), RoundedCornerShape(4.dp))
+            .padding(horizontal = 6.dp, vertical = 2.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = "收录",
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+            color = Color.White
+        )
+    }
+}

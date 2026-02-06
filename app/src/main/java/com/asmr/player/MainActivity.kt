@@ -1,0 +1,1303 @@
+package com.asmr.player
+
+import android.os.Bundle
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
+import androidx.activity.compose.setContent
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.filled.AccessTime
+import androidx.compose.material.icons.filled.Audiotrack
+import androidx.compose.material.icons.filled.CloudDownload
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
+import android.content.pm.ActivityInfo
+import android.content.res.Configuration
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
+import androidx.compose.material3.*
+import androidx.compose.material3.windowsizeclass.ExperimentalMaterial3WindowSizeClassApi
+import androidx.compose.material3.windowsizeclass.WindowHeightSizeClass
+import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
+import androidx.compose.material3.windowsizeclass.WindowSizeClass
+import androidx.compose.material3.windowsizeclass.calculateWindowSizeClass
+import androidx.compose.runtime.*
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.navigation.NavHostController
+import androidx.navigation.NavType
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
+import com.asmr.player.ui.library.AlbumDetailScreen
+import com.asmr.player.ui.library.AlbumDetailUiState
+import com.asmr.player.ui.library.AlbumDetailViewModel
+import com.asmr.player.ui.library.LibraryScreen
+import com.asmr.player.ui.library.LibraryViewModel
+import com.asmr.player.ui.library.BulkPhase
+import com.asmr.player.ui.player.MiniPlayer
+import com.asmr.player.ui.player.NowPlayingScreen
+import com.asmr.player.ui.player.PlayerViewModel
+import com.asmr.player.ui.player.LyricsPage
+import com.asmr.player.ui.common.rememberDominantColorCenterWeighted
+import com.asmr.player.ui.downloads.DownloadsScreen
+import com.asmr.player.ui.dlsite.DlsiteLoginScreen
+import com.asmr.player.ui.playlists.PlaylistDetailScreen
+import com.asmr.player.ui.playlists.PlaylistPickerScreen
+import com.asmr.player.ui.playlists.PlaylistsScreen
+import com.asmr.player.ui.playlists.SystemPlaylistScreen
+import com.asmr.player.ui.search.SearchScreen
+import com.asmr.player.ui.search.SearchViewModel
+import com.asmr.player.domain.model.SearchSource
+import com.asmr.player.ui.settings.SettingsScreen
+import com.asmr.player.ui.common.glassMenu
+import com.asmr.player.ui.drawer.DrawerStatusViewModel
+import com.asmr.player.ui.drawer.StatisticsViewModel
+import com.asmr.player.ui.drawer.SiteStatus
+import com.asmr.player.ui.drawer.SiteStatusType
+import com.asmr.player.ui.nav.AppNavigator
+import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.launch
+import java.net.URLDecoder
+import java.net.URLEncoder
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import com.asmr.player.ui.theme.AsmrPlayerTheme
+import com.asmr.player.ui.theme.AsmrTheme
+import coil.compose.AsyncImage
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.graphics.graphicsLayer
+import android.os.Build
+import android.graphics.RenderEffect
+import android.graphics.Shader
+import androidx.compose.ui.graphics.asComposeRenderEffect
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.animation.*
+import androidx.compose.animation.core.tween
+
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.material.icons.automirrored.filled.QueueMusic
+import com.asmr.player.ui.player.QueueSheetContent
+
+import com.asmr.player.data.local.datastore.SettingsDataStore
+import com.asmr.player.util.MessageManager
+import com.asmr.player.ui.common.AppMessageOverlay
+import com.asmr.player.ui.common.VisibleAppMessage
+import com.asmr.player.ui.theme.HuePalette
+import com.asmr.player.ui.theme.PlayerTheme
+import com.asmr.player.ui.theme.ThemeMode
+import com.asmr.player.ui.theme.DefaultBrandPrimaryDark
+import com.asmr.player.ui.theme.DefaultBrandPrimaryLight
+import com.asmr.player.ui.theme.deriveHuePalette
+import com.asmr.player.ui.theme.neutralPaletteForMode
+import com.asmr.player.ui.theme.rememberDynamicHuePalette
+import javax.inject.Inject
+import kotlinx.coroutines.delay
+
+@AndroidEntryPoint
+class MainActivity : ComponentActivity() {
+    @Inject
+    lateinit var messageManager: MessageManager
+
+    @Inject
+    lateinit var settingsDataStore: SettingsDataStore
+
+    @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3WindowSizeClassApi::class)
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContent {
+            val windowSizeClass = calculateWindowSizeClass(this)
+            val playerViewModel: PlayerViewModel = hiltViewModel()
+            val libraryViewModel: LibraryViewModel = hiltViewModel()
+            val playback by playerViewModel.playback.collectAsState()
+            val systemDark = isSystemInDarkTheme()
+            val themePref by settingsDataStore.theme.collectAsState(initial = "system")
+            val mode = when (themePref.lowercase()) {
+                "light" -> ThemeMode.Light
+                "soft_dark" -> ThemeMode.SoftDark
+                "dark" -> ThemeMode.Dark
+                "system" -> if (systemDark) ThemeMode.Dark else ThemeMode.Light
+                else -> if (systemDark) ThemeMode.Dark else ThemeMode.Light
+            }
+            val artworkUri = playback.currentMediaItem?.mediaMetadata?.artworkUri
+            val globalDynamicHueEnabled by settingsDataStore.dynamicPlayerHueEnabled.collectAsState(initial = false)
+            val staticHueArgb by settingsDataStore.staticHueArgb.collectAsState(initial = null)
+            val coverBackgroundEnabled by settingsDataStore.coverBackgroundEnabled.collectAsState(initial = true)
+            val coverBackgroundClarity by settingsDataStore.coverBackgroundClarity.collectAsState(initial = 0.35f)
+            val neutral = remember(mode) { neutralPaletteForMode(mode) }
+            val staticHue: HuePalette? = remember(staticHueArgb, mode, neutral) {
+                staticHueArgb?.let { argb ->
+                    deriveHuePalette(
+                        primary = Color(argb),
+                        mode = mode,
+                        neutral = neutral,
+                        fallbackOnPrimary = if (mode.isDark) Color.White else Color.Black
+                    )
+                }
+            }
+            val baseStaticHue = remember(mode, neutral, staticHue) {
+                staticHue ?: deriveHuePalette(
+                    primary = if (mode.isDark) DefaultBrandPrimaryDark else DefaultBrandPrimaryLight,
+                    mode = mode,
+                    neutral = neutral,
+                    fallbackOnPrimary = if (mode.isDark) Color.White else Color.Black
+                )
+            }
+            val globalHue = if (globalDynamicHueEnabled) {
+                val dynamicHue by rememberDynamicHuePalette(
+                    artworkModel = artworkUri,
+                    mode = mode,
+                    neutral = neutral,
+                    fallbackHue = baseStaticHue
+                )
+                dynamicHue
+            } else {
+                baseStaticHue
+            }
+
+            var showQueue by remember { mutableStateOf(false) }
+
+            val visibleMessages = remember { mutableStateListOf<VisibleAppMessage>() }
+            val recentMessageAtMs = remember { linkedMapOf<String, Long>() }
+            val dismissJobs = remember { linkedMapOf<Long, kotlinx.coroutines.Job>() }
+            var messageSeq by remember { mutableLongStateOf(0L) }
+
+            LaunchedEffect(Unit) {
+                messageManager.messages.collect { appMessage ->
+                    val normalized = appMessage.message.trim()
+                    if (normalized.isBlank()) return@collect
+                    val dedupeKey = "${appMessage.type.name}|$normalized"
+                    val now = System.currentTimeMillis()
+                    recentMessageAtMs[dedupeKey] = now
+                    val displayMs = appMessage.durationMs.coerceIn(1500L, 4500L)
+
+                    val existingIndex = visibleMessages.indexOfFirst { it.type == appMessage.type && it.message == normalized }
+                    if (existingIndex >= 0) {
+                        val oldId = visibleMessages[existingIndex].id
+                        dismissJobs.remove(oldId)?.cancel()
+                        val id = ++messageSeq
+                        visibleMessages[existingIndex] = VisibleAppMessage(id = id, message = normalized, type = appMessage.type)
+                        dismissJobs[id] = launch {
+                            delay(displayMs)
+                            visibleMessages.removeAll { it.id == id }
+                            dismissJobs.remove(id)
+                        }
+                        return@collect
+                    }
+
+                    val id = ++messageSeq
+                    visibleMessages.add(VisibleAppMessage(id = id, message = normalized, type = appMessage.type))
+                    while (visibleMessages.size > 2) {
+                        val removed = visibleMessages.removeAt(0)
+                        dismissJobs.remove(removed.id)?.cancel()
+                    }
+                    dismissJobs[id] = launch {
+                        delay(displayMs)
+                        visibleMessages.removeAll { it.id == id }
+                        dismissJobs.remove(id)
+                    }
+                }
+            }
+
+            AsmrPlayerTheme(mode = mode, hue = globalHue) {
+                Box(modifier = Modifier.fillMaxSize()) {
+                    MainContainer(
+                        windowSizeClass = windowSizeClass,
+                        playerViewModel = playerViewModel,
+                        libraryViewModel = libraryViewModel,
+                        onShowQueue = { showQueue = true },
+                        visibleMessages = visibleMessages,
+                        mode = mode,
+                        globalDynamicHueEnabled = globalDynamicHueEnabled,
+                        coverBackgroundEnabled = coverBackgroundEnabled,
+                        coverBackgroundClarity = coverBackgroundClarity,
+                        baseStaticHue = baseStaticHue
+                    )
+                    
+                    if (showQueue) {
+                        val screenHeight = androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp.dp
+                        val sheetHeight = screenHeight * 3 / 4
+                        val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+                        ModalBottomSheet(
+                            onDismissRequest = { showQueue = false },
+                            sheetState = sheetState,
+                            modifier = Modifier.height(sheetHeight)
+                        ) {
+                            if (globalDynamicHueEnabled) {
+                                QueueSheetContent(
+                                    viewModel = playerViewModel,
+                                    onDismiss = { showQueue = false }
+                                )
+                            } else {
+                                QueueSheetContent(
+                                    viewModel = playerViewModel,
+                                    onDismiss = { showQueue = false }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+@OptIn(ExperimentalMaterial3Api::class)
+fun MainContainer(
+    windowSizeClass: WindowSizeClass,
+    playerViewModel: PlayerViewModel,
+    libraryViewModel: LibraryViewModel,
+    onShowQueue: () -> Unit,
+    visibleMessages: List<VisibleAppMessage>,
+    mode: ThemeMode,
+    globalDynamicHueEnabled: Boolean,
+    coverBackgroundEnabled: Boolean,
+    coverBackgroundClarity: Float,
+    baseStaticHue: HuePalette
+) {
+    val navController = rememberNavController()
+    val navigator = remember(navController) { AppNavigator(navController) }
+    val navBackStackEntry by navController.currentBackStackEntryAsState()
+    val currentRoute = navBackStackEntry?.destination?.route
+    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+    val scope = rememberCoroutineScope()
+    val playback by playerViewModel.playback.collectAsState()
+    val artworkUri = playback.currentMediaItem?.mediaMetadata?.artworkUri
+    val drawerStatusViewModel: DrawerStatusViewModel = hiltViewModel()
+    val statisticsViewModel: StatisticsViewModel = hiltViewModel()
+    val bulkProgress by libraryViewModel.bulkProgress.collectAsState()
+    var showManualRjDialog by remember { mutableStateOf(false) }
+    var manualRjInput by remember { mutableStateOf("") }
+    
+    val configuration = LocalConfiguration.current
+    val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+    // 使用 smallestScreenWidthDp 判定是否为手机 (一般 < 600dp 为手机)
+    val isPhone = configuration.smallestScreenWidthDp < 600
+    val context = LocalContext.current
+    val activity = remember(context) { context.findActivity() }
+    val immersivePlayer = currentRoute == "now_playing" || currentRoute == "lyrics"
+
+    val defaultSystemUi = remember(activity) {
+        activity?.let { act ->
+            val controller = WindowInsetsControllerCompat(act.window, act.window.decorView)
+            DefaultSystemUiState(
+                statusBarColor = act.window.statusBarColor,
+                navigationBarColor = act.window.navigationBarColor,
+                lightStatusBars = controller.isAppearanceLightStatusBars,
+                lightNavigationBars = controller.isAppearanceLightNavigationBars
+            )
+        }
+    }
+
+    DisposableEffect(activity, immersivePlayer) {
+        val act = activity ?: return@DisposableEffect onDispose { }
+        val window = act.window
+        val controller = WindowInsetsControllerCompat(window, window.decorView)
+        if (immersivePlayer) {
+            WindowCompat.setDecorFitsSystemWindows(window, false)
+            controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            controller.hide(WindowInsetsCompat.Type.systemBars())
+            window.statusBarColor = android.graphics.Color.TRANSPARENT
+            window.navigationBarColor = android.graphics.Color.TRANSPARENT
+            controller.isAppearanceLightStatusBars = false
+            controller.isAppearanceLightNavigationBars = false
+        } else {
+            WindowCompat.setDecorFitsSystemWindows(window, true)
+            controller.show(WindowInsetsCompat.Type.systemBars())
+            defaultSystemUi?.let { ui ->
+                window.statusBarColor = ui.statusBarColor
+                window.navigationBarColor = ui.navigationBarColor
+                controller.isAppearanceLightStatusBars = ui.lightStatusBars
+                controller.isAppearanceLightNavigationBars = ui.lightNavigationBars
+            }
+        }
+        onDispose {
+            val act2 = activity ?: return@onDispose
+            val window2 = act2.window
+            val controller2 = WindowInsetsControllerCompat(window2, window2.decorView)
+            WindowCompat.setDecorFitsSystemWindows(window2, true)
+            controller2.show(WindowInsetsCompat.Type.systemBars())
+            defaultSystemUi?.let { ui ->
+                window2.statusBarColor = ui.statusBarColor
+                window2.navigationBarColor = ui.navigationBarColor
+                controller2.isAppearanceLightStatusBars = ui.lightStatusBars
+                controller2.isAppearanceLightNavigationBars = ui.lightNavigationBars
+            }
+        }
+    }
+
+    // 屏幕旋转管理逻辑
+    LaunchedEffect(currentRoute, isPhone) {
+        activity?.let { act ->
+            if (isPhone) {
+                if (currentRoute == "now_playing" || currentRoute == "lyrics") {
+                    // 手机端在播放页和歌词页允许横屏 (由传感器决定)
+                    act.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR
+                } else {
+                    // 手机端其他页面强制锁定竖屏
+                    act.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+                }
+            } else {
+                // 平板端始终允许旋转
+                act.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR
+            }
+        }
+    }
+
+    val colorScheme = AsmrTheme.colorScheme
+    val surfaceColor = colorScheme.surface
+    
+    val topBarContainerColor = Color.Transparent
+    val topBarContentColor = colorScheme.onSurface
+    
+    val drawerContainerColor = surfaceColor
+
+    BackHandler(drawerState.isOpen) {
+        scope.launch { drawerState.close() }
+    }
+
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        gesturesEnabled = true,
+        drawerContent = {
+            Box(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .width(300.dp)
+                    .glassMenu(baseColor = drawerContainerColor.copy(alpha = 0.9f))
+            ) {
+                ModalDrawerSheet(
+                    drawerContainerColor = Color.Transparent,
+                    drawerContentColor = colorScheme.onSurface,
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    val itemSelectedContainerColor = colorScheme.onSurface.copy(alpha = 0.1f)
+                    val itemContentColor = colorScheme.onSurface
+                    val itemSecondaryColor = itemContentColor.copy(alpha = 0.6f)
+                    val itemColors = NavigationDrawerItemDefaults.colors(
+                        unselectedContainerColor = Color.Transparent,
+                        selectedContainerColor = itemSelectedContainerColor,
+                        unselectedTextColor = itemSecondaryColor,
+                        selectedTextColor = itemContentColor,
+                        unselectedIconColor = itemSecondaryColor,
+                        selectedIconColor = itemContentColor
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        "ASMR Player",
+                        modifier = Modifier.padding(horizontal = 28.dp, vertical = 16.dp),
+                        style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
+                        color = colorScheme.onSurface
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
+                    val navItems = listOf(
+                        Triple(Icons.Default.Home, "本地库", "library"),
+                        Triple(Icons.Default.Search, "在线搜索", "search"),
+                        Triple(Icons.Default.Favorite, "我的收藏", "playlist_system/favorites"),
+                        Triple(Icons.AutoMirrored.Filled.QueueMusic, "我的列表", "playlists"),
+                        Triple(Icons.Default.Download, "下载管理", "downloads"),
+                        Triple(Icons.Default.Settings, "设置", "settings"),
+                        Triple(Icons.Default.Person, "DLsite 登录", "dlsite_login")
+                    )
+
+                    navItems.forEach { (icon, label, route) ->
+                        val isAlbumDetailFromSearch =
+                            currentRoute?.startsWith("album_detail_rj") == true ||
+                                currentRoute?.startsWith("album_detail_online") == true
+                        val isAlbumDetailFromLibrary =
+                            currentRoute?.startsWith("album_detail/") == true &&
+                                currentRoute?.startsWith("album_detail_rj") != true
+                        val isSelected = when (route) {
+                            "library" -> currentRoute == route || isAlbumDetailFromLibrary
+                            "search" -> currentRoute == route || isAlbumDetailFromSearch
+                            else -> currentRoute == route
+                        }
+                        NavigationDrawerItem(
+                            icon = { Icon(icon, contentDescription = null) },
+                            label = { Text(label) },
+                            selected = isSelected,
+                            colors = itemColors,
+                            modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding),
+                            onClick = {
+                                navController.navigateSingleTop(route, popUpToRoute = "library")
+                                scope.launch { drawerState.close() }
+                            }
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.weight(1f))
+
+                    DailyStatisticsFooter(statisticsViewModel, modifier = Modifier.padding(horizontal = 18.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
+                    DrawerSiteStatusFooter(drawerStatusViewModel, modifier = Modifier.padding(horizontal = 18.dp))
+                    Spacer(modifier = Modifier.height(18.dp))
+                }
+            }
+        }
+    ) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(colorScheme.background.copy(alpha = 0.88f))
+            )
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(colorScheme.primarySoft.copy(alpha = 0.16f))
+            )
+
+            Scaffold(
+                containerColor = Color.Transparent,
+                contentColor = colorScheme.onBackground,
+                topBar = {
+                    if (currentRoute != "now_playing" && currentRoute != "lyrics") {
+                        Column {
+                            CenterAlignedTopAppBar(
+                                title = {
+                                    Text(
+                                        when {
+                                            currentRoute == "library" -> "本地库"
+                                            currentRoute == "search" -> "在线搜索"
+                                            currentRoute == "playlists" -> "我的列表"
+                                            currentRoute == "settings" -> "设置"
+                                            currentRoute == "downloads" -> "下载管理"
+                                            currentRoute == "dlsite_login" -> "DLsite 登录"
+                                            currentRoute?.startsWith("playlist_picker") == true -> "添加到我的列表"
+                                            currentRoute?.startsWith("album_detail") == true -> "专辑详情"
+                                            else -> "ASMR Player"
+                                        },
+                                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
+                                    )
+                                },
+                                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                                    containerColor = Color.Transparent,
+                                    titleContentColor = topBarContentColor,
+                                    navigationIconContentColor = topBarContentColor,
+                                    actionIconContentColor = topBarContentColor
+                                ),
+                                navigationIcon = {
+                                    if (currentRoute?.startsWith("playlist_picker") == true) {
+                                        IconButton(onClick = { navController.popBackStack() }) {
+                                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
+                                        }
+                                    } else {
+                                        IconButton(onClick = { scope.launch { drawerState.open() } }) {
+                                            Icon(Icons.Default.Menu, contentDescription = null)
+                                        }
+                                    }
+                                },
+                                actions = {
+                                    val entry = navBackStackEntry
+                                    if (currentRoute == "library") {
+                                        val viewMode by libraryViewModel.libraryViewMode.collectAsState()
+                                        if (viewMode != null) {
+                                            var viewMenuExpanded by remember { mutableStateOf(false) }
+                                            Box {
+                                                val normalized = (viewMode ?: 0).coerceIn(0, 2)
+                                                val icon = when (normalized) {
+                                                    1 -> Icons.Default.GridView
+                                                    2 -> Icons.Default.Audiotrack
+                                                    else -> Icons.Default.ViewList
+                                                }
+                                                IconButton(onClick = { viewMenuExpanded = true }) {
+                                                    Icon(imageVector = icon, contentDescription = "切换视图")
+                                                }
+                                                DropdownMenu(
+                                                    expanded = viewMenuExpanded,
+                                                    onDismissRequest = { viewMenuExpanded = false }
+                                                ) {
+                                                    DropdownMenuItem(
+                                                        text = { Text("专辑列表") },
+                                                        onClick = {
+                                                            viewMenuExpanded = false
+                                                            libraryViewModel.setLibraryViewMode(0)
+                                                        }
+                                                    )
+                                                    DropdownMenuItem(
+                                                        text = { Text("专辑卡片") },
+                                                        onClick = {
+                                                            viewMenuExpanded = false
+                                                            libraryViewModel.setLibraryViewMode(1)
+                                                        }
+                                                    )
+                                                    DropdownMenuItem(
+                                                        text = { Text("音轨列表") },
+                                                        onClick = {
+                                                            viewMenuExpanded = false
+                                                            libraryViewModel.setLibraryViewMode(2)
+                                                        }
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    } else if (entry != null && currentRoute == "search") {
+                                        val searchViewModel: SearchViewModel = hiltViewModel(entry)
+                                        val viewMode by searchViewModel.viewMode.collectAsState()
+                                        IconButton(onClick = { searchViewModel.setViewMode(if (viewMode == 1) 0 else 1) }) {
+                                            Icon(
+                                                imageVector = if (viewMode == 1) Icons.Default.ViewList else Icons.Default.ViewModule,
+                                                contentDescription = null
+                                            )
+                                        }
+                                    } else if (entry != null && (
+                                        currentRoute?.startsWith("album_detail/{albumId}") == true ||
+                                            currentRoute?.startsWith("album_detail/") == true
+                                        )
+                                    ) {
+                                        val albumDetailViewModel: AlbumDetailViewModel = hiltViewModel(entry)
+                                        val detailState by albumDetailViewModel.uiState.collectAsState()
+                                        val showManualBind = (detailState as? AlbumDetailUiState.Success)?.model?.let { m ->
+                                            val local = m.localAlbum
+                                            local != null && local.id > 0L
+                                        } == true
+                                        if (showManualBind) {
+                                            IconButton(
+                                                onClick = {
+                                                    val currentRj = (detailState as? AlbumDetailUiState.Success)?.model?.let { m ->
+                                                        val local = m.localAlbum
+                                                        m.rjCode.trim()
+                                                            .ifBlank { local?.rjCode?.trim().orEmpty() }
+                                                            .ifBlank { local?.workId?.trim().orEmpty() }
+                                                    }.orEmpty()
+                                                    manualRjInput = currentRj
+                                                    showManualRjDialog = true
+                                                }
+                                            ) {
+                                                Icon(Icons.Default.Edit, contentDescription = "手动输入RJ号")
+                                            }
+                                        }
+                                    }
+                                }
+                            )
+
+                            val p = bulkProgress
+                            if (currentRoute == "library" && p?.phase == BulkPhase.ScanningLocal) {
+                                if (p.total > 0) {
+                                    LinearProgressIndicator(
+                                        progress = { p.fraction },
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                } else {
+                                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                                }
+                            }
+                        }
+                    }
+                },
+                bottomBar = {
+                    if (currentRoute != "now_playing" && currentRoute != "lyrics") {
+                        if (globalDynamicHueEnabled) {
+                            MiniPlayer(
+                                onClick = {
+                                    if (currentRoute != "now_playing") {
+                                        navController.navigateSingleTop("now_playing")
+                                    }
+                                },
+                                onOpenQueue = onShowQueue
+                            )
+                        } else {
+                            MiniPlayer(
+                                onClick = {
+                                    if (currentRoute != "now_playing") {
+                                        navController.navigateSingleTop("now_playing")
+                                    }
+                                },
+                                onOpenQueue = onShowQueue
+                            )
+                        }
+                    }
+                }
+            ) { padding ->
+                NavHost(
+                    navController = navController,
+                    startDestination = "library",
+                    modifier = Modifier.padding(padding)
+                ) {
+
+                composable("library") {
+                    LibraryScreen(
+                        windowSizeClass = windowSizeClass,
+                        onAlbumClick = { album ->
+                            navigator.openAlbumDetail(
+                                albumId = album.id,
+                                rj = null
+                            )
+                        },
+                        onPlayTracks = { album, tracks, startTrack ->
+                            playerViewModel.playTracks(album, tracks, startTrack)
+                            navController.navigateSingleTop("now_playing")
+                        },
+                        onOpenPlaylistPicker = { mediaId, uri, title, artist, artworkUri ->
+                            navController.navigateSingleTop(
+                                "playlist_picker" +
+                                    "?mediaId=${encodeRouteArg(mediaId)}" +
+                                    "&uri=${encodeRouteArg(uri)}" +
+                                    "&title=${encodeRouteArg(title)}" +
+                                    "&artist=${encodeRouteArg(artist)}" +
+                                    "&artworkUri=${encodeRouteArg(artworkUri)}"
+                            )
+                        },
+                        viewModel = libraryViewModel
+                    )
+                }
+                composable("search") {
+                    SearchScreen(
+                        windowSizeClass = windowSizeClass,
+                        onAlbumClick = { album ->
+                            navigator.openAlbumDetail(
+                                albumId = album.id,
+                                rj = album.rjCode.ifBlank { album.workId }
+                            )
+                        }
+                    )
+                }
+                composable(
+                    route = "album_detail_rj/{rj}",
+                    arguments = listOf(navArgument("rj") { defaultValue = "" })
+                ) { backStackEntry ->
+                    val rj = backStackEntry.arguments?.getString("rj").orEmpty()
+                    val refreshToken by backStackEntry.savedStateHandle.getStateFlow("refreshToken", 0L).collectAsState()
+                    AlbumDetailScreen(
+                        windowSizeClass = windowSizeClass,
+                        rjCode = rj,
+                        refreshToken = refreshToken,
+                        onConsumeRefreshToken = { backStackEntry.savedStateHandle["refreshToken"] = 0L },
+                        onPlayTracks = { album, tracks, startTrack ->
+                            playerViewModel.playTracks(album, tracks, startTrack)
+                            navController.navigateSingleTop("now_playing")
+                        },
+                        onAddToQueue = { album, track ->
+                            playerViewModel.addTrackToQueue(album, track)
+                        },
+                        onOpenPlaylistPicker = { mediaId, uri, title, artist, artworkUri ->
+                            navController.navigateSingleTop(
+                                "playlist_picker" +
+                                    "?mediaId=${encodeRouteArg(mediaId)}" +
+                                    "&uri=${encodeRouteArg(uri)}" +
+                                    "&title=${encodeRouteArg(title)}" +
+                                    "&artist=${encodeRouteArg(artist)}" +
+                                    "&artworkUri=${encodeRouteArg(artworkUri)}"
+                            )
+                        },
+                        onPlayVideo = { title, uriOrPath, artwork, artist ->
+                            playerViewModel.playVideo(title, uriOrPath, artwork, artist)
+                            navController.navigateSingleTop("now_playing")
+                        },
+                        onOpenDlsiteLogin = { navController.navigateSingleTop("dlsite_login") },
+                        onOpenAlbumByRj = { navigator.openAlbumDetailByRjStacked(it) }
+                    )
+                }
+                composable(
+                    route = "album_detail/{albumId}?rjCode={rjCode}",
+                    arguments = listOf(
+                        navArgument("albumId") { type = NavType.LongType },
+                        navArgument("rjCode") { type = NavType.StringType; nullable = true; defaultValue = null }
+                    )
+                ) { backStackEntry ->
+                    val albumId = backStackEntry.arguments?.getLong("albumId") ?: 0L
+                    val rjCode = backStackEntry.arguments?.getString("rjCode")
+                    val refreshToken by backStackEntry.savedStateHandle.getStateFlow("refreshToken", 0L).collectAsState()
+                    AlbumDetailScreen(
+                        windowSizeClass = windowSizeClass,
+                        albumId = albumId,
+                        rjCode = rjCode,
+                        refreshToken = refreshToken,
+                        onConsumeRefreshToken = { backStackEntry.savedStateHandle["refreshToken"] = 0L },
+                        onPlayTracks = { album, tracks, startTrack ->
+                            playerViewModel.playTracks(album, tracks, startTrack)
+                            navController.navigateSingleTop("now_playing")
+                        },
+                        onAddToQueue = { album, track ->
+                            playerViewModel.addTrackToQueue(album, track)
+                        },
+                        onOpenPlaylistPicker = { mediaId, uri, title, artist, artworkUri ->
+                            navController.navigateSingleTop(
+                                "playlist_picker" +
+                                    "?mediaId=${encodeRouteArg(mediaId)}" +
+                                    "&uri=${encodeRouteArg(uri)}" +
+                                    "&title=${encodeRouteArg(title)}" +
+                                    "&artist=${encodeRouteArg(artist)}" +
+                                    "&artworkUri=${encodeRouteArg(artworkUri)}"
+                            )
+                        },
+                        onPlayVideo = { title, uriOrPath, artwork, artist ->
+                            playerViewModel.playVideo(title, uriOrPath, artwork, artist)
+                            navController.navigateSingleTop("now_playing")
+                        },
+                        onOpenDlsiteLogin = { navController.navigateSingleTop("dlsite_login") },
+                        onOpenAlbumByRj = { navigator.openAlbumDetailByRjStacked(it) }
+                    )
+                }
+                composable(
+                    route = "album_detail_online/{rj}",
+                    arguments = listOf(navArgument("rj") { defaultValue = "" })
+                ) { backStackEntry ->
+                    val rj = backStackEntry.arguments?.getString("rj").orEmpty()
+                    val refreshToken by backStackEntry.savedStateHandle.getStateFlow("refreshToken", 0L).collectAsState()
+                    AlbumDetailScreen(
+                        windowSizeClass = windowSizeClass,
+                        rjCode = rj,
+                        refreshToken = refreshToken,
+                        onConsumeRefreshToken = { backStackEntry.savedStateHandle["refreshToken"] = 0L },
+                        onPlayTracks = { album, tracks, startTrack ->
+                            playerViewModel.playTracks(album, tracks, startTrack)
+                            navController.navigateSingleTop("now_playing")
+                        },
+                        onAddToQueue = { album, track ->
+                            playerViewModel.addTrackToQueue(album, track)
+                        },
+                        onOpenPlaylistPicker = { mediaId, uri, title, artist, artworkUri ->
+                            navController.navigateSingleTop(
+                                "playlist_picker" +
+                                    "?mediaId=${encodeRouteArg(mediaId)}" +
+                                    "&uri=${encodeRouteArg(uri)}" +
+                                    "&title=${encodeRouteArg(title)}" +
+                                    "&artist=${encodeRouteArg(artist)}" +
+                                    "&artworkUri=${encodeRouteArg(artworkUri)}"
+                            )
+                        },
+                        onPlayVideo = { title, uriOrPath, artwork, artist ->
+                            playerViewModel.playVideo(title, uriOrPath, artwork, artist)
+                            navController.navigateSingleTop("now_playing")
+                        },
+                        onOpenDlsiteLogin = { navController.navigateSingleTop("dlsite_login") },
+                        onOpenAlbumByRj = { navigator.openAlbumDetailByRjStacked(it) }
+                    )
+                }
+                composable(
+                    route = "album_detail_online/{source}/{workId}",
+                    arguments = listOf(
+                        navArgument("source") { defaultValue = SearchSource.DLSite.name },
+                        navArgument("workId") { defaultValue = "" }
+                    )
+                ) { backStackEntry ->
+                    val workId = backStackEntry.arguments?.getString("workId").orEmpty()
+                    LaunchedEffect(workId) {
+                        if (workId.isNotBlank()) {
+                            navController.navigate("album_detail_online/$workId") {
+                                launchSingleTop = true
+                                popUpTo("album_detail_online/{source}/{workId}") { inclusive = true }
+                            }
+                        } else {
+                            navController.popBackStack()
+                        }
+                    }
+                }
+                composable(
+                    route = "now_playing",
+                    enterTransition = {
+                        slideInVertically(initialOffsetY = { it }, animationSpec = tween(400)) + fadeIn(animationSpec = tween(400))
+                    },
+                    exitTransition = {
+                        slideOutVertically(targetOffsetY = { it }, animationSpec = tween(400)) + fadeOut(animationSpec = tween(400))
+                    }
+                ) {
+                    if (globalDynamicHueEnabled) {
+                        NowPlayingScreen(
+                            windowSizeClass = windowSizeClass,
+                            onBack = { navController.popBackStack() },
+                            onOpenLyrics = { navController.navigateSingleTop("lyrics") },
+                            onShowQueue = onShowQueue,
+                            onOpenPlaylistPicker = { mediaId, uri, title, artist, artworkUri ->
+                                navController.navigateSingleTop(
+                                    "playlist_picker" +
+                                        "?mediaId=${encodeRouteArg(mediaId)}" +
+                                        "&uri=${encodeRouteArg(uri)}" +
+                                        "&title=${encodeRouteArg(title)}" +
+                                        "&artist=${encodeRouteArg(artist)}" +
+                                        "&artworkUri=${encodeRouteArg(artworkUri)}"
+                                )
+                            },
+                            viewModel = playerViewModel,
+                            coverBackgroundEnabled = coverBackgroundEnabled,
+                            coverBackgroundClarity = coverBackgroundClarity
+                        )
+                    } else {
+                        NowPlayingScreen(
+                            windowSizeClass = windowSizeClass,
+                            onBack = { navController.popBackStack() },
+                            onOpenLyrics = { navController.navigateSingleTop("lyrics") },
+                            onShowQueue = onShowQueue,
+                            onOpenPlaylistPicker = { mediaId, uri, title, artist, artworkUri ->
+                                navController.navigateSingleTop(
+                                    "playlist_picker" +
+                                        "?mediaId=${encodeRouteArg(mediaId)}" +
+                                        "&uri=${encodeRouteArg(uri)}" +
+                                        "&title=${encodeRouteArg(title)}" +
+                                        "&artist=${encodeRouteArg(artist)}" +
+                                        "&artworkUri=${encodeRouteArg(artworkUri)}"
+                                )
+                            },
+                            viewModel = playerViewModel,
+                            coverBackgroundEnabled = coverBackgroundEnabled,
+                            coverBackgroundClarity = coverBackgroundClarity
+                        )
+                    }
+                }
+                composable("lyrics") {
+                    if (globalDynamicHueEnabled) {
+                        LyricsPage(
+                            onBack = { navController.popBackStack() },
+                            onSeekTo = { pos -> playerViewModel.seekTo(pos) },
+                            playerViewModel = playerViewModel,
+                            coverBackgroundEnabled = coverBackgroundEnabled,
+                            coverBackgroundClarity = coverBackgroundClarity
+                        )
+                    } else {
+                        LyricsPage(
+                            onBack = { navController.popBackStack() },
+                            onSeekTo = { pos -> playerViewModel.seekTo(pos) },
+                            playerViewModel = playerViewModel,
+                            coverBackgroundEnabled = coverBackgroundEnabled,
+                            coverBackgroundClarity = coverBackgroundClarity
+                        )
+                    }
+                }
+                composable("playlists") {
+                    PlaylistsScreen(
+                        windowSizeClass = windowSizeClass,
+                        onPlaylistClick = { playlist ->
+                            val encoded = URLEncoder.encode(playlist.name, "UTF-8")
+                            navController.navigateSingleTop("playlist/${playlist.id}/$encoded")
+                        }
+                    )
+                }
+                composable(
+                    route = "playlist/{playlistId}/{playlistName}",
+                    arguments = listOf(
+                        navArgument("playlistId") { type = NavType.LongType; defaultValue = 0L },
+                        navArgument("playlistName") { defaultValue = "" }
+                    )
+                ) { backStackEntry ->
+                    val playlistId = backStackEntry.arguments?.getLong("playlistId") ?: 0L
+                    val playlistName = backStackEntry.arguments?.getString("playlistName").orEmpty()
+                    PlaylistDetailScreen(
+                        windowSizeClass = windowSizeClass,
+                        playlistId = playlistId,
+                        title = playlistName,
+                        onPlayAll = { items, startItem ->
+                            playerViewModel.playPlaylistItems(items, startItem)
+                            navController.navigateSingleTop("now_playing")
+                        }
+                    )
+                }
+                composable("playlist_system/{type}") { backStackEntry ->
+                    val type = backStackEntry.arguments?.getString("type").orEmpty()
+                    SystemPlaylistScreen(
+                        windowSizeClass = windowSizeClass,
+                        type = type,
+                        onPlayAll = { items, startItem ->
+                            playerViewModel.playPlaylistItems(items, startItem)
+                            navController.navigateSingleTop("now_playing")
+                        }
+                    )
+                }
+                composable(
+                    route = "playlist_picker?mediaId={mediaId}&uri={uri}&title={title}&artist={artist}&artworkUri={artworkUri}",
+                    arguments = listOf(
+                        navArgument("mediaId") { defaultValue = "" },
+                        navArgument("uri") { defaultValue = "" },
+                        navArgument("title") { defaultValue = "" },
+                        navArgument("artist") { defaultValue = "" },
+                        navArgument("artworkUri") { defaultValue = "" }
+                    )
+                ) { backStackEntry ->
+                    val mediaId = decodeRouteArg(backStackEntry.arguments?.getString("mediaId").orEmpty())
+                    val uri = decodeRouteArg(backStackEntry.arguments?.getString("uri").orEmpty())
+                    val title = decodeRouteArg(backStackEntry.arguments?.getString("title").orEmpty())
+                    val artist = decodeRouteArg(backStackEntry.arguments?.getString("artist").orEmpty())
+                    val artworkUri = decodeRouteArg(backStackEntry.arguments?.getString("artworkUri").orEmpty())
+                    PlaylistPickerScreen(
+                        windowSizeClass = windowSizeClass,
+                        mediaId = mediaId,
+                        uri = uri,
+                        title = title,
+                        artist = artist,
+                        artworkUri = artworkUri,
+                        onBack = { navController.popBackStack() }
+                    )
+                }
+                composable("settings") {
+                    SettingsScreen(
+                        windowSizeClass = windowSizeClass,
+                        libraryViewModel = libraryViewModel
+                    )
+                }
+                composable("downloads") {
+                    DownloadsScreen(windowSizeClass = windowSizeClass)
+                }
+                composable("dlsite_login") {
+                    DlsiteLoginScreen(
+                        windowSizeClass = windowSizeClass,
+                        onDone = { navController.popBackStack() }
+                    )
+                }
+            }
+            }
+
+            if (showManualRjDialog && navBackStackEntry != null &&
+                (currentRoute?.startsWith("album_detail/{albumId}") == true || currentRoute?.startsWith("album_detail/") == true)
+            ) {
+                val albumDetailViewModel: AlbumDetailViewModel = hiltViewModel(navBackStackEntry!!)
+                AlertDialog(
+                    onDismissRequest = { showManualRjDialog = false },
+                    title = { Text("手动绑定 RJ") },
+                    text = {
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Text("请输入 RJ 号，保存后将自动执行云同步。", style = MaterialTheme.typography.bodySmall)
+                            OutlinedTextField(
+                                value = manualRjInput,
+                                onValueChange = { manualRjInput = it },
+                                singleLine = true,
+                                label = { Text("RJ号（如 RJ123456）") },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                    },
+                    confirmButton = {
+                        TextButton(
+                            onClick = {
+                                showManualRjDialog = false
+                                albumDetailViewModel.manualSetRjAndSync(manualRjInput)
+                            }
+                        ) { Text("同步") }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showManualRjDialog = false }) { Text("取消") }
+                    }
+                )
+            }
+
+            if (visibleMessages.isNotEmpty() && !immersivePlayer) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 80.dp),
+                    contentAlignment = Alignment.BottomCenter
+                ) {
+                    AppMessageOverlay(messages = visibleMessages)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DrawerSiteStatusFooter(
+    viewModel: DrawerStatusViewModel,
+    modifier: Modifier = Modifier
+) {
+    val colorScheme = AsmrTheme.colorScheme
+    val dlsite by viewModel.dlsite.collectAsState()
+    val asmr by viewModel.asmr.collectAsState()
+    val site by viewModel.asmrOneSite.collectAsState()
+    var expanded by remember { mutableStateOf(false) }
+
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        DrawerSiteRow(
+            name = "dlsite.com",
+            status = dlsite,
+            onTest = { viewModel.testDlsite() }
+        )
+        
+        DrawerSiteRow(
+            status = asmr,
+            onTest = { viewModel.testAsmrOne() },
+            nameContent = {
+                Box {
+                    Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(4.dp))
+                            .clickable { expanded = true }
+                            .padding(horizontal = 4.dp, vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(
+                            text = "asmr-$site",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = colorScheme.textPrimary,
+                            maxLines = 1
+                        )
+                        Icon(
+                            imageVector = Icons.Default.ArrowDropDown,
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp),
+                            tint = colorScheme.textSecondary
+                        )
+                    }
+
+                    DropdownMenu(
+                        expanded = expanded,
+                        onDismissRequest = { expanded = false }
+                    ) {
+                        listOf(100, 200, 300).forEach { opt ->
+                            val selected = opt == site
+                            DropdownMenuItem(
+                                text = { Text(opt.toString()) },
+                                onClick = {
+                                    viewModel.setAsmrOneSite(opt)
+                                    expanded = false
+                                },
+                                leadingIcon = {
+                                    if (selected) {
+                                        Icon(
+                                            imageVector = Icons.Default.Check,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(18.dp),
+                                            tint = colorScheme.primary
+                                        )
+                                    } else {
+                                        Spacer(modifier = Modifier.size(18.dp))
+                                    }
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+        )
+    }
+}
+
+@Composable
+private fun DrawerSiteRow(
+    status: SiteStatus,
+    onTest: () -> Unit,
+    name: String? = null,
+    nameContent: (@Composable RowScope.() -> Unit)? = null,
+    trailing: (@Composable () -> Unit)? = null
+) {
+    val colorScheme = AsmrTheme.colorScheme
+    val dotColor = when (status.type) {
+        SiteStatusType.Ok -> {
+            val latency = status.latencyMs ?: 0L
+            when {
+                latency < 500 -> Color(0xFF2E7D32) // 绿色 (500ms以下)
+                latency < 1000 -> Color(0xFFF9A825) // 黄色 (500ms - 1000ms)
+                else -> Color(0xFFEF6C00) // 橙色 (1000ms以上)
+            }
+        }
+        SiteStatusType.Fail -> Color(0xFFC62828) // 红色 (无法连接)
+        SiteStatusType.Testing -> Color(0xFFF9A825)
+        SiteStatusType.Unknown -> colorScheme.onSurface.copy(alpha = 0.35f)
+    }
+    val latencyText = when (status.type) {
+        SiteStatusType.Ok -> "${status.latencyMs}ms"
+        SiteStatusType.Testing -> "测试中"
+        SiteStatusType.Fail -> "失败"
+        SiteStatusType.Unknown -> "未测试"
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(colorScheme.surface.copy(alpha = 0.35f))
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(10.dp)
+                .clip(CircleShape)
+                .background(dotColor)
+        )
+        
+        if (name != null) {
+            Text(
+                text = name,
+                style = MaterialTheme.typography.bodyMedium,
+                color = colorScheme.textPrimary,
+                maxLines = 1
+            )
+        } else if (nameContent != null) {
+            nameContent()
+        }
+
+        Spacer(modifier = Modifier.weight(1f))
+        Text(
+            text = latencyText,
+            style = MaterialTheme.typography.bodySmall,
+            color = colorScheme.textSecondary,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.widthIn(max = 60.dp)
+        )
+        TextButton(
+            onClick = onTest,
+            modifier = Modifier.height(32.dp),
+            contentPadding = PaddingValues(horizontal = 8.dp)
+        ) { 
+            Text("测试", style = MaterialTheme.typography.labelMedium) 
+        }
+        if (trailing != null) {
+            Box(modifier = Modifier.height(32.dp)) {
+                trailing()
+            }
+        }
+    }
+}
+
+@Composable
+private fun DailyStatisticsFooter(
+    viewModel: StatisticsViewModel,
+    modifier: Modifier = Modifier
+) {
+    val stats by viewModel.todayStats.collectAsState()
+    val colorScheme = AsmrTheme.colorScheme
+
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(colorScheme.surface.copy(alpha = 0.35f))
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text(
+            "今日收听统计",
+            style = MaterialTheme.typography.labelSmall,
+            color = colorScheme.textSecondary,
+            modifier = Modifier.padding(start = 4.dp)
+        )
+        
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceAround
+        ) {
+            StatItem(
+                icon = Icons.Default.AccessTime,
+                label = "时长",
+                value = formatStatsDuration(stats?.listeningDurationMs ?: 0L)
+            )
+            StatItem(
+                icon = Icons.Default.Audiotrack,
+                label = "音轨",
+                value = "${stats?.trackCount ?: 0}"
+            )
+            StatItem(
+                icon = Icons.Default.CloudDownload,
+                label = "流量",
+                value = formatStatsTraffic(stats?.networkTrafficBytes ?: 0L)
+            )
+        }
+    }
+}
+
+@Composable
+private fun StatItem(icon: ImageVector, label: String, value: String) {
+    val colorScheme = AsmrTheme.colorScheme
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Icon(
+            icon,
+            contentDescription = null,
+            modifier = Modifier.size(16.dp),
+            tint = colorScheme.textSecondary
+        )
+        Text(
+            value,
+            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+            color = colorScheme.textPrimary
+        )
+        Text(
+            label,
+            style = MaterialTheme.typography.labelSmall,
+            color = colorScheme.textSecondary,
+            fontSize = 10.sp
+        )
+    }
+}
+
+private fun formatStatsDuration(ms: Long): String {
+    val totalSeconds = ms / 1000
+    val minutes = totalSeconds / 60
+    val hours = minutes / 60
+    return if (hours > 0) {
+        "${hours}h${minutes % 60}m"
+    } else {
+        "${minutes}m"
+    }
+}
+
+private fun formatStatsTraffic(bytes: Long): String {
+    return when {
+        bytes >= 1024 * 1024 * 1024 -> String.format("%.1fG", bytes / (1024.0 * 1024 * 1024))
+        bytes >= 1024 * 1024 -> String.format("%.1fM", bytes / (1024.0 * 1024))
+        bytes >= 1024 -> String.format("%.1fK", bytes / 1024.0)
+        else -> "${bytes}B"
+    }
+}
+
+private fun encodeRouteArg(value: String): String = URLEncoder.encode(value, "UTF-8")
+
+private fun decodeRouteArg(value: String): String = runCatching { URLDecoder.decode(value, "UTF-8") }
+    .getOrDefault(value)
+
+private fun NavHostController.navigateSingleTop(route: String, popUpToRoute: String? = null) {
+    navigate(route) {
+        launchSingleTop = true
+        restoreState = true
+        if (!popUpToRoute.isNullOrBlank()) {
+            popUpTo(popUpToRoute) {
+                saveState = true
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SmallTopAppBar(
+    title: @Composable () -> Unit,
+    navigationIcon: @Composable () -> Unit
+) {
+    TopAppBar(
+        title = title,
+        navigationIcon = navigationIcon
+    )
+}
+
+private data class DefaultSystemUiState(
+    val statusBarColor: Int,
+    val navigationBarColor: Int,
+    val lightStatusBars: Boolean,
+    val lightNavigationBars: Boolean
+)
+
+private fun Context.findActivity(): Activity? {
+    var context = this
+    while (context is ContextWrapper) {
+        if (context is Activity) return context
+        context = context.baseContext
+    }
+    return null
+}
