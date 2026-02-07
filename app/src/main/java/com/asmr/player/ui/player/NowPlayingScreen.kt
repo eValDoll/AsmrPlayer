@@ -112,7 +112,11 @@ fun NowPlayingScreen(
     val dominantColor = if (dominantColorState == colorScheme.background) colorScheme.primary else dominantColorState
     val accentColor = if (coverBackgroundEnabled) dominantColor else colorScheme.primary
     val onAccentColor = if (accentColor.luminance() > 0.55f) Color.Black else Color.White
-    val progressDurationMs = if (resolvedDurationMs > 0L) resolvedDurationMs else playback.durationMs
+    val progressDurationMs = when {
+        playback.durationMs > 0L && resolvedDurationMs > 0L -> maxOf(playback.durationMs, resolvedDurationMs)
+        playback.durationMs > 0L -> playback.durationMs
+        else -> resolvedDurationMs
+    }
     
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
@@ -221,13 +225,15 @@ fun NowPlayingScreen(
                             )
                         }
                         
-                        PlayerProgress(
-                            positionMs = playback.positionMs,
-                            durationMs = progressDurationMs,
-                            onSeekTo = { viewModel.seekTo(it) },
-                            activeColor = accentColor,
-                            inactiveColor = accentColor.copy(alpha = 0.2f)
-                        )
+                        key(item?.mediaId) {
+                            PlayerProgress(
+                                positionMs = playback.positionMs,
+                                durationMs = progressDurationMs,
+                                onSeekTo = { viewModel.seekTo(it) },
+                                activeColor = accentColor,
+                                inactiveColor = accentColor.copy(alpha = 0.2f)
+                            )
+                        }
                     }
 
                     // 右侧：信息与控制区
@@ -402,13 +408,15 @@ fun NowPlayingScreen(
                             )
                         }
 
-                        PlayerProgress(
-                            positionMs = playback.positionMs,
-                            durationMs = progressDurationMs,
-                            onSeekTo = { viewModel.seekTo(it) },
-                            activeColor = accentColor,
-                            inactiveColor = accentColor.copy(alpha = 0.2f)
-                        )
+                        key(item?.mediaId) {
+                            PlayerProgress(
+                                positionMs = playback.positionMs,
+                                durationMs = progressDurationMs,
+                                onSeekTo = { viewModel.seekTo(it) },
+                                activeColor = accentColor,
+                                inactiveColor = accentColor.copy(alpha = 0.2f)
+                            )
+                        }
                     }
 
                     // 右侧：歌词 + 控制
@@ -618,13 +626,15 @@ fun NowPlayingScreen(
                         )
                     }
 
-                    PlayerProgress(
-                        positionMs = playback.positionMs,
-                        durationMs = progressDurationMs,
-                        onSeekTo = { viewModel.seekTo(it) },
-                        activeColor = accentColor,
-                        inactiveColor = accentColor.copy(alpha = 0.2f)
-                    )
+                    key(item?.mediaId) {
+                        PlayerProgress(
+                            positionMs = playback.positionMs,
+                            durationMs = progressDurationMs,
+                            onSeekTo = { viewModel.seekTo(it) },
+                            activeColor = accentColor,
+                            inactiveColor = accentColor.copy(alpha = 0.2f)
+                        )
+                    }
 
                     PlaybackControls(
                         playback = playback,
@@ -1400,6 +1410,7 @@ private fun PlayerProgress(
         ScrubbableSeekBar(
             enabled = rangeDuration > 0L,
             fraction = sliderValue.coerceIn(0f, 1f),
+            rangeDurationMs = rangeDuration,
             activeColor = activeColor,
             inactiveColor = inactiveColor,
             onScrubStart = { f ->
@@ -1443,6 +1454,7 @@ private fun PlayerProgress(
 private fun ScrubbableSeekBar(
     enabled: Boolean,
     fraction: Float,
+    rangeDurationMs: Long,
     activeColor: Color,
     inactiveColor: Color,
     onScrubStart: (Float) -> Unit,
@@ -1450,7 +1462,7 @@ private fun ScrubbableSeekBar(
     onScrubStop: (Float) -> Unit
 ) {
     val f = fraction.coerceIn(0f, 1f)
-    var lastFraction by remember { mutableFloatStateOf(f) }
+    var lastFraction by remember(f) { mutableFloatStateOf(f) }
 
     val thumbRadius = 8.dp
     val trackHeight = 4.dp
@@ -1459,7 +1471,7 @@ private fun ScrubbableSeekBar(
         modifier = Modifier
             .fillMaxWidth()
             .height(32.dp)
-            .pointerInput(enabled) {
+            .pointerInput(enabled, rangeDurationMs) {
                 if (!enabled) return@pointerInput
                 val thumbRadiusPx = thumbRadius.toPx()
                 detectTapGestures { offset ->
@@ -1473,7 +1485,7 @@ private fun ScrubbableSeekBar(
                     onScrubStop(nf)
                 }
             }
-            .pointerInput(enabled) {
+            .pointerInput(enabled, rangeDurationMs) {
                 if (!enabled) return@pointerInput
                 val thumbRadiusPx = thumbRadius.toPx()
                 detectDragGestures(

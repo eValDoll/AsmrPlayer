@@ -54,13 +54,14 @@ class PlayerViewModel @Inject constructor(
     val playback: StateFlow<PlaybackSnapshot> = playerConnection.snapshot
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), PlaybackSnapshot())
 
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
     val resolvedDurationMs: StateFlow<Long> = playback
-        .map { it.currentMediaItem?.mediaId }
-        .distinctUntilChanged()
-        .flatMapLatest { _ ->
-            flow {
-                emit(resolveDurationMs(playback.value.currentMediaItem, playback.value.durationMs))
-            }
+        .map { it.currentMediaItem to it.durationMs.coerceAtLeast(0L) }
+        .distinctUntilChanged { old, new ->
+            old.first?.mediaId == new.first?.mediaId && old.second == new.second
+        }
+        .flatMapLatest { (item, durationMs) ->
+            flow { emit(resolveDurationMs(item, durationMs)) }
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0L)
 
