@@ -95,8 +95,21 @@ class PlayerConnection @Inject constructor(
         c.addListener(
             object : Player.Listener {
                 override fun onEvents(player: Player, events: Player.Events) {
-                    val prev = _snapshot.value
-                    _snapshot.value = player.toSnapshot(isConnected = true, audioSessionId = prev.audioSessionId)
+                    val shouldUpdateSnapshot =
+                        events.contains(Player.EVENT_IS_PLAYING_CHANGED) ||
+                            events.contains(Player.EVENT_PLAY_WHEN_READY_CHANGED) ||
+                            events.contains(Player.EVENT_PLAYBACK_STATE_CHANGED) ||
+                            events.contains(Player.EVENT_MEDIA_METADATA_CHANGED) ||
+                            events.contains(Player.EVENT_MEDIA_ITEM_TRANSITION) ||
+                            events.contains(Player.EVENT_TIMELINE_CHANGED) ||
+                            events.contains(Player.EVENT_REPEAT_MODE_CHANGED) ||
+                            events.contains(Player.EVENT_SHUFFLE_MODE_ENABLED_CHANGED) ||
+                            events.contains(Player.EVENT_PLAYBACK_PARAMETERS_CHANGED)
+
+                    if (shouldUpdateSnapshot) {
+                        val prev = _snapshot.value
+                        _snapshot.value = player.toSnapshot(isConnected = true, audioSessionId = prev.audioSessionId)
+                    }
                     if (
                         events.contains(Player.EVENT_TIMELINE_CHANGED) ||
                         events.contains(Player.EVENT_MEDIA_ITEM_TRANSITION)
