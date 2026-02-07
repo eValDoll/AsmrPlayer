@@ -815,11 +815,6 @@ private fun PlaybackControls(
         }
     }
 
-    LaunchedEffect(playback.isPlaying, optimisticIsPlaying) {
-        val optimistic = optimisticIsPlaying ?: return@LaunchedEffect
-        if (playback.isPlaying == optimistic) optimisticIsPlaying = null
-    }
-
     Column(
         modifier = modifier
             .fillMaxWidth()
