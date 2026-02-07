@@ -30,32 +30,32 @@ Explore your audio collection with our versatile library views. Choose between a
 
 | **Album Grid** | **Album List** |
 |:---:|:---:|
-| <img src="example_screen/main_screen_album-card.png" width="300"/> | <img src="example_screen/main_screen_album-list.png" width="300"/> |
+| <img src="example_screen/main_screen_album-card.png" width="50%"/> | <img src="example_screen/main_screen_album-list.png" width="50%"/> |
 
 ### 🔍 Search & Navigation
 Find exactly what you're looking for. The track list provides quick access to your files, while the search screen helps you locate content instantly.
 
 | **Track List** | **Smart Search** |
 |:---:|:---:|
-| <img src="example_screen/main_screen_track-list.png" width="300"/> | <img src="example_screen/search_screen.png" width="300"/> |
+| <img src="example_screen/main_screen_track-list.png" width="50%"/> | <img src="example_screen/search_screen.png" width="50%"/> |
 
 ### 🎵 Player & Focus Mode
 Immerse yourself in the sound (or video). The player interface features a calming visualizer, landscape mode for dedicated listening, synchronized lyrics, and **MP4 video playback** support.
 
 | **Now Playing** | **Landscape Mode** |
 |:---:|:---:|
-| <img src="example_screen/now_playing_screen.png" width="300"/> | <img src="example_screen/now_playing_landscape-mode.png" width="500"/> |
+| <img src="example_screen/now_playing_screen.png" width="70%"/> | <img src="example_screen/now_playing_landscape-mode.png" width="70%"/> |
 
 | **Lyrics View** | **Video Playback** |
 |:---:|:---:|
-| <img src="example_screen/lyric_screen.png" width="300"/> | <img src="example_screen/now_playing_mp4-supported.png" width="300"/> |
+| <img src="example_screen/lyric_screen.png" width="50%"/> | <img src="example_screen/now_playing_mp4-supported.png" width="50%"/> |
 
 ### ⚙️ Details & Settings
 Deep dive into album metadata or customize the app to your liking. The settings screen puts you in control of the experience.
 
 | **Album Details** | **Settings** |
 |:---:|:---:|
-| <img src="example_screen/album_detail_DL-tab.png" width="300"/> | <img src="example_screen/settings_screen.png" width="300"/> |
+| <img src="example_screen/album_detail_DL-tab.png" width="50%"/> | <img src="example_screen/settings_screen.png" width="50%"/> |
 
 ---
 
