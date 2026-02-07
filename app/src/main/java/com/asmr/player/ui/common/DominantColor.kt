@@ -12,6 +12,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
@@ -27,6 +28,11 @@ import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+
+data class DominantColorResult(
+    val color: Color?,
+    val fromCache: Boolean
+)
 
 @Composable
 fun rememberDominantColor(
@@ -195,6 +201,213 @@ fun rememberVideoFrameDominantColorCenterWeighted(
     }
 
     return animatedColor
+}
+
+@Composable
+fun rememberComputedDominantColorCenterWeighted(
+    model: Any?,
+    defaultColor: Color,
+    imageSizePx: Int = 256,
+    centerRegionRatio: Float = 0.62f
+): State<DominantColorResult> {
+    val context = LocalContext.current
+    val baseKey = model?.toString().orEmpty()
+    val regionKey = (centerRegionRatio * 100).toInt().coerceIn(10, 100)
+    val key = "cw:$regionKey:$baseKey"
+    val cached = remember(key) { DominantColorCache.get(key) }
+    val state = remember(key) { mutableStateOf(DominantColorResult(color = cached, fromCache = cached != null)) }
+
+    LaunchedEffect(key, defaultColor, baseKey) {
+        if (baseKey.isBlank()) {
+            state.value = DominantColorResult(color = null, fromCache = false)
+            return@LaunchedEffect
+        }
+        if (state.value.color != null) return@LaunchedEffect
+
+        val constrainedColor = DominantColorCache.getOrCompute(key) {
+            withContext(Dispatchers.Default) {
+                val request = ImageRequest.Builder(context)
+                    .data(model)
+                    .allowHardware(false)
+                    .size(imageSizePx)
+                    .build()
+                val drawable = runCatching { context.imageLoader.execute(request).drawable }.getOrNull()
+                    ?: return@withContext null
+                val bitmap = runCatching { drawable.toBitmap() }.getOrNull() ?: return@withContext null
+                val colorInt = runCatching {
+                    val palette = Palette.from(bitmap).generate()
+                    val hint = computeCenterWeightedHintColorInt(bitmap, centerRegionRatio)
+                    val preferDarkBackground = defaultColor.luminance() < 0.5f
+                    pickBestColorInt(
+                        palette = palette,
+                        fallbackColorInt = defaultColor.toArgb(),
+                        preferDarkBackground = preferDarkBackground,
+                        hintColorInt = hint
+                    )
+                }.getOrNull() ?: defaultColor.toArgb()
+
+                val hsl = FloatArray(3)
+                ColorUtils.colorToHSL(colorInt, hsl)
+                val preferDarkBackground = defaultColor.luminance() < 0.5f
+                adjustHslForUi(hsl, preferDarkBackground)
+
+                Color(ColorUtils.HSLToColor(hsl))
+            }
+        }
+
+        state.value = DominantColorResult(color = constrainedColor, fromCache = false)
+    }
+
+    return state
+}
+
+@Composable
+fun rememberComputedVideoFrameDominantColorCenterWeighted(
+    videoUri: Uri?,
+    defaultColor: Color,
+    imageSizePx: Int = 256,
+    centerRegionRatio: Float = 0.62f,
+    timeoutMs: Long = 2_500L
+): State<DominantColorResult> {
+    val context = LocalContext.current
+    val baseKey = videoUri?.toString().orEmpty()
+    val regionKey = (centerRegionRatio * 100).toInt().coerceIn(10, 100)
+    val key = "vf:cw:$regionKey:$baseKey"
+    val cached = remember(key) { DominantColorCache.get(key) }
+    val state = remember(key) { mutableStateOf(DominantColorResult(color = cached, fromCache = cached != null)) }
+
+    LaunchedEffect(key, defaultColor, baseKey) {
+        if (baseKey.isBlank() || videoUri == null) {
+            state.value = DominantColorResult(color = null, fromCache = false)
+            return@LaunchedEffect
+        }
+        if (state.value.color != null) return@LaunchedEffect
+
+        val constrainedColor = DominantColorCache.getOrCompute(key) {
+            withContext(Dispatchers.Default) {
+                withTimeoutOrNull(timeoutMs) {
+                    val uri = videoUri
+                    val bitmap = extractMeaningfulVideoFrameBitmap(context, uri, imageSizePx) ?: return@withTimeoutOrNull null
+                    val colorInt = runCatching {
+                        val palette = Palette.from(bitmap).generate()
+                        val hint = computeCenterWeightedHintColorInt(bitmap, centerRegionRatio)
+                        val preferDarkBackground = defaultColor.luminance() < 0.5f
+                        pickBestColorInt(
+                            palette = palette,
+                            fallbackColorInt = defaultColor.toArgb(),
+                            preferDarkBackground = preferDarkBackground,
+                            hintColorInt = hint
+                        )
+                    }.getOrNull() ?: defaultColor.toArgb()
+
+                    val hsl = FloatArray(3)
+                    ColorUtils.colorToHSL(colorInt, hsl)
+                    val preferDarkBackground = defaultColor.luminance() < 0.5f
+                    adjustHslForUi(hsl, preferDarkBackground)
+
+                    Color(ColorUtils.HSLToColor(hsl))
+                }
+            }
+        }
+
+        state.value = DominantColorResult(color = constrainedColor, fromCache = false)
+    }
+
+    return state
+}
+
+@Composable
+fun PrewarmDominantColorCenterWeighted(
+    model: Any?,
+    defaultColor: Color,
+    imageSizePx: Int = 256,
+    centerRegionRatio: Float = 0.62f
+) {
+    val context = LocalContext.current
+    val baseKey = model?.toString().orEmpty()
+    val regionKey = (centerRegionRatio * 100).toInt().coerceIn(10, 100)
+    val key = "cw:$regionKey:$baseKey"
+
+    LaunchedEffect(key, defaultColor, baseKey) {
+        if (baseKey.isBlank()) return@LaunchedEffect
+        if (DominantColorCache.get(key) != null) return@LaunchedEffect
+
+        DominantColorCache.getOrCompute(key) {
+            withContext(Dispatchers.Default) {
+                val request = ImageRequest.Builder(context)
+                    .data(model)
+                    .allowHardware(false)
+                    .size(imageSizePx)
+                    .build()
+                val drawable = runCatching { context.imageLoader.execute(request).drawable }.getOrNull()
+                    ?: return@withContext null
+                val bitmap = runCatching { drawable.toBitmap() }.getOrNull() ?: return@withContext null
+                val colorInt = runCatching {
+                    val palette = Palette.from(bitmap).generate()
+                    val hint = computeCenterWeightedHintColorInt(bitmap, centerRegionRatio)
+                    val preferDarkBackground = defaultColor.luminance() < 0.5f
+                    pickBestColorInt(
+                        palette = palette,
+                        fallbackColorInt = defaultColor.toArgb(),
+                        preferDarkBackground = preferDarkBackground,
+                        hintColorInt = hint
+                    )
+                }.getOrNull() ?: defaultColor.toArgb()
+
+                val hsl = FloatArray(3)
+                ColorUtils.colorToHSL(colorInt, hsl)
+                val preferDarkBackground = defaultColor.luminance() < 0.5f
+                adjustHslForUi(hsl, preferDarkBackground)
+
+                Color(ColorUtils.HSLToColor(hsl))
+            }
+        }
+    }
+}
+
+@Composable
+fun PrewarmVideoFrameDominantColorCenterWeighted(
+    videoUri: Uri?,
+    defaultColor: Color,
+    imageSizePx: Int = 256,
+    centerRegionRatio: Float = 0.62f,
+    timeoutMs: Long = 2_500L
+) {
+    val context = LocalContext.current
+    val baseKey = videoUri?.toString().orEmpty()
+    val regionKey = (centerRegionRatio * 100).toInt().coerceIn(10, 100)
+    val key = "vf:cw:$regionKey:$baseKey"
+
+    LaunchedEffect(key, defaultColor, baseKey) {
+        if (baseKey.isBlank() || videoUri == null) return@LaunchedEffect
+        if (DominantColorCache.get(key) != null) return@LaunchedEffect
+
+        DominantColorCache.getOrCompute(key) {
+            withContext(Dispatchers.Default) {
+                withTimeoutOrNull(timeoutMs) {
+                    val bitmap = extractMeaningfulVideoFrameBitmap(context, videoUri, imageSizePx) ?: return@withTimeoutOrNull null
+                    val colorInt = runCatching {
+                        val palette = Palette.from(bitmap).generate()
+                        val hint = computeCenterWeightedHintColorInt(bitmap, centerRegionRatio)
+                        val preferDarkBackground = defaultColor.luminance() < 0.5f
+                        pickBestColorInt(
+                            palette = palette,
+                            fallbackColorInt = defaultColor.toArgb(),
+                            preferDarkBackground = preferDarkBackground,
+                            hintColorInt = hint
+                        )
+                    }.getOrNull() ?: defaultColor.toArgb()
+
+                    val hsl = FloatArray(3)
+                    ColorUtils.colorToHSL(colorInt, hsl)
+                    val preferDarkBackground = defaultColor.luminance() < 0.5f
+                    adjustHslForUi(hsl, preferDarkBackground)
+
+                    Color(ColorUtils.HSLToColor(hsl))
+                }
+            }
+        }
+    }
 }
 
 private fun extractMeaningfulVideoFrameBitmap(context: android.content.Context, uri: Uri, imageSizePx: Int): Bitmap? {

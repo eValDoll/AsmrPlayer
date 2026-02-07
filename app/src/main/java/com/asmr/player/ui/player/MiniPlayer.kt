@@ -41,6 +41,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.Color
@@ -49,6 +50,10 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
+import coil.compose.AsyncImagePainter
+import coil.compose.SubcomposeAsyncImage
+import coil.compose.SubcomposeAsyncImageContent
+import coil.request.ImageRequest
 
 import androidx.compose.ui.text.font.FontWeight
 import com.asmr.player.ui.theme.AsmrTheme
@@ -77,6 +82,7 @@ fun MiniPlayer(
     val item = playback.currentMediaItem ?: return
     val metadata = item.mediaMetadata
     val colorScheme = AsmrTheme.colorScheme
+    val context = LocalContext.current
     val currentMediaId = item.mediaId
 
     var optimisticIsPlaying by remember { mutableStateOf<Boolean?>(null) }
@@ -121,22 +127,35 @@ fun MiniPlayer(
                 .background(colorScheme.surface)
         ) {
             // ... 背景模糊层保持不变 ...
-            AsyncImage(
-                model = metadata.artworkUri,
+            val blurredRequest = remember(metadata.artworkUri) {
+                ImageRequest.Builder(context)
+                    .data(metadata.artworkUri)
+                    .size(256)
+                    .build()
+            }
+            SubcomposeAsyncImage(
+                model = blurredRequest,
                 contentDescription = null,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .graphicsLayer {
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                            renderEffect = RenderEffect
-                                .createBlurEffect(30f, 30f, Shader.TileMode.CLAMP)
-                                .asComposeRenderEffect()
-                        }
-                    }
-                    .blur(20.dp),
+                modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Crop,
                 alpha = 0.2f
-            )
+            ) {
+                val s = painter.state
+                if (s is AsyncImagePainter.State.Success) {
+                    SubcomposeAsyncImageContent(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .graphicsLayer {
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                                    renderEffect = RenderEffect
+                                        .createBlurEffect(30f, 30f, Shader.TileMode.CLAMP)
+                                        .asComposeRenderEffect()
+                                }
+                            }
+                            .blur(20.dp)
+                    )
+                }
+            }
 
             Column(modifier = Modifier.fillMaxSize()) {
                 Row(
