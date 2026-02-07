@@ -1,73 +1,125 @@
-# ASMR Player (Android)
+# ASMR Player (Android) 🎧
 
-THIS REPOSITORY AND ITS CONTENT WERE GENERATED 100% BY AI.
+> **THIS REPOSITORY AND ITS CONTENT WERE GENERATED 100% BY AI.**
 
-## Overview
+## 📖 Overview
 
-ASMR Player (Android) is an Android audio player project built with Jetpack Compose and Media3. It includes a local library experience plus app-level features like playlists, lyrics, downloads, and settings.
+**ASMR Player (Android)** is a modern, feature-rich audio player specifically designed for ASMR content, built with **Jetpack Compose** and **Media3**. It offers a premium local library experience combined with powerful app-level features like playlist management, synchronized lyrics, background downloads, and deep customization.
 
-This repository is provided as-is and may be incomplete or experimental.
+*This repository is provided as-is and may be incomplete or experimental.*
 
-## Features
+---
 
-- Audio playback powered by Media3 (ExoPlayer)
-- Modern UI with Jetpack Compose + Material 3
-- Local library browsing and album/track views
-- Playlists management
-- Lyrics parsing/loading and on-screen lyric UI
-- Downloads screen and background work via WorkManager
-- Local persistence with Room + Paging 3
-- Network layer with Retrofit + OkHttp (includes HTML parsing via Jsoup for some sources)
+## ✨ Features
 
-## Tech Stack
+- 🎧 **High-Fidelity Playback**: Powered by the robust **Media3 (ExoPlayer)** engine for seamless audio experiences.
+- 🎨 **Modern UI/UX**: Crafted with **Jetpack Compose** and **Material 3** for a smooth, beautiful, and responsive interface.
+- 📚 **Smart Library**: Effortlessly browse your local collection with optimized album and track views.
+- 📑 **Playlist Management**: Create, edit, and manage your favorite tracks.
+- 🎤 **Synchronized Lyrics**: Real-time lyric parsing and display for an immersive listening session.
+- 📥 **Download Manager**: robust background downloads handled efficiently by **WorkManager**.
+- 💾 **Offline Persistence**: Built on **Room** and **Paging 3** for instant access to your data, online or offline.
+- 🌐 **Network Integration**: Uses **Retrofit** + **OkHttp** for reliable networking (includes HTML parsing via **Jsoup**).
 
-- Kotlin
-- Jetpack Compose (Material 3, Navigation)
-- Media3 (ExoPlayer, Media Session)
-- Room, DataStore, WorkManager, Paging 3
-- Hilt + KSP
-- Retrofit, OkHttp, Jsoup
-- Coil + Palette
+---
 
-## Project Setup
+## 📱 App Preview
+
+### 📚 Immersive Library
+Explore your audio collection with our versatile library views. Choose between a visual-rich grid layout or a detailed list view to suit your browsing style.
+
+| **Album Grid** | **Album List** |
+|:---:|:---:|
+| <img src="example_screen/main_screen_album-card.png" width="300"/> | <img src="example_screen/main_screen_album-list.png" width="300"/> |
+
+### 🔍 Search & Navigation
+Find exactly what you're looking for. The track list provides quick access to your files, while the search screen helps you locate content instantly.
+
+| **Track List** | **Smart Search** |
+|:---:|:---:|
+| <img src="example_screen/main_screen_track-list.png" width="300"/> | <img src="example_screen/search_screen.png" width="300"/> |
+
+### 🎵 Player & Focus Mode
+Immerse yourself in the sound (or video). The player interface features a calming visualizer, landscape mode for dedicated listening, synchronized lyrics, and **MP4 video playback** support.
+
+| **Now Playing** | **Landscape Mode** |
+|:---:|:---:|
+| <img src="example_screen/now_playing_screen.png" width="300"/> | <img src="example_screen/now_playing_landscape-mode.png" width="500"/> |
+
+| **Lyrics View** | **Video Playback** |
+|:---:|:---:|
+| <img src="example_screen/lyric_screen.png" width="300"/> | <img src="example_screen/now_playing_mp4-supported.png" width="300"/> |
+
+### ⚙️ Details & Settings
+Deep dive into album metadata or customize the app to your liking. The settings screen puts you in control of the experience.
+
+| **Album Details** | **Settings** |
+|:---:|:---:|
+| <img src="example_screen/album_detail_DL-tab.png" width="300"/> | <img src="example_screen/settings_screen.png" width="300"/> |
+
+---
+
+## 🛠️ Tech Stack
+
+- **Language**: Kotlin 100%
+- **UI Toolkit**: Jetpack Compose (Material 3, Navigation)
+- **Media Engine**: Media3 (ExoPlayer, Media Session)
+- **Architecture**: MVVM, Clean Architecture principles
+- **Dependency Injection**: Hilt + KSP
+- **Data Persistence**: Room, DataStore
+- **Async & Background**: Coroutines, Flow, WorkManager
+- **Pagination**: Paging 3
+- **Networking**: Retrofit, OkHttp, Jsoup
+- **Image Loading**: Coil + Palette API
+
+---
+
+## 🚀 Project Setup
 
 ### Prerequisites
 
-- Android Studio (recent stable)
-- JDK 17 (required by Android Gradle Plugin 8.x)
-- Android SDK (compileSdk/targetSdk: 34, minSdk: 24)
+- **Android Studio**: Recent stable version recommended.
+- **JDK 17**: Required by Android Gradle Plugin 8.x.
+- **Android SDK**:
+  - `compileSdk` / `targetSdk`: **34**
+  - `minSdk`: **24**
 
-### Open and Run
+### 🏃 Open and Run
 
-1. Open this project folder in Android Studio.
-2. Let Gradle sync finish.
-3. Run the `app` configuration on a device/emulator.
+1.  **Clone/Open** this project folder in Android Studio.
+2.  Wait for **Gradle Sync** to complete.
+3.  Select the `app` configuration and hit **Run** ▶️ on your device or emulator.
 
-### Build from CLI
+### 📦 Build from CLI
 
 ```bash
 ./gradlew :app:assembleDebug
 ```
 
-### Build Output Location
+### 📂 Build Output Location
 
-This project is configured to redirect Gradle build outputs into a custom build directory:
+To keep your project root clean, build outputs are redirected:
+- **Default**: `<repo>/.build_asmr_player_android/`
+- **Override**: Set `TRAE_BUILD_ROOT` environment variable.
 
-- Default: `<repo>/.build_asmr_player_android/`
-- Optional override: set environment variable `TRAE_BUILD_ROOT` to customize the build root
+---
 
-## Configuration Notes
+## 📝 Configuration Notes
 
-- `local.properties` is intentionally excluded from version control. Android Studio will generate it automatically (it contains machine-specific SDK paths).
-- Do not commit keystores or signing configs (`*.jks`, `*.keystore`, `keystore.properties`).
+- `local.properties` is **excluded** from version control (auto-generated by Android Studio).
+- ⚠️ **Security**: Never commit keystores (`*.jks`, `*.keystore`) or signing secrets.
 
-## Disclaimer
+---
 
-- This project is not an official product and is not affiliated with any platform, store, or brand that may be referenced by the code or UI.
-- This repository may contain mistakes, incomplete implementations, or security issues. Review the code carefully before using it in production.
-- You are responsible for complying with all applicable laws and the terms of service of any third-party services you interact with using this software.
-- No warranties are provided. Use at your own risk.
+## ⚖️ Disclaimer
 
-## AI Generation Notice
+- This project is **not an official product** and is not affiliated with any platform, store, or brand referenced.
+- The code may contain **bugs, incomplete implementations, or security issues**. Please review carefully before production use.
+- You are responsible for complying with all applicable laws and terms of service for any third-party services accessed.
+- **No warranties provided.** Use at your own risk.
 
-This repository (including documentation and code changes in this publishing step) is marked as 100% AI-generated as requested. Human review is recommended before any real-world use.
+---
+
+## 🤖 AI Generation Notice
+
+This repository (including documentation and code changes) is marked as **100% AI-generated**. Human review is strongly recommended.
