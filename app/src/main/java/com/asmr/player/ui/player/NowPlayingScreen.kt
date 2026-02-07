@@ -58,11 +58,13 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.media3.common.Player
+import androidx.media3.common.VideoSize
 import androidx.media3.ui.PlayerView
 import coil.compose.AsyncImage
 import com.asmr.player.playback.PlaybackSnapshot
 import com.asmr.player.ui.common.EqualizerPanel
 import com.asmr.player.ui.common.rememberDominantColorCenterWeighted
+import com.asmr.player.ui.common.rememberVideoFrameDominantColorCenterWeighted
 import com.asmr.player.ui.common.smoothScrollToIndex
 import com.asmr.player.ui.library.TagAssignDialog
 import com.asmr.player.ui.theme.AsmrTheme
@@ -98,6 +100,7 @@ fun NowPlayingScreen(
     val metadata = item?.mediaMetadata
     val colorScheme = AsmrTheme.colorScheme
     val uriText = item?.localConfiguration?.uri?.toString().orEmpty()
+    val videoUri = item?.localConfiguration?.uri
     val mimeType = item?.localConfiguration?.mimeType.orEmpty()
     val ext = uriText.substringBefore('#').substringBefore('?').substringAfterLast('.', "").lowercase()
     val isVideo = metadata?.extras?.getBoolean("is_video") == true ||
@@ -108,10 +111,19 @@ fun NowPlayingScreen(
     val tagViewModel: NowPlayingTagViewModel = hiltViewModel()
     val tagDialog by tagViewModel.dialogState.collectAsState()
     val availableTags by tagViewModel.availableTags.collectAsState()
-    val dominantColorState by rememberDominantColorCenterWeighted(metadata?.artworkUri, colorScheme.background)
+    val dominantColorState by if (isVideo) {
+        rememberVideoFrameDominantColorCenterWeighted(videoUri, colorScheme.background)
+    } else {
+        rememberDominantColorCenterWeighted(metadata?.artworkUri, colorScheme.background)
+    }
     val dominantColor = if (dominantColorState == colorScheme.background) colorScheme.primary else dominantColorState
     val accentColor = if (coverBackgroundEnabled) dominantColor else colorScheme.primary
     val onAccentColor = if (accentColor.luminance() > 0.55f) Color.Black else Color.White
+    val videoBackdropColor = if (isVideo) {
+        if (coverBackgroundEnabled) dominantColor else colorScheme.background
+    } else {
+        Color.Transparent
+    }
     val progressDurationMs = when {
         playback.durationMs > 0L && resolvedDurationMs > 0L -> maxOf(playback.durationMs, resolvedDurationMs)
         playback.durationMs > 0L -> playback.durationMs
@@ -127,6 +139,8 @@ fun NowPlayingScreen(
     val isPhoneLandscape = heightClass == WindowHeightSizeClass.Compact
     // 平板横屏：高度不为 Compact 且处于横屏状态
     val useSplitLayout = heightClass != WindowHeightSizeClass.Compact && isLandscape
+    val player = viewModel.playerOrNull()
+    val videoAspectRatio = rememberPlayerVideoAspectRatio(player)
 
     Box(
         modifier = Modifier.fillMaxSize()
@@ -214,14 +228,15 @@ fun NowPlayingScreen(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        Box(modifier = Modifier.widthIn(max = 420.dp).aspectRatio(1f)) {
+                        Box(modifier = Modifier.widthIn(max = 420.dp).aspectRatio(if (isVideo) videoAspectRatio else 1f)) {
                             ArtworkBox(
                                 isVideo = isVideo,
                                 metadata = metadata,
                                 viewModel = viewModel,
                                 onOpenLyrics = onOpenLyrics,
                                 edgeBlendEnabled = isLandscape && !isVideo,
-                                edgeBlendColor = if (coverBackgroundEnabled) dominantColor else colorScheme.background
+                                edgeBlendColor = if (coverBackgroundEnabled) dominantColor else colorScheme.background,
+                                videoBackdropColor = videoBackdropColor
                             )
                         }
                         
@@ -395,7 +410,7 @@ fun NowPlayingScreen(
                         Box(
                             modifier = Modifier
                                 .weight(1f)
-                                .aspectRatio(1f),
+                                .aspectRatio(if (isVideo) videoAspectRatio else 1f),
                             contentAlignment = Alignment.Center
                         ) {
                             ArtworkBox(
@@ -404,7 +419,8 @@ fun NowPlayingScreen(
                                 viewModel = viewModel,
                                 onOpenLyrics = onOpenLyrics,
                                 edgeBlendEnabled = isLandscape && !isVideo,
-                                edgeBlendColor = if (coverBackgroundEnabled) dominantColor else colorScheme.background
+                                edgeBlendColor = if (coverBackgroundEnabled) dominantColor else colorScheme.background,
+                                videoBackdropColor = videoBackdropColor
                             )
                         }
 
@@ -601,9 +617,19 @@ fun NowPlayingScreen(
                     ) {
                         Box(
                             modifier = Modifier
-                                .fillMaxHeight()
-                                .aspectRatio(1f)
-                                .widthIn(max = if (widthClass == WindowWidthSizeClass.Compact) 1000.dp else 400.dp) // 平板竖屏限制封面最大宽度
+                                .then(
+                                    if (isVideo) {
+                                        Modifier
+                                            .widthIn(max = if (widthClass == WindowWidthSizeClass.Compact) 1000.dp else 400.dp)
+                                            .fillMaxWidth()
+                                            .aspectRatio(videoAspectRatio)
+                                    } else {
+                                        Modifier
+                                            .fillMaxHeight()
+                                            .aspectRatio(1f)
+                                            .widthIn(max = if (widthClass == WindowWidthSizeClass.Compact) 1000.dp else 400.dp)
+                                    }
+                                ) // 平板竖屏限制最大宽度
                         ) {
                             ArtworkBox(
                                 isVideo = isVideo,
@@ -611,7 +637,8 @@ fun NowPlayingScreen(
                                 viewModel = viewModel,
                                 onOpenLyrics = onOpenLyrics,
                                 edgeBlendEnabled = isLandscape && !isVideo,
-                                edgeBlendColor = if (coverBackgroundEnabled) dominantColor else colorScheme.background
+                                edgeBlendColor = if (coverBackgroundEnabled) dominantColor else colorScheme.background,
+                                videoBackdropColor = videoBackdropColor
                             )
                         }
                     }
@@ -714,7 +741,8 @@ private fun ArtworkBox(
     viewModel: PlayerViewModel,
     onOpenLyrics: () -> Unit,
     edgeBlendEnabled: Boolean,
-    edgeBlendColor: Color
+    edgeBlendColor: Color,
+    videoBackdropColor: Color
 ) {
     val shape = RoundedCornerShape(28.dp)
     val hasArtwork = metadata?.artworkUri != null
@@ -722,7 +750,7 @@ private fun ArtworkBox(
         modifier = Modifier
             .fillMaxSize()
             .clip(shape)
-            .background(if (isVideo) Color.Black else Color.Transparent)
+            .background(if (isVideo) videoBackdropColor else Color.Transparent)
             .then(if (hasArtwork && !edgeBlendEnabled) Modifier.shadow(12.dp, shape) else Modifier)
     ) {
         if (isVideo) {
@@ -734,10 +762,11 @@ private fun ArtworkBox(
                     fullscreen = false,
                     onToggleFullscreen = { fullscreen = true },
                     viewKey = "inline",
+                    backdropColor = videoBackdropColor,
                     modifier = Modifier.fillMaxSize().clipToBounds()
                 )
             } else {
-                Box(modifier = Modifier.fillMaxSize().background(Color.Black))
+                Box(modifier = Modifier.fillMaxSize().background(videoBackdropColor))
             }
             if (fullscreen) {
                 BackHandler { fullscreen = false }
@@ -750,6 +779,7 @@ private fun ArtworkBox(
                         fullscreen = true,
                         onToggleFullscreen = { fullscreen = false },
                         viewKey = "fullscreen",
+                        backdropColor = videoBackdropColor,
                         modifier = Modifier.fillMaxSize()
                     )
                 }
@@ -979,6 +1009,7 @@ private fun NowPlayingVideoPlayer(
     fullscreen: Boolean,
     onToggleFullscreen: () -> Unit,
     viewKey: String,
+    backdropColor: Color,
     modifier: Modifier = Modifier
 ) {
     var playerView by remember { mutableStateOf<PlayerView?>(null) }
@@ -991,7 +1022,7 @@ private fun NowPlayingVideoPlayer(
 
     Box(
         modifier = modifier
-            .background(if (fullscreen) Color.Black else Color.Transparent)
+            .background(if (fullscreen) backdropColor else Color.Transparent)
     ) {
         key(viewKey) {
             AndroidView(
@@ -1001,7 +1032,7 @@ private fun NowPlayingVideoPlayer(
                         pv.useController = false
                         pv.player = player
                         pv.resizeMode = androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT
-                        pv.setShutterBackgroundColor(android.graphics.Color.BLACK)
+                        pv.setShutterBackgroundColor(backdropColor.toArgb())
                         playerView = pv
                     }
                 },
@@ -1025,6 +1056,35 @@ private fun NowPlayingVideoPlayer(
             )
         }
     }
+}
+
+@Composable
+private fun rememberPlayerVideoAspectRatio(player: Player?, default: Float = 16f / 9f): Float {
+    var ratio by remember(player) { mutableFloatStateOf(default) }
+
+    DisposableEffect(player) {
+        if (player == null) return@DisposableEffect onDispose { }
+
+        fun update(videoSize: VideoSize) {
+            val w = videoSize.width
+            val h = videoSize.height
+            val pixelRatio = videoSize.pixelWidthHeightRatio.takeIf { it > 0f } ?: 1f
+            val computed = if (w > 0 && h > 0) (w.toFloat() * pixelRatio) / h.toFloat() else default
+            ratio = computed.coerceIn(0.5f, 3.0f)
+        }
+
+        val listener = object : Player.Listener {
+            override fun onVideoSizeChanged(videoSize: VideoSize) {
+                update(videoSize)
+            }
+        }
+
+        update(player.videoSize)
+        player.addListener(listener)
+        onDispose { player.removeListener(listener) }
+    }
+
+    return ratio
 }
 
 private tailrec fun Context.findActivity(): Activity? {

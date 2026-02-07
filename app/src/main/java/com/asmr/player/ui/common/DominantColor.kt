@@ -1,5 +1,8 @@
 package com.asmr.player.ui.common
 
+import android.graphics.Bitmap
+import android.media.MediaMetadataRetriever
+import android.net.Uri
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.AnimationVector4D
 import androidx.compose.animation.core.Animatable
@@ -23,6 +26,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
 @Composable
 fun rememberDominantColor(
@@ -133,6 +137,150 @@ fun rememberDominantColorCenterWeighted(
     }
 
     return animatedColor
+}
+
+@Composable
+fun rememberVideoFrameDominantColorCenterWeighted(
+    videoUri: Uri?,
+    defaultColor: Color,
+    imageSizePx: Int = 256,
+    centerRegionRatio: Float = 0.62f,
+    timeoutMs: Long = 2_500L
+): State<Color> {
+    val context = LocalContext.current
+    val baseKey = videoUri?.toString().orEmpty()
+    val regionKey = (centerRegionRatio * 100).toInt().coerceIn(10, 100)
+    val key = "vf:cw:$regionKey:$baseKey"
+    val animatable = remember { Animatable(defaultColor, ColorVectorConverter) }
+    val animatedColor = remember { derivedStateOf { animatable.value } }
+
+    LaunchedEffect(key, defaultColor, baseKey) {
+        if (baseKey.isBlank()) {
+            animatable.animateTo(defaultColor, animationSpec = tween(durationMillis = 260, easing = FastOutSlowInEasing))
+            return@LaunchedEffect
+        }
+        DominantColorCache.get(key)?.let {
+            animatable.animateTo(it, animationSpec = tween(durationMillis = 420, easing = FastOutSlowInEasing))
+            return@LaunchedEffect
+        }
+
+        val constrainedColor = DominantColorCache.getOrCompute(key) {
+            withContext(Dispatchers.Default) {
+                withTimeoutOrNull(timeoutMs) {
+                    val uri = videoUri ?: return@withTimeoutOrNull null
+                    val bitmap = extractMeaningfulVideoFrameBitmap(context, uri, imageSizePx) ?: return@withTimeoutOrNull null
+                    val colorInt = runCatching {
+                        val palette = Palette.from(bitmap).generate()
+                        val hint = computeCenterWeightedHintColorInt(bitmap, centerRegionRatio)
+                        val preferDarkBackground = defaultColor.luminance() < 0.5f
+                        pickBestColorInt(
+                            palette = palette,
+                            fallbackColorInt = defaultColor.toArgb(),
+                            preferDarkBackground = preferDarkBackground,
+                            hintColorInt = hint
+                        )
+                    }.getOrNull() ?: defaultColor.toArgb()
+
+                    val hsl = FloatArray(3)
+                    ColorUtils.colorToHSL(colorInt, hsl)
+                    val preferDarkBackground = defaultColor.luminance() < 0.5f
+                    adjustHslForUi(hsl, preferDarkBackground)
+
+                    Color(ColorUtils.HSLToColor(hsl))
+                }
+            }
+        } ?: return@LaunchedEffect
+
+        animatable.animateTo(constrainedColor, animationSpec = tween(durationMillis = 520, easing = FastOutSlowInEasing))
+    }
+
+    return animatedColor
+}
+
+private fun extractMeaningfulVideoFrameBitmap(context: android.content.Context, uri: Uri, imageSizePx: Int): Bitmap? {
+    val retriever = MediaMetadataRetriever()
+    try {
+        val scheme = uri.scheme.orEmpty().lowercase()
+        if (scheme == "http" || scheme == "https") {
+            retriever.setDataSource(uri.toString(), emptyMap())
+        } else {
+            retriever.setDataSource(context, uri)
+        }
+
+        val candidatesUs = longArrayOf(
+            0L,
+            300_000L,
+            800_000L,
+            1_500_000L,
+            2_500_000L,
+            4_000_000L
+        )
+
+        var first: Bitmap? = null
+        for (tUs in candidatesUs) {
+            val frame = runCatching {
+                retriever.getFrameAtTime(tUs, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+            }.getOrNull() ?: continue
+
+            if (first == null) first = frame
+            if (!isLikelyBlankFrame(frame)) return frame.constrainToSize(imageSizePx)
+        }
+
+        return first?.constrainToSize(imageSizePx)
+    } catch (_: Throwable) {
+        return null
+    } finally {
+        runCatching { retriever.release() }
+    }
+}
+
+private fun Bitmap.constrainToSize(targetSizePx: Int): Bitmap {
+    if (targetSizePx <= 0) return this
+    val w = width
+    val h = height
+    if (w <= 0 || h <= 0) return this
+    val maxDim = maxOf(w, h)
+    if (maxDim <= targetSizePx) return this
+    val scale = targetSizePx.toFloat() / maxDim.toFloat()
+    val newW = (w * scale).toInt().coerceAtLeast(1)
+    val newH = (h * scale).toInt().coerceAtLeast(1)
+    return runCatching { Bitmap.createScaledBitmap(this, newW, newH, true) }.getOrElse { this }
+}
+
+private fun isLikelyBlankFrame(bitmap: Bitmap): Boolean {
+    val w = bitmap.width
+    val h = bitmap.height
+    if (w < 8 || h < 8) return true
+
+    val sampleX = 12
+    val sampleY = 12
+    val stepX = (w / (sampleX + 1)).coerceAtLeast(1)
+    val stepY = (h / (sampleY + 1)).coerceAtLeast(1)
+    var count = 0
+    var sum = 0.0
+    var sumSq = 0.0
+
+    var y = stepY
+    while (y < h && count < sampleX * sampleY) {
+        var x = stepX
+        while (x < w && count < sampleX * sampleY) {
+            val c = bitmap.getPixel(x, y)
+            val r = (c shr 16) and 0xFF
+            val g = (c shr 8) and 0xFF
+            val b = c and 0xFF
+            val luma = 0.2126 * r + 0.7152 * g + 0.0722 * b
+            sum += luma
+            sumSq += luma * luma
+            count++
+            x += stepX
+        }
+        y += stepY
+    }
+
+    if (count <= 0) return true
+    val mean = sum / count
+    val variance = (sumSq / count) - (mean * mean)
+    return mean < 18.0 || variance < 12.0
 }
 
 private object DominantColorCache {

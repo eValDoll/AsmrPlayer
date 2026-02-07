@@ -1,5 +1,8 @@
 package com.asmr.player.ui.theme
 
+import android.graphics.Bitmap
+import android.media.MediaMetadataRetriever
+import android.net.Uri
 import androidx.compose.animation.core.AnimationVector4D
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -26,6 +29,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
 @Composable
 fun rememberDynamicHuePalette(
@@ -128,6 +132,172 @@ fun rememberDynamicHuePalette(
             deriveHuePalette(animatable.value, mode, neutral, fallbackHue.onPrimary)
         }
     }
+}
+
+@Composable
+fun rememberDynamicHuePaletteFromVideoFrame(
+    videoUri: Uri?,
+    mode: ThemeMode,
+    neutral: NeutralPalette,
+    fallbackHue: HuePalette,
+    imageSizePx: Int = 256,
+    centerRegionRatio: Float = 0.62f,
+    timeoutMs: Long = 2_500L
+): State<HuePalette> {
+    val context = LocalContext.current
+    val rawBaseKey = videoUri?.toString().orEmpty()
+    val lastNonBlankBaseKeyState = rememberSaveable { androidx.compose.runtime.mutableStateOf("") }
+    if (rawBaseKey.isNotBlank() && rawBaseKey != lastNonBlankBaseKeyState.value) {
+        lastNonBlankBaseKeyState.value = rawBaseKey
+    }
+    val baseKey = if (rawBaseKey.isNotBlank()) rawBaseKey else lastNonBlankBaseKeyState.value
+    val regionKey = (centerRegionRatio * 100).toInt().coerceIn(10, 100)
+    val key = "hue:vf:cw:$regionKey:$baseKey:${mode.name}"
+
+    val animatable = remember(key) {
+        Animatable(DynamicHueCache.get(key) ?: fallbackHue.primary, ColorVectorConverter)
+    }
+
+    val preferDarkBackground = mode.isDark
+
+    LaunchedEffect(key, mode) {
+        if (baseKey.isBlank() || videoUri == null) return@LaunchedEffect
+
+        DynamicHueCache.get(key)?.let {
+            animatable.animateTo(it, animationSpec = tween(520))
+            return@LaunchedEffect
+        }
+
+        val constrainedPrimary = DynamicHueCache.getOrCompute(key) {
+            withContext(Dispatchers.Default) {
+                withTimeoutOrNull(timeoutMs) {
+                    val bitmap = extractMeaningfulVideoFrameBitmap(context, videoUri, imageSizePx) ?: return@withTimeoutOrNull null
+                    val colorInt = runCatching {
+                        val palette = Palette.from(bitmap).generate()
+                        val hint = computeCenterWeightedHintColorInt(bitmap, centerRegionRatio)
+                        pickBestColorInt(
+                            palette = palette,
+                            fallbackColorInt = fallbackHue.primary.toArgb(),
+                            preferDarkBackground = preferDarkBackground,
+                            hintColorInt = hint
+                        )
+                    }.getOrNull() ?: fallbackHue.primary.toArgb()
+
+                    val hsl = FloatArray(3)
+                    ColorUtils.colorToHSL(colorInt, hsl)
+                    adjustHslForUi(hsl, preferDarkBackground)
+                    clampPrimaryHslForMode(hsl, mode)
+
+                    Color(ColorUtils.HSLToColor(hsl))
+                }
+            }
+        }
+
+        if (constrainedPrimary == null) {
+            animatable.animateTo(
+                fallbackHue.primary,
+                animationSpec = tween(durationMillis = 260, easing = FastOutSlowInEasing)
+            )
+            return@LaunchedEffect
+        }
+
+        animatable.animateTo(
+            constrainedPrimary,
+            animationSpec = tween(durationMillis = 520, easing = FastOutSlowInEasing)
+        )
+    }
+
+    return remember(mode, neutral, fallbackHue, animatable) {
+        derivedStateOf {
+            deriveHuePalette(animatable.value, mode, neutral, fallbackHue.onPrimary)
+        }
+    }
+}
+
+private fun extractMeaningfulVideoFrameBitmap(context: android.content.Context, uri: Uri, imageSizePx: Int): Bitmap? {
+    val retriever = MediaMetadataRetriever()
+    try {
+        val scheme = uri.scheme.orEmpty().lowercase()
+        if (scheme == "http" || scheme == "https") {
+            retriever.setDataSource(uri.toString(), emptyMap())
+        } else {
+            retriever.setDataSource(context, uri)
+        }
+
+        val candidatesUs = longArrayOf(
+            0L,
+            300_000L,
+            800_000L,
+            1_500_000L,
+            2_500_000L,
+            4_000_000L
+        )
+
+        var first: Bitmap? = null
+        for (tUs in candidatesUs) {
+            val frame = runCatching {
+                retriever.getFrameAtTime(tUs, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+            }.getOrNull() ?: continue
+
+            if (first == null) first = frame
+            if (!isLikelyBlankFrame(frame)) return frame.constrainToSize(imageSizePx)
+        }
+
+        return first?.constrainToSize(imageSizePx)
+    } catch (_: Throwable) {
+        return null
+    } finally {
+        runCatching { retriever.release() }
+    }
+}
+
+private fun Bitmap.constrainToSize(targetSizePx: Int): Bitmap {
+    if (targetSizePx <= 0) return this
+    val w = width
+    val h = height
+    if (w <= 0 || h <= 0) return this
+    val maxDim = maxOf(w, h)
+    if (maxDim <= targetSizePx) return this
+    val scale = targetSizePx.toFloat() / maxDim.toFloat()
+    val newW = (w * scale).toInt().coerceAtLeast(1)
+    val newH = (h * scale).toInt().coerceAtLeast(1)
+    return runCatching { Bitmap.createScaledBitmap(this, newW, newH, true) }.getOrElse { this }
+}
+
+private fun isLikelyBlankFrame(bitmap: Bitmap): Boolean {
+    val w = bitmap.width
+    val h = bitmap.height
+    if (w < 8 || h < 8) return true
+
+    val sampleX = 12
+    val sampleY = 12
+    val stepX = (w / (sampleX + 1)).coerceAtLeast(1)
+    val stepY = (h / (sampleY + 1)).coerceAtLeast(1)
+    var count = 0
+    var sum = 0.0
+    var sumSq = 0.0
+
+    var y = stepY
+    while (y < h && count < sampleX * sampleY) {
+        var x = stepX
+        while (x < w && count < sampleX * sampleY) {
+            val c = bitmap.getPixel(x, y)
+            val r = (c shr 16) and 0xFF
+            val g = (c shr 8) and 0xFF
+            val b = c and 0xFF
+            val luma = 0.2126 * r + 0.7152 * g + 0.0722 * b
+            sum += luma
+            sumSq += luma * luma
+            count++
+            x += stepX
+        }
+        y += stepY
+    }
+
+    if (count <= 0) return true
+    val mean = sum / count
+    val variance = (sumSq / count) - (mean * mean)
+    return mean < 18.0 || variance < 12.0
 }
 
 private object DynamicHueCache {
