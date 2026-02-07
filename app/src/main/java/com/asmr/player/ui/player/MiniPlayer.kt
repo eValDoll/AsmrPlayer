@@ -32,7 +32,11 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -59,6 +63,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.foundation.layout.offset
+import kotlinx.coroutines.delay
 
 @Composable
 @OptIn(ExperimentalFoundationApi::class)
@@ -72,6 +77,25 @@ fun MiniPlayer(
     val item = playback.currentMediaItem ?: return
     val metadata = item.mediaMetadata
     val colorScheme = AsmrTheme.colorScheme
+    val currentMediaId = item.mediaId
+
+    var optimisticIsPlaying by remember { mutableStateOf<Boolean?>(null) }
+    var stableMediaId by remember { mutableStateOf(currentMediaId) }
+    val isPlayingEffective = optimisticIsPlaying ?: playback.isPlaying
+
+    LaunchedEffect(currentMediaId) {
+        if (currentMediaId != stableMediaId) {
+            stableMediaId = currentMediaId
+            optimisticIsPlaying = null
+        }
+    }
+
+    LaunchedEffect(optimisticIsPlaying) {
+        if (optimisticIsPlaying != null) {
+            delay(1_500)
+            optimisticIsPlaying = null
+        }
+    }
     
     val progress = if (playback.durationMs > 0) {
         (playback.positionMs.toDouble() / playback.durationMs.toDouble()).toFloat().coerceIn(0f, 1f)
@@ -149,9 +173,12 @@ fun MiniPlayer(
                                 modifier = Modifier.size(22.dp)
                             )
                         }
-                        IconButton(onClick = { viewModel.togglePlayPause() }) {
+                        IconButton(onClick = {
+                            optimisticIsPlaying = !(optimisticIsPlaying ?: playback.isPlaying)
+                            viewModel.togglePlayPause()
+                        }) {
                             Icon(
-                                imageVector = if (playback.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                imageVector = if (isPlayingEffective) Icons.Default.Pause else Icons.Default.PlayArrow,
                                 contentDescription = null,
                                 tint = colorScheme.primary,
                                 modifier = Modifier.size(28.dp)
@@ -205,4 +232,3 @@ fun MiniPlayer(
         }
     }
 }
-
