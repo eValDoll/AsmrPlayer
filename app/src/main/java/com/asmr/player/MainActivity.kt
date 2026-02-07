@@ -114,6 +114,7 @@ import com.asmr.player.ui.theme.DefaultBrandPrimaryLight
 import com.asmr.player.ui.theme.deriveHuePalette
 import com.asmr.player.ui.theme.neutralPaletteForMode
 import com.asmr.player.ui.theme.rememberDynamicHuePalette
+import com.asmr.player.ui.theme.rememberDynamicHuePaletteFromVideoFrame
 import javax.inject.Inject
 import kotlinx.coroutines.delay
 
@@ -142,7 +143,16 @@ class MainActivity : ComponentActivity() {
                 "system" -> if (systemDark) ThemeMode.Dark else ThemeMode.Light
                 else -> if (systemDark) ThemeMode.Dark else ThemeMode.Light
             }
-            val artworkUri = playback.currentMediaItem?.mediaMetadata?.artworkUri
+            val item = playback.currentMediaItem
+            val metadata = item?.mediaMetadata
+            val artworkUri = metadata?.artworkUri
+            val videoUri = item?.localConfiguration?.uri
+            val uriText = videoUri?.toString().orEmpty()
+            val mimeType = item?.localConfiguration?.mimeType.orEmpty()
+            val ext = uriText.substringBefore('#').substringBefore('?').substringAfterLast('.', "").lowercase()
+            val isVideo = metadata?.extras?.getBoolean("is_video") == true ||
+                mimeType.startsWith("video/") ||
+                ext in setOf("mp4", "m4v", "webm", "mkv", "mov")
             val globalDynamicHueEnabled by settingsDataStore.dynamicPlayerHueEnabled.collectAsState(initial = false)
             val staticHueArgb by settingsDataStore.staticHueArgb.collectAsState(initial = null)
             val coverBackgroundEnabled by settingsDataStore.coverBackgroundEnabled.collectAsState(initial = true)
@@ -167,16 +177,23 @@ class MainActivity : ComponentActivity() {
                 )
             }
             val globalHue = if (globalDynamicHueEnabled) {
-                val dynamicHue by rememberDynamicHuePalette(
-                    artworkModel = artworkUri,
-                    mode = mode,
-                    neutral = neutral,
-                    fallbackHue = baseStaticHue
-                )
-                dynamicHue
-            } else {
-                baseStaticHue
-            }
+                val state = if (isVideo && artworkUri == null) {
+                    rememberDynamicHuePaletteFromVideoFrame(
+                        videoUri = videoUri,
+                        mode = mode,
+                        neutral = neutral,
+                        fallbackHue = baseStaticHue
+                    )
+                } else {
+                    rememberDynamicHuePalette(
+                        artworkModel = artworkUri,
+                        mode = mode,
+                        neutral = neutral,
+                        fallbackHue = baseStaticHue
+                    )
+                }
+                state.value
+            } else baseStaticHue
 
             var showQueue by remember { mutableStateOf(false) }
 
