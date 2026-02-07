@@ -4,6 +4,9 @@ import android.content.Context
 import com.asmr.player.data.local.db.dao.RemoteSubtitleSourceDao
 import com.asmr.player.data.local.db.dao.TrackDao
 import com.asmr.player.data.local.db.entities.SubtitleEntity
+import com.asmr.player.data.remote.NetworkHeaders
+import com.asmr.player.data.remote.auth.DlsiteAuthStore
+import com.asmr.player.data.remote.auth.buildDlsiteCookieHeader
 import com.asmr.player.util.OnlineLyricsStore
 import com.asmr.player.util.RemoteSubtitleSource
 import com.asmr.player.util.SubtitleEntry
@@ -183,18 +186,34 @@ class LyricsLoader @Inject constructor(
 
     private suspend fun fetchText(url: String): String? = withContext(Dispatchers.IO) {
         val lowerUrl = url.lowercase()
-        val referer = if (lowerUrl.contains("dlsite.com")) "https://play.dlsite.com/" else null
-        val request = Request.Builder()
+        val authStore = DlsiteAuthStore(context)
+        val requestBuilder = Request.Builder()
             .url(url)
-            .header(
-                "User-Agent",
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-            )
+            .header("User-Agent", NetworkHeaders.USER_AGENT)
             .header("Accept", "text/plain, application/octet-stream, */*")
-            .apply { if (referer != null) header("Referer", referer) }
-            .build()
+
+        if (lowerUrl.contains("play.dlsite.com")) {
+            requestBuilder
+                .header("Referer", "https://play.dlsite.com/library")
+                .header("Accept-Language", NetworkHeaders.ACCEPT_LANGUAGE)
+            val cookie = buildDlsiteCookieHeader(authStore.getPlayCookie())
+            if (cookie.isNotBlank()) {
+                requestBuilder.header("Cookie", cookie)
+            }
+        } else if (lowerUrl.contains("dlsite")) {
+            requestBuilder
+                .header("Referer", NetworkHeaders.REFERER_DLSITE)
+                .header("Accept-Language", NetworkHeaders.ACCEPT_LANGUAGE)
+            val cookie = buildDlsiteCookieHeader(authStore.getDlsiteCookie())
+            if (cookie.isNotBlank()) {
+                requestBuilder.header("Cookie", cookie)
+            }
+        } else if (lowerUrl.contains("dlsite.com")) {
+            requestBuilder.header("Referer", "https://play.dlsite.com/")
+        }
+
         runCatching {
-            okHttpClient.newCall(request).execute().use { resp ->
+            okHttpClient.newCall(requestBuilder.build()).execute().use { resp ->
                 if (!resp.isSuccessful) return@use null
                 resp.body?.string()
             }

@@ -43,6 +43,7 @@ import com.asmr.player.util.SubtitleParser
 import com.asmr.player.util.MessageManager
 import com.asmr.player.util.SyncCoordinator
 import com.asmr.player.util.TagNormalizer
+import com.asmr.player.util.TrackKeyNormalizer
 import com.asmr.player.util.EmbeddedMediaExtractor
 import com.asmr.player.work.AlbumCoverThumbWorker
 import com.asmr.player.work.TrackDurationWorker
@@ -1091,10 +1092,8 @@ class LibraryViewModel @Inject constructor(
     }
 
     fun rescanAlbum(album: Album) {
-        val p = album.path.trim()
-        if (p.startsWith("web://", ignoreCase = true) || p.startsWith("http", ignoreCase = true)) {
-            return
-        }
+        val localPaths = album.getAllLocalPaths()
+        if (localPaths.isEmpty()) return
         if (!tryRegisterAlbumJob(album.id, "本地同步")) return
         val job = viewModelScope.launch {
             val ownerJob = currentCoroutineContext()[Job]
@@ -1108,34 +1107,41 @@ class LibraryViewModel @Inject constructor(
                 var removed = false
                 withContext(Dispatchers.IO) {
                     currentCoroutineContext().ensureActive()
-                    if (album.path.startsWith("content://")) {
-                        val uri = runCatching { Uri.parse(album.path) }.getOrNull()
-                        val docId = uri?.let { runCatching { DocumentsContract.getDocumentId(it) }.getOrNull() }
-                        val treeDocId = uri?.let { runCatching { DocumentsContract.getTreeDocumentId(it) }.getOrNull() }
-                        val treeUri = if (uri != null && !treeDocId.isNullOrBlank()) {
-                            DocumentsContract.buildTreeDocumentUri(uri.authority, treeDocId)
-                        } else null
-                        val exists = treeUri != null && !docId.isNullOrBlank() && documentExists(treeUri, docId)
-                        if (exists) {
-                            scanSingleAlbumFromDocumentUri(album.id, album.path)
+                    runCatching { database.localTreeCacheDao().deleteByAlbum(album.id) }
+
+                    var scannedAny = false
+                    localPaths.forEach { path ->
+                        currentCoroutineContext().ensureActive()
+                        val p = path.trim()
+                        if (p.isBlank()) return@forEach
+
+                        if (p.startsWith("content://")) {
+                            val uri = runCatching { Uri.parse(p) }.getOrNull()
+                            val docId = uri?.let { runCatching { DocumentsContract.getDocumentId(it) }.getOrNull() }
+                            val treeDocId = uri?.let { runCatching { DocumentsContract.getTreeDocumentId(it) }.getOrNull() }
+                            val treeUri = if (uri != null && !treeDocId.isNullOrBlank()) {
+                                DocumentsContract.buildTreeDocumentUri(uri.authority, treeDocId)
+                            } else null
+                            val exists = treeUri != null && !docId.isNullOrBlank() && documentExists(treeUri, docId)
+                            if (exists) {
+                                scanSingleAlbumFromDocumentUri(album.id, p)
+                                scannedAny = true
+                            }
                         } else {
-                            val entity = albumDao.getAlbumById(album.id) ?: return@withContext
-                            trackDao.deleteSubtitlesForAlbum(entity.id)
-                            trackDao.deleteTracksForAlbum(entity.id)
-                            albumDao.deleteAlbum(entity)
-                            removed = true
+                            val root = File(p)
+                            if (root.exists() && root.isDirectory) {
+                                scanTracksAndSubtitlesFromFileAlbum(album.id, root)
+                                scannedAny = true
+                            }
                         }
-                    } else {
-                        val root = File(album.path)
-                        if (root.exists() && root.isDirectory) {
-                            scanTracksAndSubtitlesFromFileAlbum(album.id, root)
-                        } else {
-                            val entity = albumDao.getAlbumById(album.id) ?: return@withContext
-                            trackDao.deleteSubtitlesForAlbum(entity.id)
-                            trackDao.deleteTracksForAlbum(entity.id)
-                            albumDao.deleteAlbum(entity)
-                            removed = true
-                        }
+                    }
+
+                    if (!scannedAny) {
+                        val entity = albumDao.getAlbumById(album.id) ?: return@withContext
+                        trackDao.deleteSubtitlesForAlbum(entity.id)
+                        trackDao.deleteTracksForAlbum(entity.id)
+                        albumDao.deleteAlbum(entity)
+                        removed = true
                     }
                 }
                 _syncStatus.value -= album.id
@@ -1209,6 +1215,7 @@ class LibraryViewModel @Inject constructor(
                 runCatching { trackDao.deleteSubtitlesForTrack(trackId) }
                 runCatching { database.trackTagDao().deleteTrackTagsByTrackId(trackId) }
                 runCatching { trackDao.deleteTrackById(trackId) }
+                runCatching { database.localTreeCacheDao().deleteByAlbum(track.albumId) }
             }
 
             if (deletedFile) {
@@ -1493,7 +1500,17 @@ class LibraryViewModel @Inject constructor(
         }
         audioFiles.sortBy { it.absolutePath }
 
-        val existingTracks = trackDao.getTracksForAlbumOnce(albumId)
+        val allExistingTracks = trackDao.getTracksForAlbumOnce(albumId)
+        val existingLocalKeys = LinkedHashSet<String>()
+        val existingLocalKeysNoGroup = LinkedHashSet<String>()
+        allExistingTracks
+            .filter { it.path.isNotBlank() && !it.path.startsWith(prefix) && !it.path.trim().startsWith("http", ignoreCase = true) }
+            .forEach { t ->
+                existingLocalKeys.add(TrackKeyNormalizer.buildKey(t.title, t.group, null))
+                existingLocalKeysNoGroup.add(TrackKeyNormalizer.buildKey(t.title, "", null))
+            }
+
+        val existingTracks = allExistingTracks
             .filter { it.path.startsWith(prefix) }
             .associateBy { it.path }
         val seenPaths = linkedSetOf<String>()
@@ -1507,6 +1524,11 @@ class LibraryViewModel @Inject constructor(
             val group =
                 if (relPath.contains("/")) relPath.substringBeforeLast('/').substringAfterLast('/', relPath.substringBeforeLast('/')) else ""
             val audioPath = audio.absolutePath
+            val key = TrackKeyNormalizer.buildKey(trackTitle, group, null)
+            val keyNoGroup = TrackKeyNormalizer.buildKey(trackTitle, "", null)
+            if (existingLocalKeys.contains(key) || existingLocalKeysNoGroup.contains(keyNoGroup)) {
+                return@forEach
+            }
             seenPaths.add(audioPath)
 
             tracksToUpsert.add(
@@ -1551,6 +1573,7 @@ class LibraryViewModel @Inject constructor(
         val treeDocId = runCatching { DocumentsContract.getTreeDocumentId(uri) }.getOrNull() ?: return
         val children = queryChildren(uri, treeDocId).filter { it.mimeType == DocumentsContract.Document.MIME_TYPE_DIR }
         val audioExtensions = setOf("mp3", "flac", "wav", "m4a", "ogg", "aac", "opus")
+        val subtitleExtensions = setOf("lrc", "srt", "vtt")
         val foundAlbumPaths = LinkedHashSet<String>()
 
         children.forEach { albumDir ->
@@ -1574,6 +1597,12 @@ class LibraryViewModel @Inject constructor(
 
             val all = walkTree(uri, albumDir.documentId).filter { it.mimeType != DocumentsContract.Document.MIME_TYPE_DIR }
             val audioFiles = all.filter { audioExtensions.contains(it.displayName.substringAfterLast('.', "").lowercase()) }
+            val subtitleNodes = all.filter { subtitleExtensions.contains(it.displayName.substringAfterLast('.', "").lowercase()) }
+            val subtitleNodeByRelativePath = subtitleNodes.associateBy { it.relativePath }
+            val subtitleIndex = buildSubtitleCandidateIndex(
+                subtitles = subtitleNodes.map { it.relativePath },
+                isSubtitle = { name -> subtitleExtensions.contains(name.substringAfterLast('.', "").lowercase()) }
+            )
 
             data class TrackSpec(
                 val title: String,
@@ -1582,12 +1611,14 @@ class LibraryViewModel @Inject constructor(
             )
 
             val trackSpecs = ArrayList<TrackSpec>(audioFiles.size)
+            val audioRelativeBaseByPath = LinkedHashMap<String, String>(audioFiles.size)
             audioFiles.sortedBy { it.documentId }.forEach { audio ->
                 currentCoroutineContext().ensureActive()
                 maybeUpdateBulkCurrentFile(audio.displayName)
                 val audioUri = DocumentsContract.buildDocumentUriUsingTree(uri, audio.documentId)
                 val trackTitle = audio.displayName.substringBeforeLast('.').ifBlank { "track" }
                 val group = if (audio.relativePath.contains("/")) audio.relativePath.substringBeforeLast('/').substringAfterLast('/') else ""
+                val relativeBase = audio.relativePath.substringBeforeLast('.')
                 trackSpecs.add(
                     TrackSpec(
                         title = trackTitle,
@@ -1595,6 +1626,18 @@ class LibraryViewModel @Inject constructor(
                         group = group
                     )
                 )
+                audioRelativeBaseByPath[audioUri.toString()] = relativeBase
+            }
+
+            val subtitlesByAudioPath: Map<String, List<com.asmr.player.util.SubtitleEntry>> = trackSpecs.associate { spec ->
+                val key = audioRelativeBaseByPath[spec.path].orEmpty()
+                val matched = if (key.isBlank()) emptyList() else subtitleIndex.match(key)
+                val parsed = matched.mapNotNull { cand ->
+                    val node = subtitleNodeByRelativePath[cand.fileName] ?: return@mapNotNull null
+                    val entries = readSubtitleFromUri(uri, node.documentId, node.displayName)
+                    ParsedSubtitleCandidate(fileName = cand.fileName, language = cand.language, entries = entries)
+                }
+                spec.path to mergeSubtitleCandidates(parsed)
             }
 
             var insertedAlbumId = 0L
@@ -1626,7 +1669,22 @@ class LibraryViewModel @Inject constructor(
                     trackDao.deleteTracksByIds(toDelete)
                 }
 
-                val tracksToInsert = trackSpecs.map { spec ->
+                val existingLocalKeys = LinkedHashSet<String>()
+                val existingLocalKeysNoGroup = LinkedHashSet<String>()
+                allExistingTracks
+                    .filter { it.path.isNotBlank() && !it.path.startsWith(albumPath) && !it.path.trim().startsWith("http", ignoreCase = true) }
+                    .forEach { t ->
+                        existingLocalKeys.add(TrackKeyNormalizer.buildKey(t.title, t.group, null))
+                        existingLocalKeysNoGroup.add(TrackKeyNormalizer.buildKey(t.title, "", null))
+                    }
+
+                val filteredTrackSpecs = trackSpecs.filter { spec ->
+                    val key = TrackKeyNormalizer.buildKey(spec.title, spec.group, null)
+                    val keyNoGroup = TrackKeyNormalizer.buildKey(spec.title, "", null)
+                    !(existingLocalKeys.contains(key) || existingLocalKeysNoGroup.contains(keyNoGroup))
+                }
+
+                val tracksToInsert = filteredTrackSpecs.map { spec ->
                     TrackEntity(
                         albumId = insertedAlbumId,
                         title = spec.title,
@@ -1637,13 +1695,65 @@ class LibraryViewModel @Inject constructor(
                 }
 
                 if (tracksToInsert.isNotEmpty()) {
-                    trackDao.insertTracks(tracksToInsert)
+                    val insertedTrackIds = trackDao.insertTracks(tracksToInsert)
+                    val subtitlesToInsert = ArrayList<SubtitleEntity>()
+                    insertedTrackIds.zip(filteredTrackSpecs).forEach { (trackId, spec) ->
+                        val entries = subtitlesByAudioPath[spec.path].orEmpty()
+                        entries.forEach { e ->
+                            subtitlesToInsert.add(
+                                SubtitleEntity(
+                                    trackId = trackId,
+                                    startMs = e.startMs,
+                                    endMs = e.endMs,
+                                    text = e.text
+                                )
+                            )
+                        }
+                    }
+                    if (subtitlesToInsert.isNotEmpty()) {
+                        trackDao.insertSubtitles(subtitlesToInsert)
+                    }
+                }
+
+                val allAfterInsert = trackDao.getTracksForAlbumOnce(insertedAlbumId)
+                val localAfterInsert = allAfterInsert.filter { !it.path.trim().startsWith("http", ignoreCase = true) }
+                val localKeyToId = LinkedHashMap<String, Long>()
+                localAfterInsert.forEach { t ->
+                    localKeyToId.putIfAbsent(TrackKeyNormalizer.buildKey(t.title, t.group, null), t.id)
+                    localKeyToId.putIfAbsent(TrackKeyNormalizer.buildKey(t.title, "", null), t.id)
+                }
+                val onlineTracks = allAfterInsert.filter { it.path.trim().startsWith("http", ignoreCase = true) }
+                onlineTracks.forEach { online ->
+                    val key = TrackKeyNormalizer.buildKey(online.title, online.group, null)
+                    val keyNoGroup = TrackKeyNormalizer.buildKey(online.title, "", null)
+                    val targetId = localKeyToId[key] ?: localKeyToId[keyNoGroup]
+                    if (targetId != null) {
+                        val sourceSubs = trackDao.getSubtitlesForTrack(online.id)
+                        if (sourceSubs.isNotEmpty()) {
+                            val targetHasSubs = trackDao.getSubtitlesForTrack(targetId).isNotEmpty()
+                            if (!targetHasSubs) {
+                                trackDao.insertSubtitles(
+                                    sourceSubs.map { s ->
+                                        SubtitleEntity(
+                                            trackId = targetId,
+                                            startMs = s.startMs,
+                                            endMs = s.endMs,
+                                            text = s.text
+                                        )
+                                    }
+                                )
+                            }
+                        }
+                        runCatching { database.remoteSubtitleSourceDao().deleteByTrackId(online.id) }
+                        trackDao.deleteSubtitlesForTrack(online.id)
+                        trackDao.deleteTrackById(online.id)
+                    }
                 }
 
                 val leaves = all.asSequence()
                     .mapNotNull { node ->
                         val t = cacheFileTypeForName(node.displayName)
-                        if (t == CacheTreeFileType.Other || t == CacheTreeFileType.Subtitle) return@mapNotNull null
+                        if (t == CacheTreeFileType.Other) return@mapNotNull null
                         val abs = DocumentsContract.buildDocumentUriUsingTree(uri, node.documentId).toString()
                         CacheLeafEntry(relativePath = node.relativePath, absolutePath = abs, fileType = t)
                     }
@@ -1809,12 +1919,19 @@ class LibraryViewModel @Inject constructor(
         val albumDocId = runCatching { DocumentsContract.getDocumentId(albumUri) }.getOrNull() ?: return
 
         val audioExtensions = setOf("mp3", "flac", "wav", "m4a", "ogg", "aac", "opus")
+        val subtitleExtensions = setOf("lrc", "srt", "vtt")
 
         val albumChildren = queryChildren(treeUri, albumDocId)
         val coverPath = pickCoverNode(albumChildren, treeUri, albumDocId)
 
         val all = walkTree(treeUri, albumDocId).filter { it.mimeType != DocumentsContract.Document.MIME_TYPE_DIR }
         val audioFiles = all.filter { audioExtensions.contains(it.displayName.substringAfterLast('.', "").lowercase()) }.sortedBy { it.documentId }
+        val subtitleNodes = all.filter { subtitleExtensions.contains(it.displayName.substringAfterLast('.', "").lowercase()) }
+        val subtitleNodeByRelativePath = subtitleNodes.associateBy { it.relativePath }
+        val subtitleIndex = buildSubtitleCandidateIndex(
+            subtitles = subtitleNodes.map { it.relativePath },
+            isSubtitle = { name -> subtitleExtensions.contains(name.substringAfterLast('.', "").lowercase()) }
+        )
 
         data class TrackSpec(
             val title: String,
@@ -1823,11 +1940,13 @@ class LibraryViewModel @Inject constructor(
         )
 
         val trackSpecs = ArrayList<TrackSpec>(audioFiles.size)
+        val audioRelativeBaseByPath = LinkedHashMap<String, String>(audioFiles.size)
         audioFiles.forEach { audio ->
             maybeUpdateBulkCurrentFile(audio.displayName)
             val audioUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, audio.documentId)
             val trackTitle = audio.displayName.substringBeforeLast('.').ifBlank { "track" }
             val group = if (audio.relativePath.contains("/")) audio.relativePath.substringBeforeLast('/').substringAfterLast('/') else ""
+            val relativeBase = audio.relativePath.substringBeforeLast('.')
             trackSpecs.add(
                 TrackSpec(
                     title = trackTitle,
@@ -1835,9 +1954,30 @@ class LibraryViewModel @Inject constructor(
                     group = group
                 )
             )
+            audioRelativeBaseByPath[audioUri.toString()] = relativeBase
         }
 
-        val albumPathPrefix = DocumentsContract.buildDocumentUriUsingTree(treeUri, albumDocId).toString()
+        val subtitlesByAudioPath: Map<String, List<com.asmr.player.util.SubtitleEntry>> = trackSpecs.associate { spec ->
+            val key = audioRelativeBaseByPath[spec.path].orEmpty()
+            val matched = if (key.isBlank()) emptyList() else subtitleIndex.match(key)
+            val parsed = matched.mapNotNull { cand ->
+                val node = subtitleNodeByRelativePath[cand.fileName] ?: return@mapNotNull null
+                val entries = readSubtitleFromUri(treeUri, node.documentId, node.displayName)
+                ParsedSubtitleCandidate(fileName = cand.fileName, language = cand.language, entries = entries)
+            }
+            spec.path to mergeSubtitleCandidates(parsed)
+        }
+
+        val cacheLeaves = all.mapNotNull { node ->
+            val type = cacheFileTypeForName(node.displayName)
+            if (type == CacheTreeFileType.Other || type == CacheTreeFileType.Subtitle) return@mapNotNull null
+            val rawRel = node.relativePath.replace('\\', '/').trim().trimStart('/')
+            if (rawRel.isBlank()) return@mapNotNull null
+            val docUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, node.documentId).toString()
+            CacheLeafEntry(relativePath = rawRel, absolutePath = docUri, fileType = type)
+        }
+        val treePrefix = treeUri.toString().trimEnd('/') + "/document/"
+        var persistedPaths: List<String> = emptyList()
 
         database.withTransaction {
             val entity = albumDao.getAlbumById(albumId) ?: return@withTransaction
@@ -1845,14 +1985,34 @@ class LibraryViewModel @Inject constructor(
                 albumDao.updateAlbum(entity.copy(coverPath = coverPath))
             }
 
-            val existing = trackDao.getTracksForAlbumOnce(albumId)
-            val toDelete = existing.filter { it.path.startsWith(albumPathPrefix) }.map { it.id }
+            persistedPaths = listOfNotNull(entity.path, entity.localPath, entity.downloadPath)
+                .map { it.trim() }
+                .filter { it.isNotBlank() }
+                .distinct()
+
+            val allExistingTracks = trackDao.getTracksForAlbumOnce(albumId)
+            val existingLocalKeys = LinkedHashSet<String>()
+            val existingLocalKeysNoGroup = LinkedHashSet<String>()
+            allExistingTracks
+                .filter { it.path.isNotBlank() && !it.path.startsWith(treePrefix) && !it.path.trim().startsWith("http", ignoreCase = true) }
+                .forEach { t ->
+                    existingLocalKeys.add(TrackKeyNormalizer.buildKey(t.title, t.group, null))
+                    existingLocalKeysNoGroup.add(TrackKeyNormalizer.buildKey(t.title, "", null))
+                }
+
+            val toDelete = allExistingTracks.filter { it.path.startsWith(treePrefix) }.map { it.id }
             if (toDelete.isNotEmpty()) {
                 trackDao.deleteSubtitlesForTracks(toDelete)
                 trackDao.deleteTracksByIds(toDelete)
             }
 
-            val tracksToInsert = trackSpecs.map { spec ->
+            val filteredTrackSpecs = trackSpecs.filter { spec ->
+                val key = TrackKeyNormalizer.buildKey(spec.title, spec.group, null)
+                val keyNoGroup = TrackKeyNormalizer.buildKey(spec.title, "", null)
+                !(existingLocalKeys.contains(key) || existingLocalKeysNoGroup.contains(keyNoGroup))
+            }
+
+            val tracksToInsert = filteredTrackSpecs.map { spec ->
                 TrackEntity(
                     albumId = albumId,
                     title = spec.title,
@@ -1862,8 +2022,32 @@ class LibraryViewModel @Inject constructor(
                 )
             }
             if (tracksToInsert.isNotEmpty()) {
-                trackDao.insertTracks(tracksToInsert)
+                val insertedTrackIds = trackDao.insertTracks(tracksToInsert)
+                val subtitlesToInsert = ArrayList<SubtitleEntity>()
+                insertedTrackIds.zip(filteredTrackSpecs).forEach { (trackId, spec) ->
+                    val entries = subtitlesByAudioPath[spec.path].orEmpty()
+                    entries.forEach { e ->
+                        subtitlesToInsert.add(
+                            SubtitleEntity(
+                                trackId = trackId,
+                                startMs = e.startMs,
+                                endMs = e.endMs,
+                                text = e.text
+                            )
+                        )
+                    }
+                }
+                if (subtitlesToInsert.isNotEmpty()) {
+                    trackDao.insertSubtitles(subtitlesToInsert)
+                }
             }
+        }
+        if (persistedPaths.isNotEmpty() && cacheLeaves.isNotEmpty()) {
+            upsertLocalTreeCache(
+                albumId = albumId,
+                albumPaths = persistedPaths,
+                leaves = cacheLeaves.distinctBy { it.relativePath }
+            )
         }
         enqueueAlbumCoverThumbWork(albumId)
         enqueueTrackDurationWork(albumId)

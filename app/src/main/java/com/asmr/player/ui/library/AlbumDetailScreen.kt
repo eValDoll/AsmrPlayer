@@ -1483,7 +1483,8 @@ private fun AlbumLocalTab(
                                     thumbnailModel = if (entry.fileType == TreeFileType.Image) entry.absolutePath else null,
                                     onPrimary = {
                                         if (t != null && entry.fileType == TreeFileType.Audio) {
-                                            onPlayTracks(album, queueTracks, t)
+                                            val siblings = treeIndex?.let { siblingAudioTracksForEntry(it, entry.path) }.orEmpty()
+                                            onPlayTracks(album, if (siblings.isNotEmpty()) siblings else queueTracks, t)
                                         } else if (entry.fileType == TreeFileType.Video) {
                                             val artwork = album.coverPath.ifBlank { album.coverUrl }
                                             val artist = album.cv.ifBlank { album.circle }
@@ -1742,6 +1743,29 @@ private data class LocalTreeIndex(
     val folderStats: Map<String, LocalFolderStats>
 )
 
+private fun findLocalTreeNode(root: LocalTreeNode, folderPath: String): LocalTreeNode? {
+    val normalized = folderPath.trim().trimStart('/').trimEnd('/')
+    if (normalized.isBlank()) return root
+    var cur: LocalTreeNode = root
+    val segments = normalized.split('/').filter { it.isNotBlank() }
+    for (seg in segments) {
+        val next = cur.children[seg] ?: return null
+        cur = next
+    }
+    return cur
+}
+
+private fun siblingAudioTracksForEntry(index: LocalTreeIndex, entryPath: String): List<Track> {
+    val folderPath = entryPath.substringBeforeLast('/', "")
+    val node = findLocalTreeNode(index.root, folderPath) ?: index.root
+    return node.children.values
+        .asSequence()
+        .filter { it.children.isEmpty() && it.absolutePath != null && it.fileType == TreeFileType.Audio && it.track != null }
+        .sortedBy { it.name.lowercase() }
+        .mapNotNull { it.track }
+        .toList()
+}
+
 private data class LocalTreeLeafCacheEntry(
     val relativePath: String,
     val absolutePath: String,
@@ -1945,9 +1969,15 @@ private fun buildLocalTreeIndexByScanning(
                                 val ft = if (mime == DocumentsContract.Document.MIME_TYPE_DIR) TreeFileType.Other else treeFileTypeForName(name)
                                 child.fileType = ft
                                 if (mime != DocumentsContract.Document.MIME_TYPE_DIR && ft != TreeFileType.Other && ft != TreeFileType.Subtitle) {
-                                    child.absolutePath = fileUri
-                                    child.track = trackByAbsolutePath[fileUri]
-                                    if (ft == TreeFileType.Audio || ft == TreeFileType.Video) {
+                                    val track = trackByAbsolutePath[fileUri]
+                                    if (ft == TreeFileType.Audio && track == null) {
+                                        child.absolutePath = null
+                                        child.track = null
+                                    } else {
+                                        child.absolutePath = fileUri
+                                        child.track = track
+                                    }
+                                    if (ft == TreeFileType.Video || (ft == TreeFileType.Audio && track != null)) {
                                         updateFolderStats(segments, ft, name.substringAfterLast('.', "").lowercase())
                                     }
                                 } else {
@@ -1973,6 +2003,8 @@ private fun buildLocalTreeIndexByScanning(
                     if (!file.isFile) return@forEach
                     val type = treeFileTypeForName(file.name)
                     if (type == TreeFileType.Other || type == TreeFileType.Subtitle) return@forEach
+                    val track = trackByAbsolutePath[file.absolutePath]
+                    if (type == TreeFileType.Audio && track == null) return@forEach
 
                     val rawRel = runCatching { file.relativeTo(rootDir).path }.getOrElse { file.name }
                     val rel = rawRel.replace('\\', '/').trim().trimStart('/')
@@ -1986,7 +2018,7 @@ private fun buildLocalTreeIndexByScanning(
                         if (idx == segments.lastIndex) {
                             child.absolutePath = file.absolutePath
                             child.fileType = type
-                            child.track = trackByAbsolutePath[file.absolutePath]
+                            child.track = track
                             if (type == TreeFileType.Audio || type == TreeFileType.Video) {
                                 updateFolderStats(segments, type, file.extension.lowercase())
                             }
@@ -2029,6 +2061,8 @@ private fun buildLocalTreeIndexFromLeaves(
 
     leaves.forEach { leaf ->
         if (leaf.fileType == TreeFileType.Subtitle) return@forEach
+        val track = trackByAbsolutePath[leaf.absolutePath]
+        if (leaf.fileType == TreeFileType.Audio && track == null) return@forEach
         val rel = leaf.relativePath.trim().trimStart('/')
         if (rel.isBlank()) return@forEach
         val segments = rel.split('/').filter { it.isNotBlank() }
@@ -2040,7 +2074,7 @@ private fun buildLocalTreeIndexFromLeaves(
             if (idx == segments.lastIndex) {
                 child.absolutePath = leaf.absolutePath
                 child.fileType = leaf.fileType
-                child.track = trackByAbsolutePath[leaf.absolutePath]
+                child.track = track
             }
             cur = child
         }

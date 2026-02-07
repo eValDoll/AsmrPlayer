@@ -724,10 +724,7 @@ fun LibraryScreen(
             if (album != null) {
                 val syncStatus = (uiState as? LibraryUiState.Success)?.syncingAlbums?.get(album.id) ?: SyncStatus.Idle
                 val isSyncing = syncStatus is SyncStatus.Syncing
-                val isOnlineAlbum = remember(album.path) {
-                    val p = album.path.trim()
-                    p.startsWith("web://", ignoreCase = true) || p.startsWith("http", ignoreCase = true)
-                }
+                val hasLocalPaths = remember(album) { album.getAllLocalPaths().isNotEmpty() }
                 ListItem(
                     headlineContent = { Text("删除") },
                     leadingContent = { Icon(Icons.Default.Delete, contentDescription = null) },
@@ -763,7 +760,7 @@ fun LibraryScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 8.dp)
-                        .clickable(enabled = !isOnlineAlbum && !isSyncing && !isGlobalSyncRunning) {
+                        .clickable(enabled = hasLocalPaths && !isSyncing && !isGlobalSyncRunning) {
                             showAlbumActions = false
                             viewModel.rescanAlbum(album)
                         }

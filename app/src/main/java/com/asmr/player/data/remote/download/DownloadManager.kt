@@ -11,8 +11,11 @@ import com.asmr.player.data.local.db.entities.AlbumFtsEntity
 import com.asmr.player.data.local.db.dao.DownloadDao
 import com.asmr.player.data.local.db.entities.DownloadItemEntity
 import com.asmr.player.data.local.db.entities.DownloadTaskEntity
+import com.asmr.player.data.local.db.entities.SubtitleEntity
 import com.asmr.player.data.local.db.entities.TrackEntity
 import com.asmr.player.data.local.db.AppDatabaseProvider
+import com.asmr.player.util.SubtitleParser
+import com.asmr.player.util.TrackKeyNormalizer
 import com.asmr.player.work.AlbumCoverThumbWorker
 import dagger.hilt.android.qualifiers.ApplicationContext
 import okhttp3.OkHttpClient
@@ -70,6 +73,74 @@ class DownloadManager @Inject constructor(
             val safeAlbumDescription = albumDescription.trim().take(0)
             val safeAlbumWorkId = albumWorkId.trim().take(40)
             val safeAlbumRjCode = albumRjCode.trim().take(40)
+
+            val existingFile = File(filePath)
+            if (existingFile.exists() && existingFile.isFile) {
+                val taskId = ensureTask(taskKey = taskKey, title = taskTitle, subtitle = safeTaskSubtitle, rootDir = taskRootDir, now = now)
+                val size = existingFile.length().coerceAtLeast(0L)
+                val existingItem = downloadDao.getItemByFilePath(filePath)
+                if (existingItem != null) {
+                    downloadDao.updateItemProgress(
+                        workId = existingItem.workId,
+                        state = WorkInfo.State.SUCCEEDED.name,
+                        downloaded = size,
+                        total = size,
+                        speed = 0L,
+                        updatedAt = now
+                    )
+                } else {
+                    val localWorkId = "local_$uniqueWorkName"
+                    downloadDao.upsertItem(
+                        DownloadItemEntity(
+                            taskId = taskId,
+                            workId = localWorkId,
+                            url = url,
+                            relativePath = safeRelativePath,
+                            fileName = fileName,
+                            targetDir = targetDir,
+                            filePath = filePath,
+                            state = WorkInfo.State.SUCCEEDED.name,
+                            downloaded = size,
+                            total = size,
+                            speed = 0L,
+                            createdAt = now,
+                            updatedAt = now
+                        )
+                    )
+                }
+                runCatching {
+                    val task = downloadDao.getTaskByKey(taskKey)
+                    if (task != null) {
+                        val items = downloadDao.getItemsForTask(task.id)
+                        val done = items.isNotEmpty() && items.all { it.state == WorkInfo.State.SUCCEEDED.name }
+                        if (done) {
+                            val db = AppDatabaseProvider.get(context)
+                            db.withTransaction {
+                                upsertDownloadedAlbumToLibrary(
+                                    db = db,
+                                    appContext = context,
+                                    rootDir = taskRootDir,
+                                    taskTitle = taskTitle,
+                                    taskSubtitle = safeTaskSubtitle,
+                                    albumTitle = safeAlbumTitle,
+                                    albumCircle = safeAlbumCircle,
+                                    albumCv = safeAlbumCv,
+                                    albumTagsCsv = safeAlbumTagsCsv,
+                                    albumCoverUrl = safeAlbumCoverUrl,
+                                    albumDescription = safeAlbumDescription,
+                                    albumWorkId = safeAlbumWorkId,
+                                    albumRjCode = safeAlbumRjCode
+                                )
+                            }
+                            runCatching {
+                                val marker = File(taskRootDir, ".download_complete")
+                                if (!marker.exists()) marker.createNewFile()
+                            }
+                        }
+                    }
+                }
+                return@launch
+            }
 
             val existingItem = downloadDao.getItemByFilePath(filePath)
             val workInfos = runCatching { wm.getWorkInfosForUniqueWork(uniqueWorkName).get() }.getOrDefault(emptyList())
@@ -536,6 +607,7 @@ private suspend fun upsertDownloadedAlbumToLibrary(
     }
 
     val audioExtensions = setOf("mp3", "flac", "wav", "m4a", "ogg", "aac", "opus")
+    val subtitleExtensions = setOf("lrc", "srt", "vtt")
     val audioFiles = dir.walkTopDown()
         .filter { it.isFile && audioExtensions.contains(it.extension.lowercase()) }
         .toList()
@@ -546,13 +618,29 @@ private suspend fun upsertDownloadedAlbumToLibrary(
     } catch (_: Exception) {
         emptyList()
     }
+    val prefix = dir.absolutePath.trimEnd('\\', '/') + File.separator
+    val existingLocalKeys = LinkedHashSet<String>()
+    val existingLocalKeysNoGroup = LinkedHashSet<String>()
+    existingTracks
+        .filter { it.path.isNotBlank() && !it.path.startsWith(prefix) && !it.path.trim().startsWith("http", ignoreCase = true) }
+        .forEach { t ->
+            existingLocalKeys.add(TrackKeyNormalizer.buildKey(t.title, t.group, null))
+            existingLocalKeysNoGroup.add(TrackKeyNormalizer.buildKey(t.title, "", null))
+        }
     val toDelete = existingTracks.filter { it.path.startsWith(dir.absolutePath) }.map { it.id }
     if (toDelete.isNotEmpty()) {
         runCatching { trackDao.deleteSubtitlesForTracks(toDelete) }
         runCatching { trackDao.deleteTracksByIds(toDelete) }
     }
 
-    val newTracks = audioFiles.map { f ->
+    val filteredAudioFiles = audioFiles.filter { f ->
+        val group = if (f.parentFile != null && f.parentFile?.absolutePath != dir.absolutePath) f.parentFile?.name.orEmpty() else ""
+        val key = TrackKeyNormalizer.buildKey(f.nameWithoutExtension.ifBlank { "track" }, group, null)
+        val keyNoGroup = TrackKeyNormalizer.buildKey(f.nameWithoutExtension.ifBlank { "track" }, "", null)
+        !(existingLocalKeys.contains(key) || existingLocalKeysNoGroup.contains(keyNoGroup))
+    }
+
+    val newTracks = filteredAudioFiles.map { f ->
         val group = if (f.parentFile != null && f.parentFile?.absolutePath != dir.absolutePath) f.parentFile?.name.orEmpty() else ""
         TrackEntity(
             albumId = albumId,
@@ -563,16 +651,117 @@ private suspend fun upsertDownloadedAlbumToLibrary(
         )
     }
     if (newTracks.isNotEmpty()) {
-        runCatching { trackDao.insertTracks(newTracks) }
+        val insertedTrackIds = runCatching { trackDao.insertTracks(newTracks) }.getOrDefault(emptyList())
+        if (insertedTrackIds.isNotEmpty()) {
+            val subtitlesToInsert = ArrayList<SubtitleEntity>()
+            val prefer = listOf("default", "zh", "cn", "chs", "ja", "jp", "jpn", "en")
+
+            fun findBestSidecarSubtitle(audio: File): File? {
+                val parent = audio.parentFile ?: return null
+                val base = audio.nameWithoutExtension
+                val siblings = parent.listFiles()
+                    ?.filter { it.isFile && subtitleExtensions.contains(it.extension.lowercase()) }
+                    .orEmpty()
+
+                val matched = siblings.mapNotNull { f ->
+                    val nameWithoutExt = f.nameWithoutExtension
+                    val isMatch: Boolean
+                    val language: String
+                    if (nameWithoutExt.equals(base, ignoreCase = true)) {
+                        isMatch = true
+                        language = "default"
+                    } else if (nameWithoutExt.startsWith("$base.", ignoreCase = true)) {
+                        isMatch = true
+                        val suffix = nameWithoutExt.substring(base.length + 1)
+                        val parts = suffix.split('.').filter { it.isNotBlank() }
+                        val valid = parts.filter { !audioExtensions.contains(it.lowercase()) }
+                        language = when {
+                            valid.isEmpty() -> "zh"
+                            valid.size == 1 -> valid[0]
+                            else -> valid.last()
+                        }
+                    } else {
+                        isMatch = false
+                        language = "default"
+                    }
+                    if (isMatch) f to language else null
+                }
+
+                val ordered = matched.sortedWith(
+                    compareBy<Pair<File, String>> { (_, lang) ->
+                        val idx = prefer.indexOf(lang.lowercase())
+                        if (idx >= 0) idx else Int.MAX_VALUE
+                    }.thenBy { it.first.name.lowercase() }
+                )
+                return ordered.firstOrNull()?.first
+            }
+
+            insertedTrackIds.zip(filteredAudioFiles).forEach { (trackId, audio) ->
+                val subtitleFile = findBestSidecarSubtitle(audio) ?: return@forEach
+                val entries = runCatching { SubtitleParser.parse(subtitleFile.absolutePath) }.getOrDefault(emptyList())
+                entries.forEach { e ->
+                    subtitlesToInsert.add(
+                        SubtitleEntity(
+                            trackId = trackId,
+                            startMs = e.startMs,
+                            endMs = e.endMs,
+                            text = e.text
+                        )
+                    )
+                }
+            }
+
+            if (subtitlesToInsert.isNotEmpty()) {
+                runCatching { trackDao.insertSubtitles(subtitlesToInsert) }
+            }
+        }
     }
 
-    val onlineTrackIds = runCatching { trackDao.getTracksForAlbumOnce(albumId) }.getOrDefault(emptyList())
+    val allAfterInsert = runCatching { trackDao.getTracksForAlbumOnce(albumId) }.getOrDefault(emptyList())
+    val localAfterInsert = allAfterInsert.filter { !it.path.trim().startsWith("http", ignoreCase = true) }
+    val localKeyToId = LinkedHashMap<String, Long>()
+    val localKeyToIdNoGroup = LinkedHashMap<String, Long>()
+    localAfterInsert
+        .sortedWith(compareByDescending<TrackEntity> { it.path.startsWith(prefix) }.thenBy { it.id })
+        .forEach { t ->
+            localKeyToId.putIfAbsent(TrackKeyNormalizer.buildKey(t.title, t.group, null), t.id)
+            localKeyToIdNoGroup.putIfAbsent(TrackKeyNormalizer.buildKey(t.title, "", null), t.id)
+        }
+
+    val onlineToDelete = ArrayList<Long>()
+    allAfterInsert
         .filter { it.path.trim().startsWith("http", ignoreCase = true) }
-        .map { it.id }
-    if (onlineTrackIds.isNotEmpty()) {
-        runCatching { db.remoteSubtitleSourceDao().deleteByTrackIds(onlineTrackIds) }
-        runCatching { trackDao.deleteSubtitlesForTracks(onlineTrackIds) }
-        runCatching { trackDao.deleteTracksByIds(onlineTrackIds) }
+        .forEach { online ->
+            val key = TrackKeyNormalizer.buildKey(online.title, online.group, null)
+            val keyNoGroup = TrackKeyNormalizer.buildKey(online.title, "", null)
+            val targetId = localKeyToId[key] ?: localKeyToIdNoGroup[keyNoGroup]
+            if (targetId != null) {
+                val sourceSubs = runCatching { trackDao.getSubtitlesForTrack(online.id) }.getOrDefault(emptyList())
+                if (sourceSubs.isNotEmpty()) {
+                    val targetHasSubs = runCatching { trackDao.getSubtitlesForTrack(targetId) }.getOrDefault(emptyList()).isNotEmpty()
+                    if (!targetHasSubs) {
+                        runCatching {
+                            trackDao.insertSubtitles(
+                                sourceSubs.map { s ->
+                                    SubtitleEntity(
+                                        trackId = targetId,
+                                        startMs = s.startMs,
+                                        endMs = s.endMs,
+                                        text = s.text
+                                    )
+                                }
+                            )
+                        }
+                    }
+                }
+                onlineToDelete.add(online.id)
+            }
+        }
+
+    if (onlineToDelete.isNotEmpty()) {
+        runCatching { db.remoteSubtitleSourceDao().deleteByTrackIds(onlineToDelete) }
+        runCatching { trackDao.deleteSubtitlesForTracks(onlineToDelete) }
+        runCatching { trackDao.deleteTracksByIds(onlineToDelete) }
     }
 }
 

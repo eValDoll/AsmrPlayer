@@ -30,6 +30,7 @@ import com.asmr.player.domain.model.Track
 import com.asmr.player.util.OnlineLyricsStore
 import com.asmr.player.util.RemoteSubtitleSource
 import com.asmr.player.util.SyncCoordinator
+import com.asmr.player.util.TrackKeyNormalizer
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Job
@@ -701,7 +702,17 @@ class AlbumDetailViewModel @Inject constructor(
 
     fun downloadAlbum() {
         val current = _uiState.value as? AlbumDetailUiState.Success ?: return
-        val album = current.model.displayAlbum
+        val model = current.model
+        val album = model.displayAlbum
+
+        val existingLocalKeys = LinkedHashSet<String>()
+        val existingLocalKeysNoGroup = LinkedHashSet<String>()
+        model.localAlbum?.tracks
+            ?.filter { !it.path.trim().startsWith("http", ignoreCase = true) }
+            ?.forEach { t ->
+                existingLocalKeys.add(TrackKeyNormalizer.buildKey(t.title, t.group, null))
+                existingLocalKeysNoGroup.add(TrackKeyNormalizer.buildKey(t.title, "", null))
+            }
         
         messageManager.showInfo("正在加入下载队列：${album.title}")
         
@@ -738,6 +749,11 @@ class AlbumDetailViewModel @Inject constructor(
         album.tracks.forEachIndexed { index, track ->
             val url = track.path.trim()
             if (!url.startsWith("http", ignoreCase = true)) return@forEachIndexed
+            val key = TrackKeyNormalizer.buildKey(track.title, track.group, null)
+            val keyNoGroup = TrackKeyNormalizer.buildKey(track.title, "", null)
+            if (existingLocalKeys.contains(key) || existingLocalKeysNoGroup.contains(keyNoGroup)) {
+                return@forEachIndexed
+            }
             val ext = url.substringBefore('?').substringAfterLast('.', "").takeIf { it.length in 2..6 } ?: "mp3"
             val fileName = "${(index + 1).toString().padStart(2, '0')}_${safeFileName(track.title)}.$ext"
             downloadManager.enqueueDownload(
@@ -760,8 +776,9 @@ class AlbumDetailViewModel @Inject constructor(
 
     fun downloadAsmrOneSelected(selectedLeafPaths: Set<String>) {
         val current = _uiState.value as? AlbumDetailUiState.Success ?: return
-        val album = current.model.displayAlbum
-        val tree = current.model.asmrOneTree
+        val model = current.model
+        val album = model.displayAlbum
+        val tree = model.asmrOneTree
         if (tree.isEmpty()) return
 
         val leaves = flattenAsmrOneLeafDownloads(tree)
@@ -837,9 +854,28 @@ class AlbumDetailViewModel @Inject constructor(
             coverFileName = "cover.jpg"
         }
 
+        val existingLocalKeys = LinkedHashSet<String>()
+        val existingLocalKeysNoGroup = LinkedHashSet<String>()
+        model.localAlbum?.tracks
+            ?.filter { !it.path.trim().startsWith("http", ignoreCase = true) }
+            ?.forEach { t ->
+                existingLocalKeys.add(TrackKeyNormalizer.buildKey(t.title, t.group, null))
+                existingLocalKeysNoGroup.add(TrackKeyNormalizer.buildKey(t.title, "", null))
+            }
+
+        var skipped = 0
+        var enqueued = 0
         selected.forEach { item ->
             val relPath = item.relativePath
             val rawName = relPath.substringAfterLast('/', relPath)
+            val relGroup = relPath.substringBeforeLast('/', "").substringAfterLast('/', "")
+            val titleFromName = rawName.substringBeforeLast('.', rawName)
+            val key = TrackKeyNormalizer.buildKey(titleFromName, relGroup, null)
+            val keyNoGroup = TrackKeyNormalizer.buildKey(titleFromName, "", null)
+            if (existingLocalKeys.contains(key) || existingLocalKeysNoGroup.contains(keyNoGroup)) {
+                skipped += 1
+                return@forEach
+            }
             val baseName = safeFileName(rawName)
             val extFromName = baseName.substringAfterLast('.', "").takeIf { it.isNotBlank() }
             val extFromUrl = item.url.substringBefore('?').substringAfterLast('.', "").takeIf { it.length in 2..6 }
@@ -853,6 +889,11 @@ class AlbumDetailViewModel @Inject constructor(
             val dir = if (relDir.isBlank()) targetDir else File(targetDir, relDir)
             val url = item.url.trim()
             if (!url.startsWith("http", ignoreCase = true)) return@forEach
+            val outFile = File(dir, fileName)
+            if (outFile.exists() && outFile.isFile) {
+                skipped += 1
+                return@forEach
+            }
             val relativeFilePath = if (relDir.isBlank()) fileName else "$relDir/$fileName"
             downloadManager.enqueueDownload(
                 url = url,
@@ -870,13 +911,20 @@ class AlbumDetailViewModel @Inject constructor(
                 albumWorkId = album.workId,
                 albumRjCode = album.rjCode
             )
+            enqueued += 1
+        }
+        if (skipped > 0 && enqueued == 0) {
+            messageManager.showInfo("本地已存在，已跳过下载（${skipped}项）：${album.title}")
+        } else if (skipped > 0) {
+            messageManager.showInfo("已加入下载队列（${enqueued}项），跳过已存在（${skipped}项）：${album.title}")
         }
     }
 
     fun downloadDlsitePlaySelected(selectedLeafPaths: Set<String>) {
         val current = _uiState.value as? AlbumDetailUiState.Success ?: return
-        val album = current.model.displayAlbum
-        val tree = current.model.dlsitePlayTree
+        val model = current.model
+        val album = model.displayAlbum
+        val tree = model.dlsitePlayTree
         if (tree.isEmpty()) return
 
         val leaves = flattenAsmrOneLeafDownloads(tree)
@@ -951,9 +999,28 @@ class AlbumDetailViewModel @Inject constructor(
             coverFileName = "cover.jpg"
         }
 
+        val existingLocalKeys = LinkedHashSet<String>()
+        val existingLocalKeysNoGroup = LinkedHashSet<String>()
+        model.localAlbum?.tracks
+            ?.filter { !it.path.trim().startsWith("http", ignoreCase = true) }
+            ?.forEach { t ->
+                existingLocalKeys.add(TrackKeyNormalizer.buildKey(t.title, t.group, null))
+                existingLocalKeysNoGroup.add(TrackKeyNormalizer.buildKey(t.title, "", null))
+            }
+
+        var skipped = 0
+        var enqueued = 0
         selected.forEach { item ->
             val relPath = item.relativePath
             val rawName = relPath.substringAfterLast('/', relPath)
+            val relGroup = relPath.substringBeforeLast('/', "").substringAfterLast('/', "")
+            val titleFromName = rawName.substringBeforeLast('.', rawName)
+            val key = TrackKeyNormalizer.buildKey(titleFromName, relGroup, null)
+            val keyNoGroup = TrackKeyNormalizer.buildKey(titleFromName, "", null)
+            if (existingLocalKeys.contains(key) || existingLocalKeysNoGroup.contains(keyNoGroup)) {
+                skipped += 1
+                return@forEach
+            }
             val baseName = safeFileName(rawName)
             val extFromName = baseName.substringAfterLast('.', "").takeIf { it.isNotBlank() }
             val extFromUrl = item.url.substringBefore('?').substringAfterLast('.', "").takeIf { it.length in 2..6 }
@@ -967,6 +1034,11 @@ class AlbumDetailViewModel @Inject constructor(
             val dir = if (relDir.isBlank()) targetDir else File(targetDir, relDir)
             val url = item.url.trim()
             if (!url.startsWith("http", ignoreCase = true)) return@forEach
+            val outFile = File(dir, fileName)
+            if (outFile.exists() && outFile.isFile) {
+                skipped += 1
+                return@forEach
+            }
             val relativeFilePath = if (relDir.isBlank()) fileName else "$relDir/$fileName"
             downloadManager.enqueueDownload(
                 url = url,
@@ -984,6 +1056,12 @@ class AlbumDetailViewModel @Inject constructor(
                 albumWorkId = album.workId,
                 albumRjCode = album.rjCode
             )
+            enqueued += 1
+        }
+        if (skipped > 0 && enqueued == 0) {
+            messageManager.showInfo("本地已存在，已跳过下载（${skipped}项）：${album.title}")
+        } else if (skipped > 0) {
+            messageManager.showInfo("已加入下载队列（${enqueued}项），跳过已存在（${skipped}项）：${album.title}")
         }
     }
 
@@ -1006,14 +1084,6 @@ class AlbumDetailViewModel @Inject constructor(
 
                 fun canonicalUrl(url: String): String {
                     return url.trim().substringBefore('#').substringBefore('?')
-                }
-
-                fun normalizeText(text: String): String {
-                    return text.trim().lowercase().replace(Regex("\\s+"), " ")
-                }
-
-                fun nameKey(title: String, group: String): String {
-                    return "${normalizeText(title)}\u0000${normalizeText(group)}"
                 }
 
                 var insertedCount = 0
@@ -1060,25 +1130,15 @@ class AlbumDetailViewModel @Inject constructor(
                         .map { canonicalUrl(it.path) }
                         .filter { it.isNotBlank() }
                         .toSet()
-                    val existingNameKeys = existingTracks
-                        .asSequence()
-                        .map { nameKey(it.title, it.group) }
-                        .filter { it.isNotBlank() }
-                        .toSet()
 
                     val seenUrlKeys = linkedSetOf<String>()
-                    val seenNameKeys = linkedSetOf<String>()
                     val newLeaves = selected.filter { leaf ->
                         val urlKey = canonicalUrl(leaf.url)
-                        val nk = nameKey(leaf.title, leaf.group)
                         val duplicate = urlKey.isBlank() ||
                             existingUrlKeys.contains(urlKey) ||
-                            existingNameKeys.contains(nk) ||
-                            seenUrlKeys.contains(urlKey) ||
-                            seenNameKeys.contains(nk)
+                            seenUrlKeys.contains(urlKey)
                         if (!duplicate) {
                             seenUrlKeys.add(urlKey)
-                            seenNameKeys.add(nk)
                             true
                         } else {
                             false
