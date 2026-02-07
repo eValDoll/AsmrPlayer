@@ -795,12 +795,22 @@ private fun PlaybackControls(
 ) {
     val colorScheme = AsmrTheme.colorScheme
     val currentMediaId = playback.currentMediaItem?.mediaId
-    var optimisticIsPlaying by remember(currentMediaId) { mutableStateOf<Boolean?>(null) }
+    var optimisticIsPlaying by remember { mutableStateOf<Boolean?>(null) }
+    var stableMediaId by remember { mutableStateOf<String?>(currentMediaId) }
     val isPlayingEffective = optimisticIsPlaying ?: playback.isPlaying
+
+    LaunchedEffect(currentMediaId) {
+        if (currentMediaId != null && currentMediaId != stableMediaId) {
+            stableMediaId = currentMediaId
+            optimisticIsPlaying = null
+        } else if (stableMediaId == null && currentMediaId != null) {
+            stableMediaId = currentMediaId
+        }
+    }
 
     LaunchedEffect(optimisticIsPlaying) {
         if (optimisticIsPlaying != null) {
-            delay(800)
+            delay(1_500)
             optimisticIsPlaying = null
         }
     }
