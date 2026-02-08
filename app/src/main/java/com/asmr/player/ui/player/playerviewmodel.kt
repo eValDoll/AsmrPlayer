@@ -299,6 +299,16 @@ class PlayerViewModel @Inject constructor(
         playerConnection.setQueue(listOf(item), 0, playWhenReady = true)
     }
 
+    fun playMediaItems(items: List<MediaItem>, startIndex: Int) {
+        if (playerConnection.getControllerOrNull() == null) {
+            messageManager.showError("播放器未连接")
+            return
+        }
+        if (items.isEmpty()) return
+        val safeIndex = startIndex.coerceIn(0, items.lastIndex)
+        playerConnection.setQueue(items, safeIndex, playWhenReady = true)
+    }
+
     fun playPlaylistItems(items: List<PlaylistItemEntity>, startItem: PlaylistItemEntity) {
         val mapped = items.mapNotNull { it.toMediaItemOrNull()?.let { mi -> it to mi } }
         if (mapped.isEmpty()) return
@@ -346,15 +356,32 @@ private fun PlaylistItemEntity.toMediaItemOrNull(): MediaItem? {
         .setArtist(artist)
         .setArtworkUri(artworkUri.takeIf { it.isNotBlank() }?.toUri())
         .build()
+
+    fun repairDocumentUri(raw: String): String {
+        val u = runCatching { Uri.parse(raw) }.getOrNull() ?: return raw
+        val segs = u.pathSegments ?: return raw
+        val docIndex = segs.indexOf("document")
+        if (docIndex < 0) return raw
+        if (segs.size <= docIndex + 2) return raw
+        val docId = segs.subList(docIndex + 1, segs.size).joinToString("/")
+        val encodedDocId = Uri.encode(docId)
+        val encodedPath = "/" + segs.take(docIndex + 1).joinToString("/") + "/" + encodedDocId
+        return u.buildUpon().encodedPath(encodedPath).build().toString()
+    }
+
+    val normalized = if (trimmed.startsWith("content://", ignoreCase = true)) repairDocumentUri(trimmed) else trimmed
+    val normalizedMediaId = mediaId.trim().let { mid ->
+        if (mid.startsWith("content://", ignoreCase = true)) repairDocumentUri(mid) else mid
+    }.ifBlank { normalized }
     val parsedUri = when {
-        trimmed.startsWith("http", ignoreCase = true) ||
-            trimmed.startsWith("content://", ignoreCase = true) ||
-            trimmed.startsWith("file://", ignoreCase = true) -> trimmed.toUri()
+        normalized.startsWith("http", ignoreCase = true) ||
+            normalized.startsWith("content://", ignoreCase = true) ||
+            normalized.startsWith("file://", ignoreCase = true) -> normalized.toUri()
         trimmed.startsWith("/") -> Uri.fromFile(File(trimmed))
         else -> return null
     }
     return MediaItem.Builder()
-        .setMediaId(mediaId)
+        .setMediaId(normalizedMediaId)
         .setUri(parsedUri)
         .setMediaMetadata(metadata)
         .build()

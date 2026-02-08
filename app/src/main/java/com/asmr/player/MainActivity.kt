@@ -754,6 +754,10 @@ fun MainContainer(
                             playerViewModel.playTracks(album, tracks, startTrack)
                             navController.navigateSingleTop("now_playing")
                         },
+                        onPlayMediaItems = { items, startIndex ->
+                            playerViewModel.playMediaItems(items, startIndex)
+                            navController.navigateSingleTop("now_playing")
+                        },
                         onAddToQueue = { album, track ->
                             playerViewModel.addTrackToQueue(album, track)
                         },
@@ -795,6 +799,10 @@ fun MainContainer(
                             playerViewModel.playTracks(album, tracks, startTrack)
                             navController.navigateSingleTop("now_playing")
                         },
+                        onPlayMediaItems = { items, startIndex ->
+                            playerViewModel.playMediaItems(items, startIndex)
+                            navController.navigateSingleTop("now_playing")
+                        },
                         onAddToQueue = { album, track ->
                             playerViewModel.addTrackToQueue(album, track)
                         },
@@ -829,6 +837,10 @@ fun MainContainer(
                         onConsumeRefreshToken = { backStackEntry.savedStateHandle["refreshToken"] = 0L },
                         onPlayTracks = { album, tracks, startTrack ->
                             playerViewModel.playTracks(album, tracks, startTrack)
+                            navController.navigateSingleTop("now_playing")
+                        },
+                        onPlayMediaItems = { items, startIndex ->
+                            playerViewModel.playMediaItems(items, startIndex)
                             navController.navigateSingleTop("now_playing")
                         },
                         onAddToQueue = { album, track ->
@@ -990,11 +1002,11 @@ fun MainContainer(
                         navArgument("artworkUri") { defaultValue = "" }
                     )
                 ) { backStackEntry ->
-                    val mediaId = decodeRouteArg(backStackEntry.arguments?.getString("mediaId").orEmpty())
-                    val uri = decodeRouteArg(backStackEntry.arguments?.getString("uri").orEmpty())
+                    val mediaId = backStackEntry.arguments?.getString("mediaId").orEmpty()
+                    val uri = backStackEntry.arguments?.getString("uri").orEmpty()
                     val title = decodeRouteArg(backStackEntry.arguments?.getString("title").orEmpty())
                     val artist = decodeRouteArg(backStackEntry.arguments?.getString("artist").orEmpty())
-                    val artworkUri = decodeRouteArg(backStackEntry.arguments?.getString("artworkUri").orEmpty())
+                    val artworkUri = backStackEntry.arguments?.getString("artworkUri").orEmpty()
                     PlaylistPickerScreen(
                         windowSizeClass = windowSizeClass,
                         mediaId = mediaId,

@@ -10,6 +10,7 @@ import com.asmr.player.data.local.db.dao.TrackDao
 import com.asmr.player.data.local.db.entities.AlbumEntity
 import com.asmr.player.data.local.db.entities.PlaylistEntity
 import com.asmr.player.data.local.db.entities.PlaylistItemEntity
+import com.asmr.player.data.local.db.entities.PlaylistItemWithSubtitles
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.flatMapLatest
@@ -44,6 +45,10 @@ class PlaylistRepository @Inject constructor(
 
     fun observePlaylistItems(playlistId: Long): Flow<List<PlaylistItemEntity>> {
         return playlistItemDao.observeItems(playlistId)
+    }
+
+    fun observePlaylistItemsWithSubtitles(playlistId: Long): Flow<List<PlaylistItemWithSubtitles>> {
+        return playlistItemDao.observeItemsWithSubtitles(playlistId)
     }
 
     suspend fun replacePlaylistWithMediaItems(playlistId: Long, items: List<MediaItem>) {

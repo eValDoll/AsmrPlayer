@@ -1,5 +1,6 @@
 package com.asmr.player.ui.playlists
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,8 +16,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.*
 import androidx.compose.material3.windowsizeclass.WindowSizeClass
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
@@ -36,6 +36,9 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
 import com.asmr.player.data.local.db.entities.PlaylistItemEntity
+import com.asmr.player.data.local.db.entities.PlaylistItemWithSubtitles
+import com.asmr.player.ui.common.DiscPlaceholder
+import com.asmr.player.ui.common.SubtitleStamp
 
 import androidx.compose.foundation.lazy.itemsIndexed
 
@@ -51,7 +54,20 @@ fun PlaylistDetailScreen(
         viewModel.setPlaylistId(playlistId)
     }
     val items by viewModel.items.collectAsState()
-    var pendingRemoveItem by remember { mutableStateOf<PlaylistItemEntity?>(null) }
+    val playItems = remember(items) {
+        items.map {
+            PlaylistItemEntity(
+                playlistId = it.playlistId,
+                mediaId = it.mediaId,
+                title = it.title,
+                artist = it.artist,
+                uri = it.uri,
+                artworkUri = it.artworkUri,
+                itemOrder = it.itemOrder
+            )
+        }
+    }
+    var pendingRemoveItem by remember { mutableStateOf<PlaylistItemWithSubtitles?>(null) }
 
     // 屏幕尺寸判断
     val isCompact = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact
@@ -84,9 +100,19 @@ fun PlaylistDetailScreen(
                 modifier = Modifier.fillMaxSize()
             ) {
                 itemsIndexed(items, key = { idx, item -> "${item.mediaId}#$idx" }) { index, item ->
+                    val startItem = PlaylistItemEntity(
+                        playlistId = item.playlistId,
+                        mediaId = item.mediaId,
+                        title = item.title,
+                        artist = item.artist,
+                        uri = item.uri,
+                        artworkUri = item.artworkUri,
+                        itemOrder = item.itemOrder
+                    )
                     PlaylistItemRow(
                         item = item,
-                        onPlay = { onPlayAll(items, item) },
+                        showSubtitleStamp = item.hasSubtitles,
+                        onPlay = { onPlayAll(playItems, startItem) },
                         onRemove = {
                             pendingRemoveItem = item
                         }
@@ -135,38 +161,66 @@ fun PlaylistDetailScreen(
 
 @Composable
 private fun PlaylistItemRow(
-    item: PlaylistItemEntity,
+    item: PlaylistItemWithSubtitles,
+    showSubtitleStamp: Boolean,
     onPlay: () -> Unit,
     onRemove: () -> Unit
 ) {
+    val colorScheme = com.asmr.player.ui.theme.AsmrTheme.colorScheme
+    var expanded by remember { mutableStateOf(false) }
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .clickable { onPlay() }
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        AsyncImage(
-            model = item.artworkUri,
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            modifier = Modifier
-                .size(40.dp)
-                .clip(RoundedCornerShape(6.dp))
-        )
+        if (item.artworkUri.isNotBlank()) {
+            AsyncImage(
+                model = item.artworkUri,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(RoundedCornerShape(6.dp))
+            )
+        } else {
+            DiscPlaceholder(modifier = Modifier.size(40.dp), cornerRadius = 6)
+        }
         Spacer(modifier = Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 item.title.ifBlank { "未命名" }, 
                 maxLines = 2, 
-                overflow = TextOverflow.Ellipsis
+                overflow = TextOverflow.Ellipsis,
+                style = MaterialTheme.typography.bodyMedium,
+                color = colorScheme.textPrimary
             )
         }
-        Spacer(modifier = Modifier.padding(4.dp))
-        IconButton(onClick = onRemove) {
-            Icon(Icons.Default.Close, contentDescription = "移除")
+        Spacer(modifier = Modifier.width(8.dp))
+        if (showSubtitleStamp) {
+            SubtitleStamp(modifier = Modifier.padding(end = 8.dp))
         }
-        IconButton(onClick = onPlay) {
-            Icon(Icons.Default.PlayArrow, contentDescription = null)
+        Box {
+            IconButton(onClick = { expanded = true }) {
+                Icon(imageVector = Icons.Default.MoreVert, contentDescription = null)
+            }
+            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                DropdownMenuItem(
+                    text = { Text("播放") },
+                    onClick = {
+                        expanded = false
+                        onPlay()
+                    }
+                )
+                DropdownMenuItem(
+                    text = { Text("移除") },
+                    onClick = {
+                        expanded = false
+                        onRemove()
+                    }
+                )
+            }
         }
     }
 }

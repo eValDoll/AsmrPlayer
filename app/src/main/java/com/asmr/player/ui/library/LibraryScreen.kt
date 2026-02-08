@@ -44,6 +44,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.widthIn
 import com.asmr.player.util.Formatting
 import com.asmr.player.ui.common.SubtitleStamp
+import com.asmr.player.ui.common.DiscPlaceholder
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.Button
@@ -899,7 +900,8 @@ private fun TrackAlbumHeader(
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        if (coverModel != null) {
+        val hasCover = coverModel?.toString()?.isNotBlank() == true
+        if (hasCover) {
             AsyncImage(
                 model = coverModel,
                 contentDescription = null,
@@ -909,7 +911,7 @@ private fun TrackAlbumHeader(
                     .clip(RoundedCornerShape(8.dp))
             )
         } else {
-            Spacer(modifier = Modifier.size(50.dp))
+            DiscPlaceholder(modifier = Modifier.size(50.dp), cornerRadius = 8)
         }
         Spacer(modifier = Modifier.width(10.dp))
         Text(
@@ -1020,12 +1022,19 @@ private fun AlbumGridItem(
             )
     ) {
         Box(modifier = Modifier.fillMaxWidth().aspectRatio(1f)) {
-            AsyncImage(
-                model = album.coverThumbPath.ifBlank { album.coverPath }.ifEmpty { album.coverUrl },
-                contentDescription = null,
-                modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(20.dp)),
-                contentScale = ContentScale.Crop
-            )
+            val coverModel = remember(album.coverThumbPath, album.coverPath, album.coverUrl) {
+                album.coverThumbPath.ifBlank { album.coverPath }.ifBlank { album.coverUrl }.trim().ifBlank { null }
+            }
+            if (coverModel != null) {
+                AsyncImage(
+                    model = coverModel,
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(20.dp)),
+                    contentScale = ContentScale.Crop
+                )
+            } else {
+                DiscPlaceholder(modifier = Modifier.fillMaxSize(), cornerRadius = 20)
+            }
             
             if (syncStatus is SyncStatus.Syncing) {
                 Box(
@@ -1196,12 +1205,19 @@ private fun AlbumItem(
                     .size(coverSize)
                     .clip(RoundedCornerShape(16.dp))
             ) {
-                AsyncImage(
-                    model = album.coverThumbPath.ifBlank { album.coverPath }.ifEmpty { album.coverUrl },
-                    contentDescription = null,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
-                )
+                val coverModel = remember(album.coverThumbPath, album.coverPath, album.coverUrl) {
+                    album.coverThumbPath.ifBlank { album.coverPath }.ifBlank { album.coverUrl }.trim().ifBlank { null }
+                }
+                if (coverModel != null) {
+                    AsyncImage(
+                        model = coverModel,
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
+                    )
+                } else {
+                    DiscPlaceholder(modifier = Modifier.fillMaxSize(), cornerRadius = 16)
+                }
                 
                 if (syncStatus is SyncStatus.Syncing) {
                     Box(
