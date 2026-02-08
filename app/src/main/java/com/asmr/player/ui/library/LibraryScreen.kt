@@ -624,7 +624,7 @@ fun LibraryScreen(
                                         verticalItemSpacing = 16.dp,
                                         horizontalArrangement = Arrangement.spacedBy(16.dp)
                                     ) {
-                                        staggeredItems(pagedAlbumIndices, key = { it }) { idx ->
+                                        staggeredItems(pagedAlbumIndices, key = { idx -> pagedAlbums[idx]?.id ?: idx }) { idx ->
                                             val album = pagedAlbums[idx] ?: return@staggeredItems
                                             AlbumGridItem(
                                                 album = album,

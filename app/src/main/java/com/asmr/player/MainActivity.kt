@@ -33,6 +33,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
@@ -100,6 +101,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
 import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
+import androidx.compose.ui.input.pointer.pointerInteropFilter
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -313,7 +315,7 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
 fun MainContainer(
     windowSizeClass: WindowSizeClass,
     playerViewModel: PlayerViewModel,
@@ -330,6 +332,8 @@ fun MainContainer(
     val navigator = remember(navController) { AppNavigator(navController) }
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
+    var blockNavTouches by remember { mutableStateOf(false) }
+    var lastRouteForTouchBlock by remember { mutableStateOf(currentRoute) }
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     val playback by playerViewModel.playback.collectAsState()
@@ -347,6 +351,16 @@ fun MainContainer(
     val context = LocalContext.current
     val activity = remember(context) { context.findActivity() }
     val immersivePlayer = currentRoute == "now_playing" || currentRoute == "lyrics"
+
+    LaunchedEffect(currentRoute) {
+        val last = lastRouteForTouchBlock
+        if (last != null && currentRoute != null && last != currentRoute) {
+            blockNavTouches = true
+            delay(320)
+            blockNavTouches = false
+        }
+        lastRouteForTouchBlock = currentRoute
+    }
 
     val defaultSystemUi = remember(activity) {
         activity?.let { act ->
@@ -681,11 +695,12 @@ fun MainContainer(
                     }
                 }
             ) { padding ->
-                NavHost(
-                    navController = navController,
-                    startDestination = "library",
-                    modifier = Modifier.padding(padding)
-                ) {
+                Box(modifier = Modifier.padding(padding)) {
+                    NavHost(
+                        navController = navController,
+                        startDestination = "library",
+                        modifier = Modifier.fillMaxSize()
+                    ) {
 
                 composable("library") {
                     LibraryScreen(
@@ -1006,6 +1021,14 @@ fun MainContainer(
                     )
                 }
             }
+
+                    if (blockNavTouches) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .pointerInteropFilter { true }
+                        )
+                    }
             }
 
             if (showManualRjDialog && navBackStackEntry != null &&
@@ -1054,6 +1077,8 @@ fun MainContainer(
             }
         }
     }
+}
+
 }
 
 @Composable
