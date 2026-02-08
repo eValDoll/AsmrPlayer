@@ -43,3 +43,4 @@ jobs:
           tag_name: ${{ github.ref_name }}
           generate_release_notes: true
           files: dist/AsmrPlayer-${{ github.ref_name }}-release.apk
+          token: ${{ secrets.GITHUB_TOKEN }}
