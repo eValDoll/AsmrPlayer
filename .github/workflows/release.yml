@@ -20,6 +20,8 @@ jobs:
           distribution: temurin
           java-version: 17
           cache: gradle
+      - name: Enable Gradle Wrapper
+        run: chmod +x gradlew
       - name: Build release APK
         run: ./gradlew :app:assembleRelease
       - name: Prepare release artifact
