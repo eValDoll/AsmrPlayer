@@ -32,13 +32,20 @@ class AppNavigator(
         if (id <= 0L) return
         val route = "album_detail/$id"
         val popped = navController.popBackStack(route, inclusive = false)
+        val refreshToken = System.currentTimeMillis()
         if (!popped) {
             navController.navigate(route) {
                 launchSingleTop = true
                 restoreState = true
             }
+            runCatching { navController.getBackStackEntry(route) }
+                .getOrNull()
+                ?.savedStateHandle
+                ?.set("refreshToken", refreshToken)
+                ?: navController.currentBackStackEntry?.savedStateHandle?.set("refreshToken", refreshToken)
+        } else {
+            navController.currentBackStackEntry?.savedStateHandle?.set("refreshToken", refreshToken)
         }
-        navController.currentBackStackEntry?.savedStateHandle?.set("refreshToken", System.currentTimeMillis())
     }
 
     fun openAlbumDetailByRj(rj: String) {
@@ -46,13 +53,20 @@ class AppNavigator(
         if (normalized.isBlank()) return
         val route = Routes.albumDetailByRj(normalized)
         val popped = navController.popBackStack(route, inclusive = false)
+        val refreshToken = System.currentTimeMillis()
         if (!popped) {
             navController.navigate(route) {
                 launchSingleTop = true
                 restoreState = true
             }
+            runCatching { navController.getBackStackEntry(route) }
+                .getOrNull()
+                ?.savedStateHandle
+                ?.set("refreshToken", refreshToken)
+                ?: navController.currentBackStackEntry?.savedStateHandle?.set("refreshToken", refreshToken)
+        } else {
+            navController.currentBackStackEntry?.savedStateHandle?.set("refreshToken", refreshToken)
         }
-        navController.currentBackStackEntry?.savedStateHandle?.set("refreshToken", System.currentTimeMillis())
     }
 
     fun openAlbumDetailByRjStacked(rj: String) {
