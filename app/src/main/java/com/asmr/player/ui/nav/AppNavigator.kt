@@ -31,42 +31,46 @@ class AppNavigator(
         val id = albumId ?: 0L
         if (id <= 0L) return
         val route = "album_detail/$id"
-        val popped = navController.popBackStack(route, inclusive = false)
         val refreshToken = System.currentTimeMillis()
-        if (!popped) {
-            navController.navigate(route) {
-                launchSingleTop = true
-                restoreState = true
-            }
-            runCatching { navController.getBackStackEntry(route) }
-                .getOrNull()
-                ?.savedStateHandle
-                ?.set("refreshToken", refreshToken)
-                ?: navController.currentBackStackEntry?.savedStateHandle?.set("refreshToken", refreshToken)
-        } else {
-            navController.currentBackStackEntry?.savedStateHandle?.set("refreshToken", refreshToken)
+        val currentRoute = navController.currentBackStackEntry?.destination?.route
+        val popToRoute = when {
+            currentRoute == Routes.Search -> Routes.Search
+            currentRoute == Routes.Library -> Routes.Library
+            else -> currentRoute ?: Routes.Library
         }
+        navController.navigate(route) {
+            launchSingleTop = true
+            restoreState = true
+            popUpTo(popToRoute) { inclusive = false; saveState = true }
+        }
+        runCatching { navController.getBackStackEntry(route) }
+            .getOrNull()
+            ?.savedStateHandle
+            ?.set("refreshToken", refreshToken)
+            ?: navController.currentBackStackEntry?.savedStateHandle?.set("refreshToken", refreshToken)
     }
 
     fun openAlbumDetailByRj(rj: String) {
         val normalized = rj.trim().uppercase()
         if (normalized.isBlank()) return
         val route = Routes.albumDetailByRj(normalized)
-        val popped = navController.popBackStack(route, inclusive = false)
         val refreshToken = System.currentTimeMillis()
-        if (!popped) {
-            navController.navigate(route) {
-                launchSingleTop = true
-                restoreState = true
-            }
-            runCatching { navController.getBackStackEntry(route) }
-                .getOrNull()
-                ?.savedStateHandle
-                ?.set("refreshToken", refreshToken)
-                ?: navController.currentBackStackEntry?.savedStateHandle?.set("refreshToken", refreshToken)
-        } else {
-            navController.currentBackStackEntry?.savedStateHandle?.set("refreshToken", refreshToken)
+        val currentRoute = navController.currentBackStackEntry?.destination?.route
+        val popToRoute = when {
+            currentRoute == Routes.Search -> Routes.Search
+            currentRoute == Routes.Library -> Routes.Library
+            else -> currentRoute ?: Routes.Library
         }
+        navController.navigate(route) {
+            launchSingleTop = true
+            restoreState = true
+            popUpTo(popToRoute) { inclusive = false; saveState = true }
+        }
+        runCatching { navController.getBackStackEntry(route) }
+            .getOrNull()
+            ?.savedStateHandle
+            ?.set("refreshToken", refreshToken)
+            ?: navController.currentBackStackEntry?.savedStateHandle?.set("refreshToken", refreshToken)
     }
 
     fun openAlbumDetailByRjStacked(rj: String) {
