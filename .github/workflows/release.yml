@@ -29,7 +29,14 @@ jobs:
       - name: Prepare release artifact
         run: |
           mkdir -p dist
-          cp app/build/outputs/apk/release/app-release.apk "dist/AsmrPlayer-${{ github.ref_name }}-release.apk"
+          APK_PATH="$(find . -type f -path '*/outputs/apk/release/*.apk' -name '*release*.apk' | head -n 1)"
+          if [ -z "$APK_PATH" ]; then
+            echo "Release APK not found under outputs/apk/release"
+            find . -maxdepth 4 -type d -name outputs -print
+            exit 1
+          fi
+          echo "Using APK: $APK_PATH"
+          cp "$APK_PATH" "dist/AsmrPlayer-${{ github.ref_name }}-release.apk"
       - uses: softprops/action-gh-release@v2
         with:
           name: ${{ github.ref_name }}
