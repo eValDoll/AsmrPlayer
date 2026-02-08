@@ -2,7 +2,7 @@ package com.asmr.player.ui.playlists
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.asmr.player.data.local.db.entities.PlaylistItemEntity
+import com.asmr.player.data.local.db.entities.PlaylistItemWithSubtitles
 import com.asmr.player.data.repository.PlaylistRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.launch
@@ -30,10 +30,10 @@ class PlaylistDetailViewModel @Inject constructor(
     private val playlistIdFlow = MutableStateFlow(playlistId)
 
     @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
-    val items: StateFlow<List<PlaylistItemEntity>> = playlistIdFlow
+    val items: StateFlow<List<PlaylistItemWithSubtitles>> = playlistIdFlow
         .flatMapLatest { id ->
             if (id == -1L) kotlinx.coroutines.flow.flowOf(emptyList())
-            else playlistRepository.observePlaylistItems(id)
+            else playlistRepository.observePlaylistItemsWithSubtitles(id)
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 

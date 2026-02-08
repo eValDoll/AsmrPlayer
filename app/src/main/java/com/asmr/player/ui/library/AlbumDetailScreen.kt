@@ -64,6 +64,7 @@ import com.asmr.player.data.remote.scraper.DlsiteRecommendedWork
 import com.asmr.player.data.remote.scraper.DlsiteRecommendations
 import com.asmr.player.domain.model.Album
 import com.asmr.player.domain.model.Track
+import com.asmr.player.playback.MediaItemFactory
 import com.asmr.player.data.remote.NetworkHeaders
 import com.asmr.player.data.remote.dlsite.DlsiteLanguageEdition
 import com.asmr.player.ui.dlsite.DlsitePlayViewModel
@@ -89,6 +90,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import com.asmr.player.ui.common.rememberDominantColor
 import com.asmr.player.ui.common.SubtitleStamp
+import com.asmr.player.ui.common.DiscPlaceholder
 import com.asmr.player.ui.theme.AsmrTheme
 import com.asmr.player.ui.theme.AsmrPlayerTheme
 import com.asmr.player.util.Formatting
@@ -113,6 +115,7 @@ fun AlbumDetailScreen(
     refreshToken: Long = 0L,
     onConsumeRefreshToken: (() -> Unit)? = null,
     onPlayTracks: (Album, List<Track>, Track) -> Unit,
+    onPlayMediaItems: (List<MediaItem>, Int) -> Unit = { _, _ -> },
     onAddToQueue: (Album, Track) -> Boolean = { _, _ -> false },
     onOpenPlaylistPicker: (mediaId: String, uri: String, title: String, artist: String, artworkUri: String) -> Unit = { _, _, _, _, _ -> },
     onPlayVideo: (String, String, String, String) -> Unit = { _, _, _, _ -> },
@@ -133,7 +136,6 @@ fun AlbumDetailScreen(
     var userSelectedTab by rememberSaveable(screenKey) { mutableStateOf(false) }
     var showAsmrDownloadDialog by remember { mutableStateOf(false) }
     var showOnlineSaveDialog by remember { mutableStateOf(false) }
-    var primaryAction by rememberSaveable(screenKey) { mutableStateOf(AlbumPrimaryAction.Download) }
     var pendingOnlineSaveSelection by remember { mutableStateOf<Set<String>?>(null) }
     var downloadSource by remember { mutableStateOf(OnlineDownloadSource.AsmrOne) }
     val scope = rememberCoroutineScope()
@@ -211,11 +213,6 @@ fun AlbumDetailScreen(
                             viewModel.ensureDlsiteLoaded()
                         }
                     }
-                    LaunchedEffect(selectedTab) {
-                        if (selectedTab == 2 && primaryAction != AlbumPrimaryAction.Download) {
-                            primaryAction = AlbumPrimaryAction.Download
-                        }
-                    }
     
                     Column(modifier = Modifier.fillMaxSize()) {
                         val headerContent: @Composable () -> Unit = {
@@ -226,31 +223,20 @@ fun AlbumDetailScreen(
                                 dlsiteEditions = if (selectedTab == 0) emptyList() else model.dlsiteEditions,
                                 dlsiteSelectedLang = model.dlsiteSelectedLang,
                                 onDlsiteLangSelected = { viewModel.selectDlsiteLanguage(it) },
-                                primaryAction = primaryAction,
                                 canSaveOnline = canSaveOnline,
-                                onPrimaryActionChange = { action ->
-                                    if (selectedTab != 2) primaryAction = action
-                                },
-                                onPrimaryActionClick = {
-                                    when (primaryAction) {
-                                        AlbumPrimaryAction.Download -> {
-                                            downloadSource = if (selectedTab == 2) {
-                                                OnlineDownloadSource.DlsitePlay
-                                            } else {
-                                                OnlineDownloadSource.AsmrOne
-                                            }
-                                            showAsmrDownloadDialog = true
-                                        }
-                                        AlbumPrimaryAction.Save -> showOnlineSaveDialog = true
+                                onDownloadClick = {
+                                    downloadSource = if (selectedTab == 2) {
+                                        OnlineDownloadSource.DlsitePlay
+                                    } else {
+                                        OnlineDownloadSource.AsmrOne
                                     }
+                                    showAsmrDownloadDialog = true
                                 },
-                                primaryActionEnabled = when (primaryAction) {
-                                    AlbumPrimaryAction.Download -> {
-                                        val tree = if (selectedTab == 2) model.dlsitePlayTree else asmrOneTree
-                                        tree.isNotEmpty()
-                                    }
-                                    AlbumPrimaryAction.Save -> selectedTab != 2 && canSaveOnline
+                                onSaveClick = {
+                                    showOnlineSaveDialog = true
                                 },
+                                downloadEnabled = (if (selectedTab == 2) model.dlsitePlayTree else asmrOneTree).isNotEmpty(),
+                                saveEnabled = canSaveOnline,
                                 onPickLocalCover = if (selectedTab == 0 && model.localAlbum != null) {
                                     { coverPicker.launch(arrayOf("image/*")) }
                                 } else null,
@@ -328,6 +314,7 @@ fun AlbumDetailScreen(
                                     album = local,
                                     header = headerContent,
                                     onPlayTracks = onPlayTracks,
+                                    onPlayMediaItems = onPlayMediaItems,
                                     onPlayVideo = onPlayVideo,
                                     onAddToQueue = { track ->
                                         onAddToQueue(local, track)
@@ -421,6 +408,7 @@ fun AlbumDetailScreen(
                             onOpenLogin = onOpenDlsiteLogin,
                             onEnsureLoaded = { viewModel.ensureDlsitePlayLoaded() },
                             onPlayTracks = onPlayTracks,
+                            onPlayMediaItems = onPlayMediaItems,
                             onPlayVideo = onPlayVideo,
                             onAddToQueue = { track ->
                                 onAddToQueue(album, track)
@@ -551,11 +539,11 @@ private fun AlbumHeader(
     dlsiteEditions: List<DlsiteLanguageEdition>,
     dlsiteSelectedLang: String,
     onDlsiteLangSelected: (String) -> Unit,
-    primaryAction: AlbumPrimaryAction,
     canSaveOnline: Boolean,
-    onPrimaryActionChange: (AlbumPrimaryAction) -> Unit,
-    onPrimaryActionClick: () -> Unit,
-    primaryActionEnabled: Boolean,
+    onDownloadClick: () -> Unit,
+    onSaveClick: () -> Unit,
+    downloadEnabled: Boolean,
+    saveEnabled: Boolean,
     onPickLocalCover: (() -> Unit)? = null,
     messageManager: MessageManager
 ) {
@@ -600,12 +588,16 @@ private fun AlbumHeader(
                     .fillMaxWidth()
                     .height(240.dp)
             ) {
-                AsyncImage(
-                    model = imageModel,
-                    contentDescription = null,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
-                )
+                if (data.isBlank()) {
+                    DiscPlaceholder(modifier = Modifier.fillMaxSize(), cornerRadius = 0)
+                } else {
+                    AsyncImage(
+                        model = imageModel,
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
+                    )
+                }
                 if (onPickLocalCover != null) {
                     IconButton(
                         onClick = onPickLocalCover,
@@ -749,53 +741,43 @@ private fun AlbumHeader(
                     modifier = Modifier.padding(top = 4.dp),
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    val primaryLabel = when (primaryAction) {
-                        AlbumPrimaryAction.Download -> "下载"
-                        AlbumPrimaryAction.Save -> "保存"
-                    }
-                    var expanded by rememberSaveable { mutableStateOf(false) }
-                    Box(modifier = Modifier.height(36.dp).weight(1f)) {
+                    Row(modifier = Modifier.height(36.dp).weight(1f)) {
+                        val radius = 10.dp
+                        val leftShape = if (canSaveOnline) {
+                            RoundedCornerShape(topStart = radius, bottomStart = radius, topEnd = 0.dp, bottomEnd = 0.dp)
+                        } else {
+                            RoundedCornerShape(radius)
+                        }
+                        val rightShape = RoundedCornerShape(topStart = 0.dp, bottomStart = 0.dp, topEnd = radius, bottomEnd = radius)
+
                         Button(
-                            onClick = onPrimaryActionClick,
-                            modifier = Modifier.fillMaxSize(),
-                            enabled = primaryActionEnabled,
-                            shape = RoundedCornerShape(10.dp),
+                            onClick = onDownloadClick,
+                            enabled = downloadEnabled,
+                            modifier = Modifier.fillMaxHeight().weight(1f),
+                            shape = leftShape,
                             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = colorScheme.primary)
                         ) {
-                            Text(primaryLabel, style = MaterialTheme.typography.labelMedium)
-                            if (canSaveOnline) {
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Icon(Icons.Default.KeyboardArrowDown, contentDescription = null, modifier = Modifier.size(18.dp))
-                            }
+                            Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("下载", style = MaterialTheme.typography.labelMedium)
                         }
 
                         if (canSaveOnline) {
-                            Box(
-                                modifier = Modifier
-                                    .align(Alignment.CenterEnd)
-                                    .fillMaxHeight()
-                                    .width(44.dp)
-                                    .clickable(enabled = primaryActionEnabled) { expanded = true }
-                            )
-                            DropdownMenu(
-                                expanded = expanded,
-                                onDismissRequest = { expanded = false }
+                            Button(
+                                onClick = onSaveClick,
+                                enabled = saveEnabled,
+                                modifier = Modifier.fillMaxHeight().weight(1f),
+                                shape = rightShape,
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = colorScheme.primary.copy(alpha = 0.14f),
+                                    contentColor = colorScheme.primary
+                                )
                             ) {
-                                DropdownMenuItem(
-                                    text = { Text("下载") },
-                                    onClick = {
-                                        onPrimaryActionChange(AlbumPrimaryAction.Download)
-                                        expanded = false
-                                    }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("保存") },
-                                    onClick = {
-                                        onPrimaryActionChange(AlbumPrimaryAction.Save)
-                                        expanded = false
-                                    }
-                                )
+                                Icon(Icons.Default.Bookmark, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("保存", style = MaterialTheme.typography.labelMedium)
                             }
                         }
                     }
@@ -813,9 +795,11 @@ private fun AlbumHeader(
                                 }
                             },
                             enabled = url.isNotBlank(),
-                            modifier = Modifier.height(36.dp).weight(1f),
+                            modifier = Modifier
+                                .height(36.dp)
+                                .widthIn(min = 56.dp, max = 76.dp),
                             shape = RoundedCornerShape(10.dp),
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
                             border = androidx.compose.foundation.BorderStroke(1.dp, colorScheme.primary.copy(alpha = 0.3f))
                         ) {
                             Text(label, style = MaterialTheme.typography.labelMedium, color = colorScheme.primary)
@@ -1319,6 +1303,7 @@ private fun AlbumLocalTab(
     album: Album,
     header: @Composable () -> Unit,
     onPlayTracks: (Album, List<Track>, Track) -> Unit,
+    onPlayMediaItems: (List<MediaItem>, Int) -> Unit,
     onPlayVideo: (String, String, String, String) -> Unit,
     onAddToQueue: (Track) -> Boolean,
     onAddToPlaylist: (Track) -> Unit,
@@ -1482,16 +1467,48 @@ private fun AlbumLocalTab(
                                     showSubtitleStamp = showStamp,
                                     thumbnailModel = if (entry.fileType == TreeFileType.Image) entry.absolutePath else null,
                                     onPrimary = {
-                                        if (t != null && entry.fileType == TreeFileType.Audio) {
-                                            val siblings = treeIndex?.let { siblingAudioTracksForEntry(it, entry.path) }.orEmpty()
-                                            onPlayTracks(album, if (siblings.isNotEmpty()) siblings else queueTracks, t)
-                                        } else if (entry.fileType == TreeFileType.Video) {
-                                            val artwork = album.coverPath.ifBlank { album.coverUrl }
-                                            val artist = album.cv.ifBlank { album.circle }
-                                            onPlayVideo(entry.title, entry.absolutePath, artwork, artist)
-                                        } else {
-                                            onPreviewFile(entry)
+                                        val artwork = album.coverPath.ifBlank { album.coverUrl }
+                                        val artist = album.cv.ifBlank { album.circle }
+                                        if ((entry.fileType == TreeFileType.Audio && t != null) || entry.fileType == TreeFileType.Video) {
+                                            val nodes = treeIndex?.let { siblingPlayableNodesForEntry(it, entry.path) }.orEmpty()
+                                            val siblingItems = nodes.mapNotNull { node ->
+                                                val abs = node.absolutePath ?: return@mapNotNull null
+                                                when (node.fileType) {
+                                                    TreeFileType.Audio -> node.track?.let { MediaItemFactory.fromTrack(album, it) }
+                                                    TreeFileType.Video -> buildVideoMediaItem(
+                                                        title = node.name,
+                                                        uriOrPath = abs,
+                                                        artworkUri = artwork,
+                                                        artist = artist
+                                                    )
+                                                    else -> null
+                                                }
+                                            }
+                                            val clickedId = when (entry.fileType) {
+                                                TreeFileType.Audio -> t?.path?.trim().orEmpty()
+                                                TreeFileType.Video -> entry.absolutePath.trim()
+                                                else -> ""
+                                            }
+                                            val items = if (siblingItems.isNotEmpty()) siblingItems else when (entry.fileType) {
+                                                TreeFileType.Audio -> queueTracks.map { MediaItemFactory.fromTrack(album, it) }
+                                                TreeFileType.Video -> listOfNotNull(
+                                                    buildVideoMediaItem(
+                                                        title = entry.title,
+                                                        uriOrPath = entry.absolutePath,
+                                                        artworkUri = artwork,
+                                                        artist = artist
+                                                    )
+                                                )
+                                                else -> emptyList()
+                                            }
+                                            val startIndex = items.indexOfFirst { it.mediaId.trim() == clickedId }
+                                                .takeIf { it >= 0 } ?: 0
+                                            if (items.isNotEmpty()) {
+                                                onPlayMediaItems(items, startIndex)
+                                                return@TreeFileRow
+                                            }
                                         }
+                                        onPreviewFile(entry)
                                     },
                                     onSetAsCover = if (entry.fileType == TreeFileType.Image) ({ onSetCoverFromImage(entry.absolutePath) }) else null,
                                     onDownload = null,
@@ -1702,6 +1719,46 @@ private fun treeFileTypeForName(fileName: String): TreeFileType {
     }
 }
 
+private fun buildVideoMediaItem(
+    title: String,
+    uriOrPath: String,
+    artworkUri: String,
+    artist: String
+): MediaItem? {
+    val trimmed = uriOrPath.trim()
+    if (trimmed.isBlank()) return null
+    val uri = if (
+        trimmed.startsWith("http", ignoreCase = true) ||
+            trimmed.startsWith("content://", ignoreCase = true) ||
+            trimmed.startsWith("file://", ignoreCase = true)
+    ) {
+        trimmed.toUri()
+    } else {
+        Uri.fromFile(File(trimmed))
+    }
+    val ext = trimmed.substringBefore('#').substringBefore('?').substringAfterLast('.', "").lowercase()
+    val mimeType = when (ext) {
+        "mp4", "m4v" -> "video/mp4"
+        "webm" -> "video/webm"
+        "mkv" -> "video/x-matroska"
+        "mov" -> "video/quicktime"
+        else -> "video/*"
+    }
+    val displayTitle = title.ifBlank { trimmed.substringAfterLast('/').substringAfterLast('\\') }
+    val metadata = androidx.media3.common.MediaMetadata.Builder()
+        .setTitle(displayTitle)
+        .setArtist(artist.trim())
+        .setArtworkUri(artworkUri.trim().takeIf { it.isNotBlank() }?.toUri())
+        .setExtras(android.os.Bundle().apply { putBoolean("is_video", true) })
+        .build()
+    return MediaItem.Builder()
+        .setMediaId(trimmed)
+        .setUri(uri)
+        .setMimeType(mimeType)
+        .setMediaMetadata(metadata)
+        .build()
+}
+
 private data class LocalTreeUiResult(
     val entries: List<LocalTreeUiEntry>
 )
@@ -1763,6 +1820,17 @@ private fun siblingAudioTracksForEntry(index: LocalTreeIndex, entryPath: String)
         .filter { it.children.isEmpty() && it.absolutePath != null && it.fileType == TreeFileType.Audio && it.track != null }
         .sortedBy { it.name.lowercase() }
         .mapNotNull { it.track }
+        .toList()
+}
+
+private fun siblingPlayableNodesForEntry(index: LocalTreeIndex, entryPath: String): List<LocalTreeNode> {
+    val folderPath = entryPath.substringBeforeLast('/', "")
+    val node = findLocalTreeNode(index.root, folderPath) ?: index.root
+    return node.children.values
+        .asSequence()
+        .filter { it.children.isEmpty() && it.absolutePath != null && (it.fileType == TreeFileType.Audio || it.fileType == TreeFileType.Video) }
+        .filter { it.fileType != TreeFileType.Audio || it.track != null }
+        .sortedBy { it.name.lowercase() }
         .toList()
 }
 
@@ -3442,6 +3510,7 @@ private fun AlbumDlsitePlayTreeTab(
     onOpenLogin: () -> Unit,
     onEnsureLoaded: () -> Unit,
     onPlayTracks: (Album, List<Track>, Track) -> Unit,
+    onPlayMediaItems: (List<MediaItem>, Int) -> Unit,
     onPlayVideo: (String, String, String, String) -> Unit,
     onAddToQueue: (Track) -> Boolean,
     onDownloadOne: (String) -> Unit,
@@ -3588,24 +3657,66 @@ private fun AlbumDlsitePlayTreeTab(
                             }
                             is AsmrTreeUiEntry.File -> {
                                 val canPlay = entry.fileType == TreeFileType.Audio && leafByRelPath.containsKey(entry.path)
+                                val canPlayVideo = entry.fileType == TreeFileType.Video && !entry.url.isNullOrBlank()
                                 TreeFileRow(
                                     title = entry.title,
                                     depth = entry.depth,
                                     fileType = entry.fileType,
-                                    isPlayable = canPlay,
+                                    isPlayable = canPlay || canPlayVideo,
                                     showSubtitleStamp = canPlay && (leafByRelPath[entry.path]?.subtitles?.isNotEmpty() == true),
                                     onPrimary = {
-                                        if (canPlay && entry.fileType == TreeFileType.Audio) {
-                                            val start = leafByRelPath[entry.path] ?: return@TreeFileRow
-                                            val tracks = leafTracks.map { it.toTrack() }
-                                            onPlayTracks(album, tracks, start.toTrack())
-                                        } else if (entry.fileType == TreeFileType.Video && !entry.url.isNullOrBlank()) {
-                                            val artwork = album.coverPath.ifBlank { album.coverUrl }
-                                            val artist = album.cv.ifBlank { album.circle }
-                                            onPlayVideo(entry.title, entry.url.orEmpty(), artwork, artist)
-                                        } else {
+                                        if (!canPlay && !canPlayVideo) {
                                             onPreviewFile(entry)
+                                            return@TreeFileRow
                                         }
+                                        val artwork = album.coverPath.ifBlank { album.coverUrl }
+                                        val artist = album.cv.ifBlank { album.circle }
+                                        val folderPath = entry.path.substringBeforeLast('/', "")
+                                        val siblings = treeResult.entries
+                                            .asSequence()
+                                            .filterIsInstance<AsmrTreeUiEntry.File>()
+                                            .filter { it.path.substringBeforeLast('/', "") == folderPath }
+                                            .filter { file ->
+                                                val audioOk = file.fileType == TreeFileType.Audio && leafByRelPath.containsKey(file.path)
+                                                val videoOk = file.fileType == TreeFileType.Video && !file.url.isNullOrBlank()
+                                                audioOk || videoOk
+                                            }
+                                            .sortedBy { it.title.lowercase() }
+                                            .toList()
+
+                                        val paired = siblings.mapNotNull { file ->
+                                            when (file.fileType) {
+                                                TreeFileType.Audio -> {
+                                                    val leaf = leafByRelPath[file.path] ?: return@mapNotNull null
+                                                    val track = leaf.toTrack()
+                                                    val id = track.path.trim()
+                                                    id to MediaItemFactory.fromTrack(album, track)
+                                                }
+                                                TreeFileType.Video -> {
+                                                    val url = file.url?.trim().orEmpty()
+                                                    if (url.isBlank()) return@mapNotNull null
+                                                    url to buildVideoMediaItem(
+                                                        title = file.title,
+                                                        uriOrPath = url,
+                                                        artworkUri = artwork,
+                                                        artist = artist
+                                                    )
+                                                }
+                                                else -> null
+                                            }
+                                        }.mapNotNull { (id, item) -> item?.let { id to it } }
+
+                                        if (paired.isEmpty()) {
+                                            onPreviewFile(entry)
+                                            return@TreeFileRow
+                                        }
+                                        val clickedId = if (canPlay) {
+                                            leafByRelPath[entry.path]?.url?.trim().orEmpty()
+                                        } else {
+                                            entry.url?.trim().orEmpty()
+                                        }
+                                        val startIndex = paired.indexOfFirst { (id, _) -> id == clickedId }.takeIf { it >= 0 } ?: 0
+                                        onPlayMediaItems(paired.map { it.second }, startIndex)
                                     },
                                     onDownload = if (entry.fileType == TreeFileType.Audio || entry.fileType == TreeFileType.Video) {
                                         ({ onDownloadOne(entry.path) })

@@ -20,8 +20,15 @@ interface PlaylistDao {
             p.createdAt AS createdAt,
             (SELECT COUNT(*) FROM playlist_items i WHERE i.playlistId = p.id) AS itemCount,
             (
-                SELECT i.artworkUri
+                SELECT COALESCE(
+                    NULLIF(a.coverThumbPath, ''),
+                    NULLIF(a.coverPath, ''),
+                    NULLIF(a.coverUrl, ''),
+                    NULLIF(i.artworkUri, '')
+                )
                 FROM playlist_items i
+                LEFT JOIN tracks t ON t.path = i.mediaId
+                LEFT JOIN albums a ON a.id = t.albumId
                 WHERE i.playlistId = p.id
                 ORDER BY i.itemOrder ASC, i.rowid ASC
                 LIMIT 1

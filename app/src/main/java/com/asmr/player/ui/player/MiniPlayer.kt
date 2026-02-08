@@ -56,6 +56,7 @@ import coil.compose.SubcomposeAsyncImageContent
 import coil.request.ImageRequest
 
 import androidx.compose.ui.text.font.FontWeight
+import com.asmr.player.ui.common.DiscPlaceholder
 import com.asmr.player.ui.theme.AsmrTheme
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.Brush
@@ -242,12 +243,17 @@ fun MiniPlayer(
                 .clip(CircleShape)
                 .background(Color.White)
         ) {
-            AsyncImage(
-                model = metadata.artworkUri,
-                contentDescription = null,
-                modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Crop
-            )
+            val artwork = metadata.artworkUri
+            if (artwork != null) {
+                AsyncImage(
+                    model = artwork,
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
+                )
+            } else {
+                DiscPlaceholder(modifier = Modifier.fillMaxSize(), cornerRadius = 64)
+            }
         }
     }
 }

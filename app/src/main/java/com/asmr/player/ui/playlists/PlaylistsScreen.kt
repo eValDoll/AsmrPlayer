@@ -38,6 +38,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
 import com.asmr.player.data.local.db.dao.PlaylistStatsRow
 import com.asmr.player.data.local.db.entities.PlaylistEntity
+import com.asmr.player.ui.common.DiscPlaceholder
 
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.ui.text.font.FontWeight
@@ -164,12 +165,7 @@ private fun PlaylistRow(
                         .clip(RoundedCornerShape(12.dp))
                 )
             } else {
-                Box(
-                    modifier = Modifier
-                        .size(54.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(colorScheme.primaryContainer)
-                )
+                DiscPlaceholder(modifier = Modifier.size(54.dp), cornerRadius = 12)
             }
             Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {

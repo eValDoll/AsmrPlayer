@@ -65,6 +65,7 @@ import com.asmr.player.playback.PlaybackSnapshot
 import com.asmr.player.ui.common.EqualizerPanel
 import com.asmr.player.ui.common.rememberComputedDominantColorCenterWeighted
 import com.asmr.player.ui.common.rememberComputedVideoFrameDominantColorCenterWeighted
+import com.asmr.player.ui.common.DiscPlaceholder
 import com.asmr.player.ui.common.smoothScrollToIndex
 import com.asmr.player.ui.library.TagAssignDialog
 import com.asmr.player.ui.theme.AsmrTheme
@@ -802,18 +803,28 @@ private fun ArtworkBox(
                     .clickable { onOpenLyrics() }
             ) {
                 if (edgeBlendEnabled) {
-                    CoverArtworkEdgeBlend(
-                        artworkModel = metadata?.artworkUri,
-                        blendColor = edgeBlendColor,
-                        modifier = Modifier.fillMaxSize()
-                    )
+                    val artwork = metadata?.artworkUri
+                    if (artwork != null) {
+                        CoverArtworkEdgeBlend(
+                            artworkModel = artwork,
+                            blendColor = edgeBlendColor,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    } else {
+                        DiscPlaceholder(modifier = Modifier.fillMaxSize(), cornerRadius = 28)
+                    }
                 } else {
-                    AsyncImage(
-                        model = metadata?.artworkUri,
-                        contentDescription = null,
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop
-                    )
+                    val artwork = metadata?.artworkUri
+                    if (artwork != null) {
+                        AsyncImage(
+                            model = artwork,
+                            contentDescription = null,
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop
+                        )
+                    } else {
+                        DiscPlaceholder(modifier = Modifier.fillMaxSize(), cornerRadius = 28)
+                    }
                 }
             }
         }
