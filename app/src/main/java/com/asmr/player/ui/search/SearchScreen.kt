@@ -194,7 +194,10 @@ fun SearchScreen(
                                 modifier = Modifier.fillMaxSize(),
                                 contentPadding = PaddingValues(vertical = 8.dp)
                             ) {
-                                lazyItems(state.results) { album ->
+                                lazyItems(
+                                    items = state.results,
+                                    key = { album -> album.rjCode.ifBlank { album.workId }.ifBlank { album.title } }
+                                ) { album ->
                                     AlbumItem(album = album, onClick = { onAlbumClick(album) })
                                 }
                             }
