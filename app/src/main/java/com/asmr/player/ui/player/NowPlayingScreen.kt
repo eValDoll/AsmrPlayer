@@ -63,8 +63,8 @@ import androidx.media3.ui.PlayerView
 import coil.compose.AsyncImage
 import com.asmr.player.playback.PlaybackSnapshot
 import com.asmr.player.ui.common.EqualizerPanel
-import com.asmr.player.ui.common.rememberDominantColorCenterWeighted
-import com.asmr.player.ui.common.rememberVideoFrameDominantColorCenterWeighted
+import com.asmr.player.ui.common.rememberComputedDominantColorCenterWeighted
+import com.asmr.player.ui.common.rememberComputedVideoFrameDominantColorCenterWeighted
 import com.asmr.player.ui.common.smoothScrollToIndex
 import com.asmr.player.ui.library.TagAssignDialog
 import com.asmr.player.ui.theme.AsmrTheme
@@ -111,16 +111,27 @@ fun NowPlayingScreen(
     val tagViewModel: NowPlayingTagViewModel = hiltViewModel()
     val tagDialog by tagViewModel.dialogState.collectAsState()
     val availableTags by tagViewModel.availableTags.collectAsState()
-    val dominantColorState by if (isVideo) {
-        rememberVideoFrameDominantColorCenterWeighted(videoUri, colorScheme.background)
+    val dominantColorResult by if (isVideo) {
+        rememberComputedVideoFrameDominantColorCenterWeighted(videoUri = videoUri, defaultColor = colorScheme.background)
     } else {
-        rememberDominantColorCenterWeighted(metadata?.artworkUri, colorScheme.background)
+        rememberComputedDominantColorCenterWeighted(model = metadata?.artworkUri, defaultColor = colorScheme.background)
     }
-    val dominantColor = if (dominantColorState == colorScheme.background) colorScheme.primary else dominantColorState
-    val accentColor = if (coverBackgroundEnabled) dominantColor else colorScheme.primary
+    val targetAccentColor = if (coverBackgroundEnabled) {
+        dominantColorResult.color ?: colorScheme.primary
+    } else {
+        colorScheme.primary
+    }
+    val accentColor by animateColorAsState(
+        targetValue = targetAccentColor,
+        animationSpec = tween(
+            durationMillis = if (dominantColorResult.fromCache) 260 else 1000,
+            easing = FastOutSlowInEasing
+        ),
+        label = "nowPlayingAccentColor"
+    )
     val onAccentColor = if (accentColor.luminance() > 0.55f) Color.Black else Color.White
     val videoBackdropColor = if (isVideo) {
-        if (coverBackgroundEnabled) dominantColor else colorScheme.background
+        if (coverBackgroundEnabled) accentColor else colorScheme.background
     } else {
         Color.Transparent
     }
@@ -151,7 +162,7 @@ fun NowPlayingScreen(
                 enabled = coverBackgroundEnabled,
                 clarity = coverBackgroundClarity,
                 overlayBaseColor = colorScheme.background,
-                tintBaseColor = dominantColor,
+                tintBaseColor = accentColor,
                 isDark = colorScheme.isDark
             )
         }
@@ -235,7 +246,7 @@ fun NowPlayingScreen(
                                 viewModel = viewModel,
                                 onOpenLyrics = onOpenLyrics,
                                 edgeBlendEnabled = isLandscape && !isVideo,
-                                edgeBlendColor = if (coverBackgroundEnabled) dominantColor else colorScheme.background,
+                                edgeBlendColor = if (coverBackgroundEnabled) accentColor else colorScheme.background,
                                 videoBackdropColor = videoBackdropColor
                             )
                         }
@@ -419,7 +430,7 @@ fun NowPlayingScreen(
                                 viewModel = viewModel,
                                 onOpenLyrics = onOpenLyrics,
                                 edgeBlendEnabled = isLandscape && !isVideo,
-                                edgeBlendColor = if (coverBackgroundEnabled) dominantColor else colorScheme.background,
+                                edgeBlendColor = if (coverBackgroundEnabled) accentColor else colorScheme.background,
                                 videoBackdropColor = videoBackdropColor
                             )
                         }
@@ -637,7 +648,7 @@ fun NowPlayingScreen(
                                 viewModel = viewModel,
                                 onOpenLyrics = onOpenLyrics,
                                 edgeBlendEnabled = isLandscape && !isVideo,
-                                edgeBlendColor = if (coverBackgroundEnabled) dominantColor else colorScheme.background,
+                                edgeBlendColor = if (coverBackgroundEnabled) accentColor else colorScheme.background,
                                 videoBackdropColor = videoBackdropColor
                             )
                         }

@@ -38,7 +38,9 @@ fun rememberDynamicHuePalette(
     neutral: NeutralPalette,
     fallbackHue: HuePalette,
     imageSizePx: Int = 256,
-    centerRegionRatio: Float = 0.62f
+    centerRegionRatio: Float = 0.62f,
+    transitionDurationMs: Int = 520,
+    cachedTransitionDurationMs: Int = 260
 ): State<HuePalette> {
     val context = LocalContext.current
     val rawBaseKey = artworkModel?.toString().orEmpty()
@@ -64,7 +66,8 @@ fun rememberDynamicHuePalette(
         
         // If we have it in cache, snap immediately to avoid animation if we are just scrolling/recomposing?
         DynamicHueCache.get(key)?.let {
-            animatable.animateTo(it, animationSpec = tween(520)) 
+            if (cachedTransitionDurationMs <= 0) animatable.snapTo(it)
+            else animatable.animateTo(it, animationSpec = tween(cachedTransitionDurationMs))
             return@LaunchedEffect
         }
         
@@ -114,16 +117,18 @@ fun rememberDynamicHuePalette(
 
         if (constrainedPrimary == null) {
             // If failed after retries, stick to fallback
-            animatable.animateTo(
+            if (cachedTransitionDurationMs <= 0) animatable.snapTo(fallbackHue.primary)
+            else animatable.animateTo(
                 fallbackHue.primary,
-                animationSpec = tween(durationMillis = 260, easing = FastOutSlowInEasing)
+                animationSpec = tween(durationMillis = cachedTransitionDurationMs, easing = FastOutSlowInEasing)
             )
             return@LaunchedEffect
         }
 
-        animatable.animateTo(
+        if (transitionDurationMs <= 0) animatable.snapTo(constrainedPrimary)
+        else animatable.animateTo(
             constrainedPrimary,
-            animationSpec = tween(durationMillis = 520, easing = FastOutSlowInEasing)
+            animationSpec = tween(durationMillis = transitionDurationMs, easing = FastOutSlowInEasing)
         )
     }
 
@@ -142,7 +147,9 @@ fun rememberDynamicHuePaletteFromVideoFrame(
     fallbackHue: HuePalette,
     imageSizePx: Int = 256,
     centerRegionRatio: Float = 0.62f,
-    timeoutMs: Long = 2_500L
+    timeoutMs: Long = 2_500L,
+    transitionDurationMs: Int = 520,
+    cachedTransitionDurationMs: Int = 260
 ): State<HuePalette> {
     val context = LocalContext.current
     val rawBaseKey = videoUri?.toString().orEmpty()
@@ -164,7 +171,8 @@ fun rememberDynamicHuePaletteFromVideoFrame(
         if (baseKey.isBlank() || videoUri == null) return@LaunchedEffect
 
         DynamicHueCache.get(key)?.let {
-            animatable.animateTo(it, animationSpec = tween(520))
+            if (cachedTransitionDurationMs <= 0) animatable.snapTo(it)
+            else animatable.animateTo(it, animationSpec = tween(cachedTransitionDurationMs))
             return@LaunchedEffect
         }
 
@@ -194,16 +202,18 @@ fun rememberDynamicHuePaletteFromVideoFrame(
         }
 
         if (constrainedPrimary == null) {
-            animatable.animateTo(
+            if (cachedTransitionDurationMs <= 0) animatable.snapTo(fallbackHue.primary)
+            else animatable.animateTo(
                 fallbackHue.primary,
-                animationSpec = tween(durationMillis = 260, easing = FastOutSlowInEasing)
+                animationSpec = tween(durationMillis = cachedTransitionDurationMs, easing = FastOutSlowInEasing)
             )
             return@LaunchedEffect
         }
 
-        animatable.animateTo(
+        if (transitionDurationMs <= 0) animatable.snapTo(constrainedPrimary)
+        else animatable.animateTo(
             constrainedPrimary,
-            animationSpec = tween(durationMillis = 520, easing = FastOutSlowInEasing)
+            animationSpec = tween(durationMillis = transitionDurationMs, easing = FastOutSlowInEasing)
         )
     }
 

@@ -83,7 +83,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import com.asmr.player.ui.theme.AsmrPlayerTheme
 import com.asmr.player.ui.theme.AsmrTheme
+import com.asmr.player.ui.common.PrewarmDominantColorCenterWeighted
+import com.asmr.player.ui.common.PrewarmVideoFrameDominantColorCenterWeighted
 import coil.compose.AsyncImage
+import coil.imageLoader
+import coil.request.ImageRequest
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.graphicsLayer
@@ -131,6 +135,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             val windowSizeClass = calculateWindowSizeClass(this)
+            val context = LocalContext.current
             val playerViewModel: PlayerViewModel = hiltViewModel()
             val libraryViewModel: LibraryViewModel = hiltViewModel()
             val playback by playerViewModel.playback.collectAsState()
@@ -158,6 +163,27 @@ class MainActivity : ComponentActivity() {
             val coverBackgroundEnabled by settingsDataStore.coverBackgroundEnabled.collectAsState(initial = true)
             val coverBackgroundClarity by settingsDataStore.coverBackgroundClarity.collectAsState(initial = 0.35f)
             val neutral = remember(mode) { neutralPaletteForMode(mode) }
+
+            LaunchedEffect(artworkUri) {
+                val uri = artworkUri ?: return@LaunchedEffect
+                val request = ImageRequest.Builder(context)
+                    .data(uri)
+                    .size(512)
+                    .build()
+                context.imageLoader.enqueue(request)
+            }
+
+            if (isVideo && artworkUri == null) {
+                PrewarmVideoFrameDominantColorCenterWeighted(
+                    videoUri = videoUri,
+                    defaultColor = neutral.background
+                )
+            } else {
+                PrewarmDominantColorCenterWeighted(
+                    model = artworkUri,
+                    defaultColor = neutral.background
+                )
+            }
             val staticHue: HuePalette? = remember(staticHueArgb, mode, neutral) {
                 staticHueArgb?.let { argb ->
                     deriveHuePalette(
@@ -182,14 +208,18 @@ class MainActivity : ComponentActivity() {
                         videoUri = videoUri,
                         mode = mode,
                         neutral = neutral,
-                        fallbackHue = baseStaticHue
+                        fallbackHue = baseStaticHue,
+                        transitionDurationMs = 0,
+                        cachedTransitionDurationMs = 0
                     )
                 } else {
                     rememberDynamicHuePalette(
                         artworkModel = artworkUri,
                         mode = mode,
                         neutral = neutral,
-                        fallbackHue = baseStaticHue
+                        fallbackHue = baseStaticHue,
+                        transitionDurationMs = 0,
+                        cachedTransitionDurationMs = 0
                     )
                 }
                 state.value

@@ -14,9 +14,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asComposeRenderEffect
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import coil.compose.AsyncImagePainter
+import coil.compose.SubcomposeAsyncImage
+import coil.compose.SubcomposeAsyncImageContent
+import coil.request.ImageRequest
 import kotlin.math.max
 import kotlin.math.min
 
@@ -30,6 +35,7 @@ fun CoverArtworkBackground(
     isDark: Boolean = true
 ) {
     if (!enabled || artworkModel == null) return
+    val context = LocalContext.current
 
     val c = remember(clarity) { min(1f, max(0f, clarity)) }
     val blurDp: Dp = remember(c) { (2f + (1f - c) * 18f).dp }
@@ -62,15 +68,25 @@ fun CoverArtworkBackground(
         }
     }
 
-    AsyncImage(
-        model = artworkModel,
+    val request = remember(artworkModel) {
+        ImageRequest.Builder(context)
+            .data(artworkModel)
+            .size(384)
+            .build()
+    }
+
+    SubcomposeAsyncImage(
+        model = request,
         contentDescription = null,
-        modifier = Modifier
-            .fillMaxSize()
-            .then(artworkModifier),
+        modifier = Modifier.fillMaxSize(),
         contentScale = ContentScale.Crop,
         alpha = alpha
-    )
+    ) {
+        val s = painter.state
+        if (s is AsyncImagePainter.State.Success) {
+            SubcomposeAsyncImageContent(modifier = Modifier.fillMaxSize().then(artworkModifier))
+        }
+    }
     
     // 叠加层 1: 基础背景色叠加 (Overlay)
     Box(modifier = Modifier.fillMaxSize().background(overlayBaseColor.copy(alpha = overlayAlpha)))
