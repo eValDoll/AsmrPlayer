@@ -1067,8 +1067,7 @@ fun MainContainer(
             if (visibleMessages.isNotEmpty() && !immersivePlayer) {
                 Box(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .align(Alignment.BottomCenter)
+                        .fillMaxSize()
                         .padding(bottom = 80.dp),
                     contentAlignment = Alignment.BottomCenter
                 ) {
