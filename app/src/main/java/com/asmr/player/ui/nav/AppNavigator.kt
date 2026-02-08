@@ -40,7 +40,7 @@ class AppNavigator(
         }
         navController.navigate(route) {
             launchSingleTop = true
-            restoreState = true
+            restoreState = false
             popUpTo(popToRoute) { inclusive = false; saveState = true }
         }
         runCatching { navController.getBackStackEntry(route) }
@@ -63,7 +63,7 @@ class AppNavigator(
         }
         navController.navigate(route) {
             launchSingleTop = true
-            restoreState = true
+            restoreState = false
             popUpTo(popToRoute) { inclusive = false; saveState = true }
         }
         runCatching { navController.getBackStackEntry(route) }

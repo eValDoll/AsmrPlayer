@@ -205,7 +205,8 @@ fun LibraryScreen(
     val isTrackList = mode == 2
     val pagedAlbums = viewModel.pagedAlbums.collectAsLazyPagingItems()
     val pagedTrackAlbumHeaders = viewModel.pagedTrackAlbumHeaders.collectAsLazyPagingItems()
-    val pagedAlbumIndices = remember(pagedAlbums.itemCount) { List(pagedAlbums.itemCount) { it } }
+    val pagedAlbumSnapshot = pagedAlbums.itemSnapshotList
+    val pagedAlbumIndices = remember(pagedAlbumSnapshot.items.size) { List(pagedAlbumSnapshot.items.size) { it } }
     val expandedAlbumTracks by (if (isTrackList) viewModel.expandedTrackAlbumTracks else flowOf(emptyMap())).collectAsState(initial = emptyMap())
     val expandedAlbumIds = remember { mutableStateListOf<Long>() }
     var actionAlbum by remember { mutableStateOf<Album?>(null) }
@@ -223,6 +224,11 @@ fun LibraryScreen(
         }
         snapshotFlow { expandedAlbumIds.toSet() }
             .collect { ids -> viewModel.setExpandedTrackAlbums(ids) }
+    }
+    LaunchedEffect(showDeleteConfirm, actionAlbum) {
+        if (showDeleteConfirm && (actionAlbum == null || actionAlbum?.id?.let { it <= 0L } == true)) {
+            showDeleteConfirm = false
+        }
     }
 
     Scaffold(
@@ -624,8 +630,11 @@ fun LibraryScreen(
                                         verticalItemSpacing = 16.dp,
                                         horizontalArrangement = Arrangement.spacedBy(16.dp)
                                     ) {
-                                        staggeredItems(pagedAlbumIndices, key = { idx -> pagedAlbums[idx]?.id ?: idx }) { idx ->
-                                            val album = pagedAlbums[idx] ?: return@staggeredItems
+                                        staggeredItems(
+                                            pagedAlbumIndices,
+                                            key = { idx -> pagedAlbumSnapshot.items.getOrNull(idx)?.id?.takeIf { it > 0L } ?: idx }
+                                        ) { idx ->
+                                            val album = pagedAlbumSnapshot.items.getOrNull(idx) ?: return@staggeredItems
                                             AlbumGridItem(
                                                 album = album,
                                                 syncStatus = state.syncingAlbums[album.id] ?: SyncStatus.Idle,
@@ -645,9 +654,9 @@ fun LibraryScreen(
                                     ) {
                                         items(
                                             count = pagedAlbums.itemCount,
-                                            key = { idx -> pagedAlbums[idx]?.id ?: idx }
+                                            key = { idx -> pagedAlbums.itemSnapshotList.getOrNull(idx)?.id?.takeIf { it > 0L } ?: idx }
                                         ) { idx ->
-                                            val album = pagedAlbums[idx] ?: return@items
+                                            val album = pagedAlbums.itemSnapshotList.getOrNull(idx) ?: return@items
                                             AlbumItem(
                                                 album = album,
                                                 syncStatus = state.syncingAlbums[album.id] ?: SyncStatus.Idle,
@@ -731,7 +740,7 @@ fun LibraryScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 8.dp)
-                        .clickable {
+                        .clickable(enabled = !isSyncing && !isGlobalSyncRunning) {
                             showAlbumActions = false
                             showDeleteConfirm = true
                         }

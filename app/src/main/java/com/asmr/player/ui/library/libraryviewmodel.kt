@@ -1169,23 +1169,44 @@ class LibraryViewModel @Inject constructor(
 
     fun deleteAlbum(album: Album) {
         viewModelScope.launch(Dispatchers.IO) {
-            val entity = albumDao.getAlbumById(album.id) ?: return@launch
-            trackDao.deleteSubtitlesForAlbum(album.id)
-            trackDao.deleteTracksForAlbum(album.id)
-            albumDao.deleteAlbum(entity)
-            database.tagDao().deleteAlbumTagsByAlbumId(album.id)
-            database.albumFtsDao().deleteByAlbumId(album.id)
+            if (album.id <= 0L) return@launch
+            if (isBulkTaskRunning()) {
+                messageManager.showInfo("正在执行批量任务，请先取消后再删除")
+                return@launch
+            }
 
-            val downloadRoot = entity.downloadPath.orEmpty()
-            if (downloadRoot.isNotBlank()) {
-                val downloadDao = database.downloadDao()
-                val task = runCatching { downloadDao.getTaskByRootDir(downloadRoot) }.getOrNull()
-                if (task != null) {
-                    runCatching { WorkManager.getInstance(context).cancelAllWorkByTag(task.taskKey) }
-                    runCatching { downloadDao.deleteItemsForTask(task.id) }
-                    runCatching { downloadDao.deleteTaskById(task.id) }
+            albumJobs.remove(album.id)?.cancel()
+            _syncStatus.value -= album.id
+
+            try {
+                val entity = albumDao.getAlbumById(album.id) ?: return@launch
+                val downloadRoot = entity.downloadPath.orEmpty()
+
+                database.withTransaction {
+                    trackDao.deleteSubtitlesForAlbum(album.id)
+                    trackDao.deleteTracksForAlbum(album.id)
+                    albumDao.deleteAlbum(entity)
+                    database.tagDao().deleteAlbumTagsByAlbumId(album.id)
+                    database.albumFtsDao().deleteByAlbumId(album.id)
                 }
-                deletePathSafely(downloadRoot)
+
+                if (downloadRoot.isNotBlank()) {
+                    val downloadDao = database.downloadDao()
+                    val task = runCatching { downloadDao.getTaskByRootDir(downloadRoot) }.getOrNull()
+                    if (task != null) {
+                        runCatching { WorkManager.getInstance(context).cancelAllWorkByTag(task.taskKey) }
+                        runCatching { downloadDao.deleteItemsForTask(task.id) }
+                        runCatching { downloadDao.deleteTaskById(task.id) }
+                    }
+                    deletePathSafely(downloadRoot)
+                }
+
+                messageManager.showSuccess("已删除专辑")
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e("LibraryViewModel", "deleteAlbum failed: ${album.id}", e)
+                messageManager.showError("删除失败：${e.message ?: "未知错误"}")
             }
         }
     }
