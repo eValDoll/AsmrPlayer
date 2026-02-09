@@ -1729,6 +1729,26 @@ private fun treeFileTypeForName(fileName: String): TreeFileType {
     }
 }
 
+private fun treeFileTypeForNode(title: String, url: String?): TreeFileType {
+    val t = title.trim()
+    val fromTitle = treeFileTypeForName(t)
+
+    val urlName = url
+        ?.substringBefore('#')
+        ?.substringBefore('?')
+        ?.substringAfterLast('/')
+        ?.substringAfterLast('\\')
+        .orEmpty()
+    val fromUrl = if (urlName.isNotBlank()) treeFileTypeForName(urlName) else TreeFileType.Other
+
+    return when {
+        fromUrl != TreeFileType.Other -> fromUrl
+        fromTitle != TreeFileType.Other -> fromTitle
+        url != null && url.isNotBlank() -> TreeFileType.Audio
+        else -> TreeFileType.Other
+    }
+}
+
 private fun buildVideoMediaItem(
     title: String,
     uriOrPath: String,
@@ -2388,10 +2408,9 @@ private fun flattenAsmrOneTreeForUi(
                 val children = node.children.orEmpty()
                 val url = node.mediaDownloadUrl ?: node.streamUrl
                 if (children.isEmpty()) {
-                    val nameForType = title.ifBlank { url?.substringBefore('?')?.substringAfterLast('/').orEmpty() }
-                    val type = treeFileTypeForName(nameForType)
+                    val type = treeFileTypeForNode(title, url)
                     if (type == TreeFileType.Other || type == TreeFileType.Subtitle) return@forEach
-                    val extLower = nameForType.substringAfterLast('.', "").lowercase()
+                    val extLower = title.substringAfterLast('.', "").lowercase()
                     updateFolderStats(parentPath = parentPath, type = type, extLower = extLower)
                 } else {
                     walkAll(children, path)
@@ -2409,8 +2428,7 @@ private fun flattenAsmrOneTreeForUi(
             val children = node.children.orEmpty()
             val url = node.mediaDownloadUrl ?: node.streamUrl
             if (children.isEmpty()) {
-                val nameForType = title.ifBlank { url?.substringBefore('?')?.substringAfterLast('/').orEmpty() }
-                val type = treeFileTypeForName(nameForType)
+                val type = treeFileTypeForNode(title, url)
                 if (type == TreeFileType.Other || type == TreeFileType.Subtitle) return@forEach
                 out.add(
                     AsmrTreeUiEntry.File(
