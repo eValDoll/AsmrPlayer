@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -41,6 +42,7 @@ import com.asmr.player.ui.common.DiscPlaceholder
 import com.asmr.player.ui.common.SubtitleStamp
 
 import androidx.compose.foundation.lazy.itemsIndexed
+import com.asmr.player.ui.common.LocalBottomOverlayPadding
 
 @Composable
 fun PlaylistDetailScreen(
@@ -97,7 +99,8 @@ fun PlaylistDetailScreen(
             }
 
             LazyColumn(
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(bottom = LocalBottomOverlayPadding.current)
             ) {
                 itemsIndexed(items, key = { idx, item -> "${item.mediaId}#$idx" }) { index, item ->
                     val startItem = PlaylistItemEntity(

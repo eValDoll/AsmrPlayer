@@ -48,6 +48,7 @@ import com.asmr.player.data.settings.FloatingLyricsSettings
 import com.asmr.player.ui.library.BulkPhase
 import com.asmr.player.ui.library.LibraryViewModel
 import com.asmr.player.ui.theme.AsmrTheme
+import com.asmr.player.ui.common.LocalBottomOverlayPadding
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -104,6 +105,7 @@ fun SettingsScreen(
                     .fillMaxSize()
                     .verticalScroll(rememberScrollState())
                     .padding(16.dp)
+                    .padding(bottom = LocalBottomOverlayPadding.current)
             } else {
                 // 仅用于平板适配：限制内容区域最大宽度并填充可用空间
                 Modifier
@@ -112,6 +114,7 @@ fun SettingsScreen(
                     .fillMaxWidth()
                     .verticalScroll(rememberScrollState())
                     .padding(16.dp)
+                    .padding(bottom = LocalBottomOverlayPadding.current)
             },
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {

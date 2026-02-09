@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -48,6 +49,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.ui.graphics.Color
+import com.asmr.player.ui.common.LocalBottomOverlayPadding
+import com.asmr.player.ui.common.withAddedBottomPadding
 
 @Composable
 fun PlaylistsScreen(
@@ -101,7 +104,8 @@ fun PlaylistsScreen(
             }
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                    .withAddedBottomPadding(LocalBottomOverlayPadding.current),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 items(userPlaylists, key = { it.id }) { playlist ->
