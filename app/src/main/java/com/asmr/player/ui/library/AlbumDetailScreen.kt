@@ -385,16 +385,16 @@ fun AlbumDetailScreen(
                                 )
                             },
                             onPreviewFile = { onlinePreviewFile = it },
-                            treeStateKey = "tree:asmrOne:${model.baseRjCode.ifBlank { model.rjCode }.trim().uppercase()}",
-                            treeInitialExpanded = viewModel.getTreeExpanded("tree:asmrOne:${model.baseRjCode.ifBlank { model.rjCode }.trim().uppercase()}"),
-                            treeWasInitialized = viewModel.isTreeInitialized("tree:asmrOne:${model.baseRjCode.ifBlank { model.rjCode }.trim().uppercase()}"),
+                            treeStateKey = "tree:asmrOne:${model.rjCode.trim().uppercase()}",
+                            treeInitialExpanded = viewModel.getTreeExpanded("tree:asmrOne:${model.rjCode.trim().uppercase()}"),
+                            treeWasInitialized = viewModel.isTreeInitialized("tree:asmrOne:${model.rjCode.trim().uppercase()}"),
                             onPersistTreeState = { expanded ->
-                                val rj = model.baseRjCode.ifBlank { model.rjCode }.trim().uppercase()
+                                val rj = model.rjCode.trim().uppercase()
                                 viewModel.persistTreeState("tree:asmrOne:$rj", expanded)
                             },
-                            initialScroll = viewModel.getListScrollPosition("scroll:tree:asmrOne:${model.baseRjCode.ifBlank { model.rjCode }.trim().uppercase()}"),
+                            initialScroll = viewModel.getListScrollPosition("scroll:tree:asmrOne:${model.rjCode.trim().uppercase()}"),
                             onPersistScroll = { index, offset ->
-                                viewModel.persistListScrollPosition("scroll:tree:asmrOne:${model.baseRjCode.ifBlank { model.rjCode }.trim().uppercase()}", index, offset)
+                                viewModel.persistListScrollPosition("scroll:tree:asmrOne:${model.rjCode.trim().uppercase()}", index, offset)
                             },
                             dlsiteRecommendations = model.dlsiteRecommendations,
                             onOpenAlbumByRj = onOpenAlbumByRj
