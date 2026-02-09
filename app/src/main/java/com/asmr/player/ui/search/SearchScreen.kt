@@ -33,6 +33,8 @@ import com.asmr.player.ui.theme.AsmrTheme
 import androidx.compose.foundation.lazy.items as lazyItems
 
 import androidx.compose.runtime.rememberCoroutineScope
+import com.asmr.player.ui.common.LocalBottomOverlayPadding
+import com.asmr.player.ui.common.withAddedBottomPadding
 import kotlinx.coroutines.launch
 
 private enum class SearchResultViewMode { Grid, List }
@@ -193,6 +195,7 @@ fun SearchScreen(
                                 state = listState,
                                 modifier = Modifier.fillMaxSize(),
                                 contentPadding = PaddingValues(vertical = 8.dp)
+                                    .withAddedBottomPadding(LocalBottomOverlayPadding.current)
                             ) {
                                 lazyItems(
                                     items = state.results,
@@ -206,7 +209,8 @@ fun SearchScreen(
                                 columns = StaggeredGridCells.Adaptive(150.dp),
                                 state = gridState,
                                 modifier = Modifier.fillMaxSize(),
-                                contentPadding = PaddingValues(16.dp),
+                                contentPadding = PaddingValues(16.dp)
+                                    .withAddedBottomPadding(LocalBottomOverlayPadding.current),
                                 horizontalArrangement = Arrangement.spacedBy(16.dp),
                                 verticalItemSpacing = 16.dp
                             ) {

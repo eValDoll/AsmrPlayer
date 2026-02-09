@@ -55,6 +55,7 @@ dependencies {
     val room_version = "2.6.1"
     val hilt_version = "2.49"
     val paging_version = "3.2.1"
+    val haze_version = "0.7.0"
 
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")
@@ -68,6 +69,7 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.navigation:navigation-compose:2.7.7")
     implementation("com.google.android.material:material:1.11.0")
+    implementation("dev.chrisbanes.haze:haze-jetpack-compose:$haze_version")
 
     // Media3 ExoPlayer
     implementation("androidx.media3:media3-exoplayer:$media3_version")

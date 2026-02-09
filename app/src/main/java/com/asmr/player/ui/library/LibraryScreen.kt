@@ -45,6 +45,8 @@ import androidx.compose.foundation.layout.widthIn
 import com.asmr.player.util.Formatting
 import com.asmr.player.ui.common.SubtitleStamp
 import com.asmr.player.ui.common.DiscPlaceholder
+import com.asmr.player.ui.common.LocalBottomOverlayPadding
+import com.asmr.player.ui.common.withAddedBottomPadding
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.Button
@@ -478,6 +480,7 @@ fun LibraryScreen(
                                         state = listState,
                                         modifier = Modifier.fillMaxSize(),
                                         contentPadding = PaddingValues(vertical = 8.dp)
+                                            .withAddedBottomPadding(LocalBottomOverlayPadding.current)
                                     ) {
                                         val headerCount = pagedTrackAlbumHeaders.itemCount
                                         for (headerIndex in 0 until headerCount) {
@@ -627,7 +630,8 @@ fun LibraryScreen(
                                         columns = StaggeredGridCells.Adaptive(150.dp),
                                         state = gridState,
                                         modifier = Modifier.fillMaxSize(),
-                                        contentPadding = PaddingValues(16.dp),
+                                        contentPadding = PaddingValues(16.dp)
+                                            .withAddedBottomPadding(LocalBottomOverlayPadding.current),
                                         verticalItemSpacing = 16.dp,
                                         horizontalArrangement = Arrangement.spacedBy(16.dp)
                                     ) {
@@ -652,6 +656,7 @@ fun LibraryScreen(
                                         state = listState,
                                         modifier = Modifier.fillMaxSize(),
                                         contentPadding = PaddingValues(vertical = 8.dp)
+                                            .withAddedBottomPadding(LocalBottomOverlayPadding.current)
                                     ) {
                                         items(
                                             count = pagedAlbums.itemCount,

@@ -92,6 +92,7 @@ import com.asmr.player.ui.common.rememberDominantColor
 import com.asmr.player.ui.common.SubtitleStamp
 import com.asmr.player.ui.common.DiscPlaceholder
 import com.asmr.player.ui.theme.AsmrTheme
+import com.asmr.player.ui.common.LocalBottomOverlayPadding
 import com.asmr.player.ui.theme.AsmrPlayerTheme
 import com.asmr.player.util.Formatting
 import com.asmr.player.util.MessageManager
@@ -157,8 +158,7 @@ fun AlbumDetailScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Transparent) // Background handled by MainActivity
-            .padding(bottom = 0.dp), // 确保没有多余的底部 padding
+            .background(Color.Transparent), // Background handled by MainActivity
         contentAlignment = Alignment.TopCenter // 仅用于平板适配：居中显示内容
     ) {
         val isCompact = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact
@@ -1114,7 +1114,10 @@ fun AlbumTracks(album: Album, onTrackClick: (Track) -> Unit) {
             Text("暂无曲目")
         }
     } else {
-        LazyColumn(modifier = Modifier.fillMaxSize()) {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(bottom = LocalBottomOverlayPadding.current)
+        ) {
             groupedTracks.forEach { (group, tracks) ->
                 if (group.isNotEmpty()) {
                     item {
@@ -1397,7 +1400,11 @@ private fun AlbumLocalTab(
         }
     }
 
-    LazyColumn(modifier = Modifier.fillMaxSize(), state = listState) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        state = listState,
+        contentPadding = PaddingValues(bottom = LocalBottomOverlayPadding.current)
+    ) {
         item { header() }
         if (treeResult.entries.isEmpty()) {
             item {
@@ -1556,7 +1563,10 @@ private fun AlbumAsmrOneTab(
     val expanded = remember { mutableStateListOf<String>() }
     val treeResult = remember(trackTree, expanded.toList()) { flattenAsmrOneTreeForUi(trackTree, expanded.toSet()) }
 
-    LazyColumn(modifier = Modifier.fillMaxSize()) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(bottom = LocalBottomOverlayPadding.current)
+    ) {
         item { header() }
         if (trackTree.isEmpty()) {
             item {
@@ -3228,7 +3238,11 @@ private fun AlbumDlsiteInfoTab(
             .distinctUntilChanged()
             .collect { (idx, off) -> onPersistScroll(idx, off) }
     }
-    LazyColumn(modifier = Modifier.fillMaxSize(), state = listState) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        state = listState,
+        contentPadding = PaddingValues(bottom = LocalBottomOverlayPadding.current)
+    ) {
         item { header() }
         if (dlsiteInfo == null && isLoading) {
             item {
@@ -3579,7 +3593,11 @@ private fun AlbumDlsitePlayTreeTab(
     }
     val treeResult = remember(tree, expanded.toList()) { flattenAsmrOneTreeForUi(tree, expanded.toSet()) }
 
-    LazyColumn(modifier = Modifier.fillMaxSize(), state = listState) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        state = listState,
+        contentPadding = PaddingValues(bottom = LocalBottomOverlayPadding.current)
+    ) {
         item { header() }
         item {
             Row(
