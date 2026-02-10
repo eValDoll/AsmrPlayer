@@ -338,6 +338,7 @@ fun MainContainer(
     val currentRoute = navBackStackEntry?.destination?.route
     var blockNavTouches by remember { mutableStateOf(false) }
     var lastRouteForTouchBlock by remember { mutableStateOf(currentRoute) }
+    var touchBlockSeq by remember { mutableIntStateOf(0) }
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     val playback by playerViewModel.playback.collectAsState()
@@ -358,9 +359,17 @@ fun MainContainer(
 
     LaunchedEffect(currentRoute) {
         val last = lastRouteForTouchBlock
+        val seq = ++touchBlockSeq
         if (last != null && currentRoute != null && last != currentRoute) {
             blockNavTouches = true
-            delay(320)
+            try {
+                delay(320)
+            } finally {
+                if (touchBlockSeq == seq) {
+                    blockNavTouches = false
+                }
+            }
+        } else {
             blockNavTouches = false
         }
         lastRouteForTouchBlock = currentRoute

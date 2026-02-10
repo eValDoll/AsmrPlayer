@@ -385,16 +385,16 @@ fun AlbumDetailScreen(
                                 )
                             },
                             onPreviewFile = { onlinePreviewFile = it },
-                            treeStateKey = "tree:asmrOne:${model.baseRjCode.ifBlank { model.rjCode }.trim().uppercase()}",
-                            treeInitialExpanded = viewModel.getTreeExpanded("tree:asmrOne:${model.baseRjCode.ifBlank { model.rjCode }.trim().uppercase()}"),
-                            treeWasInitialized = viewModel.isTreeInitialized("tree:asmrOne:${model.baseRjCode.ifBlank { model.rjCode }.trim().uppercase()}"),
+                            treeStateKey = "tree:asmrOne:${model.rjCode.trim().uppercase()}",
+                            treeInitialExpanded = viewModel.getTreeExpanded("tree:asmrOne:${model.rjCode.trim().uppercase()}"),
+                            treeWasInitialized = viewModel.isTreeInitialized("tree:asmrOne:${model.rjCode.trim().uppercase()}"),
                             onPersistTreeState = { expanded ->
-                                val rj = model.baseRjCode.ifBlank { model.rjCode }.trim().uppercase()
+                                val rj = model.rjCode.trim().uppercase()
                                 viewModel.persistTreeState("tree:asmrOne:$rj", expanded)
                             },
-                            initialScroll = viewModel.getListScrollPosition("scroll:tree:asmrOne:${model.baseRjCode.ifBlank { model.rjCode }.trim().uppercase()}"),
+                            initialScroll = viewModel.getListScrollPosition("scroll:tree:asmrOne:${model.rjCode.trim().uppercase()}"),
                             onPersistScroll = { index, offset ->
-                                viewModel.persistListScrollPosition("scroll:tree:asmrOne:${model.baseRjCode.ifBlank { model.rjCode }.trim().uppercase()}", index, offset)
+                                viewModel.persistListScrollPosition("scroll:tree:asmrOne:${model.rjCode.trim().uppercase()}", index, offset)
                             },
                             dlsiteRecommendations = model.dlsiteRecommendations,
                             onOpenAlbumByRj = onOpenAlbumByRj
@@ -1637,9 +1637,12 @@ private fun AlbumAsmrOneTab(
                                     onPrimary = {
                                         if (!canPlay) return@TreeFileRow
                                         val start = leafByRelPath[entry.path] ?: return@TreeFileRow
-                                        val tracks = leafTracks.map { it.toTrack() }
+                                        val folderPath = entry.path.substringBeforeLast('/', "")
+                                        val siblingLeaves = leafTracks.filter { it.relativePath.substringBeforeLast('/', "") == folderPath }
+                                        val queueLeaves = siblingLeaves.ifEmpty { leafTracks }
+                                        val tracks = queueLeaves.sortedBy { it.title.lowercase() }.map { it.toTrack() }
                                         com.asmr.player.util.OnlineLyricsStore.replaceAll(
-                                            leafTracks.associate { it.url to it.subtitles }
+                                            queueLeaves.associate { it.url to it.subtitles }
                                         )
                                         onPlayTracks(album, tracks, start.toTrack())
                                     },
@@ -1725,6 +1728,26 @@ private fun treeFileTypeForName(fileName: String): TreeFileType {
         "lrc", "srt", "vtt" -> TreeFileType.Subtitle
         "txt", "md", "nfo" -> TreeFileType.Text
         "pdf" -> TreeFileType.Pdf
+        else -> TreeFileType.Other
+    }
+}
+
+private fun treeFileTypeForNode(title: String, url: String?): TreeFileType {
+    val t = title.trim()
+    val fromTitle = treeFileTypeForName(t)
+
+    val urlName = url
+        ?.substringBefore('#')
+        ?.substringBefore('?')
+        ?.substringAfterLast('/')
+        ?.substringAfterLast('\\')
+        .orEmpty()
+    val fromUrl = if (urlName.isNotBlank()) treeFileTypeForName(urlName) else TreeFileType.Other
+
+    return when {
+        fromUrl != TreeFileType.Other -> fromUrl
+        fromTitle != TreeFileType.Other -> fromTitle
+        url != null && url.isNotBlank() -> TreeFileType.Audio
         else -> TreeFileType.Other
     }
 }
@@ -2388,10 +2411,9 @@ private fun flattenAsmrOneTreeForUi(
                 val children = node.children.orEmpty()
                 val url = node.mediaDownloadUrl ?: node.streamUrl
                 if (children.isEmpty()) {
-                    val nameForType = title.ifBlank { url?.substringBefore('?')?.substringAfterLast('/').orEmpty() }
-                    val type = treeFileTypeForName(nameForType)
+                    val type = treeFileTypeForNode(title, url)
                     if (type == TreeFileType.Other || type == TreeFileType.Subtitle) return@forEach
-                    val extLower = nameForType.substringAfterLast('.', "").lowercase()
+                    val extLower = title.substringAfterLast('.', "").lowercase()
                     updateFolderStats(parentPath = parentPath, type = type, extLower = extLower)
                 } else {
                     walkAll(children, path)
@@ -2409,8 +2431,7 @@ private fun flattenAsmrOneTreeForUi(
             val children = node.children.orEmpty()
             val url = node.mediaDownloadUrl ?: node.streamUrl
             if (children.isEmpty()) {
-                val nameForType = title.ifBlank { url?.substringBefore('?')?.substringAfterLast('/').orEmpty() }
-                val type = treeFileTypeForName(nameForType)
+                val type = treeFileTypeForNode(title, url)
                 if (type == TreeFileType.Other || type == TreeFileType.Subtitle) return@forEach
                 out.add(
                     AsmrTreeUiEntry.File(
@@ -3350,9 +3371,12 @@ private fun AlbumDlsiteInfoTab(
                                         onPrimary = {
                                             if (canPlay) {
                                                 val start = asmrLeafByRelPath[entry.path] ?: return@TreeFileRow
-                                                val tracks = asmrLeafTracks.map { it.toTrack() }
+                                                val folderPath = entry.path.substringBeforeLast('/', "")
+                                                val siblingLeaves = asmrLeafTracks.filter { it.relativePath.substringBeforeLast('/', "") == folderPath }
+                                                val queueLeaves = siblingLeaves.ifEmpty { listOf(start) }
+                                                val tracks = queueLeaves.sortedBy { it.title.lowercase() }.map { it.toTrack() }
                                                 com.asmr.player.util.OnlineLyricsStore.replaceAll(
-                                                    asmrLeafTracks.associate { it.url to it.subtitles }
+                                                    queueLeaves.associate { it.url to it.subtitles }
                                                 )
                                                 onPlayTracks(album, tracks, start.toTrack())
                                             } else {
