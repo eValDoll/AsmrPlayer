@@ -3371,9 +3371,12 @@ private fun AlbumDlsiteInfoTab(
                                         onPrimary = {
                                             if (canPlay) {
                                                 val start = asmrLeafByRelPath[entry.path] ?: return@TreeFileRow
-                                                val tracks = asmrLeafTracks.map { it.toTrack() }
+                                                val folderPath = entry.path.substringBeforeLast('/', "")
+                                                val siblingLeaves = asmrLeafTracks.filter { it.relativePath.substringBeforeLast('/', "") == folderPath }
+                                                val queueLeaves = siblingLeaves.ifEmpty { listOf(start) }
+                                                val tracks = queueLeaves.sortedBy { it.title.lowercase() }.map { it.toTrack() }
                                                 com.asmr.player.util.OnlineLyricsStore.replaceAll(
-                                                    asmrLeafTracks.associate { it.url to it.subtitles }
+                                                    queueLeaves.associate { it.url to it.subtitles }
                                                 )
                                                 onPlayTracks(album, tracks, start.toTrack())
                                             } else {
