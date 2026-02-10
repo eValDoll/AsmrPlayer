@@ -35,10 +35,9 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import coil.compose.AsyncImage
 import com.asmr.player.data.local.db.entities.PlaylistItemEntity
 import com.asmr.player.data.local.db.entities.PlaylistItemWithSubtitles
-import com.asmr.player.ui.common.DiscPlaceholder
+import com.asmr.player.ui.common.AsmrAsyncImage
 import com.asmr.player.ui.common.SubtitleStamp
 
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -178,18 +177,15 @@ private fun PlaylistItemRow(
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        if (item.artworkUri.isNotBlank()) {
-            AsyncImage(
-                model = item.artworkUri,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(RoundedCornerShape(6.dp))
-            )
-        } else {
-            DiscPlaceholder(modifier = Modifier.size(40.dp), cornerRadius = 6)
-        }
+        AsmrAsyncImage(
+            model = item.artworkUri,
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            placeholderCornerRadius = 6,
+            modifier = Modifier
+                .size(40.dp)
+                .clip(RoundedCornerShape(6.dp)),
+        )
         Spacer(modifier = Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(

@@ -16,7 +16,6 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.lerp
-import coil.compose.AsyncImage
 import com.asmr.player.domain.model.Album
 import kotlin.math.absoluteValue
 
@@ -65,11 +64,12 @@ fun AlbumCarousel(
             elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
         ) {
             Box {
-                AsyncImage(
+                AsmrAsyncImage(
                     model = album.coverThumbPath.ifBlank { album.coverPath }.ifEmpty { album.coverUrl },
                     contentDescription = null,
                     modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
+                    contentScale = ContentScale.Crop,
+                    placeholderCornerRadius = 16,
                 )
                 Surface(
                     modifier = Modifier

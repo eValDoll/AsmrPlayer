@@ -53,7 +53,6 @@ import androidx.core.net.toUri
 import androidx.media3.common.MediaItem
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
-import coil.compose.AsyncImage
 import coil.compose.SubcomposeAsyncImage
 import coil.request.ImageRequest
 import com.asmr.player.data.local.db.AppDatabaseProvider
@@ -91,6 +90,7 @@ import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import com.asmr.player.ui.common.rememberDominantColor
 import com.asmr.player.ui.common.SubtitleStamp
 import com.asmr.player.ui.common.DiscPlaceholder
+import com.asmr.player.ui.common.AsmrAsyncImage
 import com.asmr.player.ui.theme.AsmrTheme
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
 import com.asmr.player.ui.theme.AsmrPlayerTheme
@@ -588,16 +588,13 @@ private fun AlbumHeader(
                     .fillMaxWidth()
                     .height(240.dp)
             ) {
-                if (data.isBlank()) {
-                    DiscPlaceholder(modifier = Modifier.fillMaxSize(), cornerRadius = 0)
-                } else {
-                    AsyncImage(
-                        model = imageModel,
-                        contentDescription = null,
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop
-                    )
-                }
+                AsmrAsyncImage(
+                    model = imageModel,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    placeholderCornerRadius = 0,
+                    modifier = Modifier.fillMaxSize(),
+                )
                 if (onPickLocalCover != null) {
                     IconButton(
                         onClick = onPickLocalCover,
@@ -2563,13 +2560,14 @@ private fun TreeFileRow(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (depth > 0) Spacer(modifier = Modifier.width((depth * 12).dp))
                     if (fileType == TreeFileType.Image && thumbnailModel != null) {
-                        AsyncImage(
+                        AsmrAsyncImage(
                             model = thumbnailModel,
                             contentDescription = null,
                             modifier = Modifier
                                 .size(40.dp)
                                 .clip(RoundedCornerShape(6.dp)),
-                            contentScale = ContentScale.Crop
+                            contentScale = ContentScale.Crop,
+                            placeholderCornerRadius = 6,
                         )
                     } else {
                         Icon(
@@ -3319,11 +3317,12 @@ private fun AlbumDlsiteInfoTab(
                                 .clickable { previewUrl = url },
                             shape = RoundedCornerShape(12.dp)
                         ) {
-                            AsyncImage(
+                            AsmrAsyncImage(
                                 model = model,
                                 contentDescription = null,
                                 contentScale = ContentScale.Crop,
-                                modifier = Modifier.fillMaxSize()
+                                placeholderCornerRadius = 12,
+                                modifier = Modifier.fillMaxSize(),
                             )
                         }
                     }
@@ -3524,13 +3523,14 @@ private fun AlbumDlsiteInfoTab(
                                 .build()
                         } else url
                     }
-                    AsyncImage(
+                    AsmrAsyncImage(
                         model = model,
                         contentDescription = null,
                         contentScale = ContentScale.Fit,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(8.dp)
+                            .padding(8.dp),
+                        placeholderCornerRadius = 16,
                     )
                 }
             }
@@ -4054,7 +4054,7 @@ private fun FilePreviewDialog(
                         TreeFileType.Image -> {
                             var scale by remember { mutableStateOf(1f) }
                             var offset by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
-                            AsyncImage(
+                            AsmrAsyncImage(
                                 model = currentPath,
                                 contentDescription = null,
                                 contentScale = ContentScale.Fit,
@@ -4075,7 +4075,8 @@ private fun FilePreviewDialog(
                                         scaleY = scale,
                                         translationX = offset.x,
                                         translationY = offset.y
-                                    )
+                                    ),
+                                placeholderCornerRadius = 0,
                             )
                         }
                         TreeFileType.Video -> {

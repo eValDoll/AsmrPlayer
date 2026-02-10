@@ -23,7 +23,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import coil.compose.AsyncImage
+import com.asmr.player.ui.common.AsmrAsyncImage
 import coil.request.ImageRequest
 
 @Composable
@@ -48,11 +48,19 @@ fun CoverArtworkEdgeBlend(
             Modifier.blur(blurDp)
         }
     }
-    val blurredRequest = remember(artworkModel) {
-        ImageRequest.Builder(context)
-            .data(artworkModel)
-            .size(384)
-            .build()
+    val normalizedArtworkModel = remember(artworkModel) {
+        when (artworkModel) {
+            is String -> artworkModel.trim().takeIf { it.isNotEmpty() }
+            else -> artworkModel
+        }
+    }
+    val blurredRequest = remember(normalizedArtworkModel) {
+        normalizedArtworkModel?.let {
+            ImageRequest.Builder(context)
+                .data(it)
+                .size(384)
+                .build()
+        }
     }
 
     Box(
@@ -61,7 +69,7 @@ fun CoverArtworkEdgeBlend(
             .clip(shape)
             .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
     ) {
-        AsyncImage(
+        AsmrAsyncImage(
             model = blurredRequest,
             contentDescription = null,
             modifier = Modifier
@@ -72,13 +80,14 @@ fun CoverArtworkEdgeBlend(
                     alpha = 0.82f
                 }
                 .then(blurModifier),
-            contentScale = ContentScale.Crop
+            contentScale = ContentScale.Crop,
+            placeholder = {},
         )
 
         Box(modifier = Modifier.fillMaxSize().background(blendColor.copy(alpha = 0.06f)))
 
-        AsyncImage(
-            model = artworkModel,
+        AsmrAsyncImage(
+            model = normalizedArtworkModel,
             contentDescription = null,
             modifier = Modifier
                 .fillMaxSize()
@@ -107,7 +116,8 @@ fun CoverArtworkEdgeBlend(
                         drawRect(vert, blendMode = BlendMode.DstIn)
                     }
                 },
-            contentScale = ContentScale.Crop
+            contentScale = ContentScale.Crop,
+            placeholderCornerRadius = cornerRadius.value.toInt(),
         )
     }
 }

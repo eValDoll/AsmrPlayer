@@ -17,7 +17,6 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import coil.compose.AsyncImage
 import coil.compose.AsyncImagePainter
 import coil.compose.SubcomposeAsyncImage
 import coil.compose.SubcomposeAsyncImageContent
@@ -34,7 +33,7 @@ fun CoverArtworkBackground(
     tintBaseColor: Color,
     isDark: Boolean = true
 ) {
-    if (!enabled || artworkModel == null) return
+    if (!enabled) return
     val context = LocalContext.current
 
     val c = remember(clarity) { min(1f, max(0f, clarity)) }
@@ -55,6 +54,8 @@ fun CoverArtworkBackground(
         maxTint * (1f - c) + 0.12f * c
     }
     
+    Box(modifier = Modifier.fillMaxSize().background(overlayBaseColor))
+
     val artworkModifier = remember(blurDp) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             Modifier.graphicsLayer {
@@ -69,22 +70,26 @@ fun CoverArtworkBackground(
     }
 
     val request = remember(artworkModel) {
-        ImageRequest.Builder(context)
-            .data(artworkModel)
-            .size(384)
-            .build()
+        artworkModel?.let {
+            ImageRequest.Builder(context)
+                .data(it)
+                .size(384)
+                .build()
+        }
     }
 
-    SubcomposeAsyncImage(
-        model = request,
-        contentDescription = null,
-        modifier = Modifier.fillMaxSize(),
-        contentScale = ContentScale.Crop,
-        alpha = alpha
-    ) {
-        val s = painter.state
-        if (s is AsyncImagePainter.State.Success) {
-            SubcomposeAsyncImageContent(modifier = Modifier.fillMaxSize().then(artworkModifier))
+    if (request != null) {
+        SubcomposeAsyncImage(
+            model = request,
+            contentDescription = null,
+            modifier = Modifier.fillMaxSize(),
+            contentScale = ContentScale.Crop,
+            alpha = alpha
+        ) {
+            val s = painter.state
+            if (s is AsyncImagePainter.State.Success) {
+                SubcomposeAsyncImageContent(modifier = Modifier.fillMaxSize().then(artworkModifier))
+            }
         }
     }
     
