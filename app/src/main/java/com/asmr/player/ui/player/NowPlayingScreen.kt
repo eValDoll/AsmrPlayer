@@ -60,7 +60,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.media3.common.Player
 import androidx.media3.common.VideoSize
 import androidx.media3.ui.PlayerView
-import coil.compose.AsyncImage
+import com.asmr.player.ui.common.AsmrAsyncImage
 import com.asmr.player.playback.PlaybackSnapshot
 import com.asmr.player.ui.common.EqualizerPanel
 import com.asmr.player.ui.common.rememberComputedDominantColorCenterWeighted
@@ -814,17 +814,13 @@ private fun ArtworkBox(
                         DiscPlaceholder(modifier = Modifier.fillMaxSize(), cornerRadius = 28)
                     }
                 } else {
-                    val artwork = metadata?.artworkUri
-                    if (artwork != null) {
-                        AsyncImage(
-                            model = artwork,
-                            contentDescription = null,
-                            modifier = Modifier.fillMaxSize(),
-                            contentScale = ContentScale.Crop
-                        )
-                    } else {
-                        DiscPlaceholder(modifier = Modifier.fillMaxSize(), cornerRadius = 28)
-                    }
+                    AsmrAsyncImage(
+                        model = metadata?.artworkUri,
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        placeholderCornerRadius = 28,
+                        modifier = Modifier.fillMaxSize(),
+                    )
                 }
             }
         }

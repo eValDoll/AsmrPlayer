@@ -36,10 +36,9 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import coil.compose.AsyncImage
 import com.asmr.player.data.local.db.dao.PlaylistStatsRow
 import com.asmr.player.data.local.db.entities.PlaylistEntity
-import com.asmr.player.ui.common.DiscPlaceholder
+import com.asmr.player.ui.common.AsmrAsyncImage
 
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.ui.text.font.FontWeight
@@ -159,18 +158,15 @@ private fun PlaylistRow(
             .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            if (cover.isNotBlank()) {
-                AsyncImage(
-                    model = cover,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier
-                        .size(54.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                )
-            } else {
-                DiscPlaceholder(modifier = Modifier.size(54.dp), cornerRadius = 12)
-            }
+            AsmrAsyncImage(
+                model = cover,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                placeholderCornerRadius = 12,
+                modifier = Modifier
+                    .size(54.dp)
+                    .clip(RoundedCornerShape(12.dp)),
+            )
             Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(

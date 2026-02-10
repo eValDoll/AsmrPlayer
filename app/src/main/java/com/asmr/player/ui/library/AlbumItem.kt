@@ -48,10 +48,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
-import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.asmr.player.domain.model.Album
 import com.asmr.player.data.remote.NetworkHeaders
+import com.asmr.player.ui.common.AsmrAsyncImage
 import com.asmr.player.ui.common.rememberDominantColor
 
 import com.asmr.player.ui.theme.AsmrTheme
@@ -104,11 +104,12 @@ fun AlbumItem(
                     .size(coverSize)
                     .clip(RoundedCornerShape(16.dp))
             ) {
-                AsyncImage(
+                AsmrAsyncImage(
                     model = imageModel,
                     contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    placeholderCornerRadius = 16,
                     modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
                 )
             }
 
@@ -264,11 +265,12 @@ fun AlbumGridItem(
             )
     ) {
         Box(modifier = Modifier.fillMaxWidth().aspectRatio(1f)) {
-            AsyncImage(
+            AsmrAsyncImage(
                 model = imageModel,
                 contentDescription = null,
+                contentScale = ContentScale.Crop,
+                placeholderCornerRadius = 20,
                 modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(20.dp)),
-                contentScale = ContentScale.Crop
             )
             
             val rj = album.rjCode.ifBlank { album.workId }

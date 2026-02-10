@@ -36,10 +36,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.hilt.navigation.compose.hiltViewModel
-import coil.compose.AsyncImage
+import com.asmr.player.ui.common.AsmrAsyncImage
 
 import androidx.compose.ui.text.font.FontWeight
-import com.asmr.player.ui.common.DiscPlaceholder
 import com.asmr.player.ui.theme.AsmrTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
 
@@ -203,17 +202,13 @@ fun MiniPlayer(
                 .clip(CircleShape)
                 .background(Color.White)
         ) {
-            val artwork = metadata.artworkUri
-            if (artwork != null) {
-                AsyncImage(
-                    model = artwork,
-                    contentDescription = null,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
-                )
-            } else {
-                DiscPlaceholder(modifier = Modifier.fillMaxSize(), cornerRadius = 64)
-            }
+            AsmrAsyncImage(
+                model = metadata.artworkUri,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                placeholderCornerRadius = 64,
+                modifier = Modifier.fillMaxSize(),
+            )
         }
     }
 }

@@ -115,7 +115,7 @@ import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
-import coil.compose.AsyncImage
+import com.asmr.player.ui.common.AsmrAsyncImage
 import androidx.paging.LoadState
 import androidx.paging.compose.collectAsLazyPagingItems
 import kotlinx.coroutines.launch
@@ -905,19 +905,15 @@ private fun TrackAlbumHeader(
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        val hasCover = coverModel?.toString()?.isNotBlank() == true
-        if (hasCover) {
-            AsyncImage(
-                model = coverModel,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .size(50.dp)
-                    .clip(RoundedCornerShape(8.dp))
-            )
-        } else {
-            DiscPlaceholder(modifier = Modifier.size(50.dp), cornerRadius = 8)
-        }
+        AsmrAsyncImage(
+            model = coverModel,
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            placeholderCornerRadius = 8,
+            modifier = Modifier
+                .size(50.dp)
+                .clip(RoundedCornerShape(8.dp)),
+        )
         Spacer(modifier = Modifier.width(10.dp))
         Text(
             text = albumTitle.ifBlank { rjCode.ifBlank { "专辑" } },
@@ -1030,16 +1026,13 @@ private fun AlbumGridItem(
             val coverModel = remember(album.coverThumbPath, album.coverPath, album.coverUrl) {
                 album.coverThumbPath.ifBlank { album.coverPath }.ifBlank { album.coverUrl }.trim().ifBlank { null }
             }
-            if (coverModel != null) {
-                AsyncImage(
-                    model = coverModel,
-                    contentDescription = null,
-                    modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(20.dp)),
-                    contentScale = ContentScale.Crop
-                )
-            } else {
-                DiscPlaceholder(modifier = Modifier.fillMaxSize(), cornerRadius = 20)
-            }
+            AsmrAsyncImage(
+                model = coverModel,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                placeholderCornerRadius = 20,
+                modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(20.dp)),
+            )
             
             if (syncStatus is SyncStatus.Syncing) {
                 Box(
@@ -1213,16 +1206,13 @@ private fun AlbumItem(
                 val coverModel = remember(album.coverThumbPath, album.coverPath, album.coverUrl) {
                     album.coverThumbPath.ifBlank { album.coverPath }.ifBlank { album.coverUrl }.trim().ifBlank { null }
                 }
-                if (coverModel != null) {
-                    AsyncImage(
-                        model = coverModel,
-                        contentDescription = null,
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop
-                    )
-                } else {
-                    DiscPlaceholder(modifier = Modifier.fillMaxSize(), cornerRadius = 16)
-                }
+                AsmrAsyncImage(
+                    model = coverModel,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    placeholderCornerRadius = 16,
+                    modifier = Modifier.fillMaxSize(),
+                )
                 
                 if (syncStatus is SyncStatus.Syncing) {
                     Box(
