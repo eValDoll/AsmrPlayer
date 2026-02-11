@@ -117,7 +117,8 @@ fun SearchScreen(
                 onValueChange = { keyword = it },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 4.dp)
+                    .height(44.dp)
+                    .padding(horizontal = 16.dp, vertical = 2.dp)
                     .clip(RoundedCornerShape(16.dp)),
                 leadingIcon = {
                     val currentOrder = success?.order ?: SearchSortOption.Trend
@@ -125,10 +126,11 @@ fun SearchScreen(
                     TextButton(
                         onClick = { scopeMenuExpanded = true },
                         enabled = success != null && !(success.isPaging),
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                        modifier = Modifier.height(32.dp),
+                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
                         colors = ButtonDefaults.textButtonColors(contentColor = colorScheme.primary)
                     ) {
-                        Text(label, style = MaterialTheme.typography.labelMedium)
+                        Text(label, style = MaterialTheme.typography.labelSmall, maxLines = 1)
                     }
                     DropdownMenu(
                         expanded = scopeMenuExpanded,
@@ -158,17 +160,20 @@ fun SearchScreen(
                 },
                 placeholder = { Text("搜索专辑、社团、CV...", color = colorScheme.textTertiary) },
                 trailingIcon = {
-                    IconButton(onClick = { 
-                        viewModel.search(keyword)
-                        // 只有主动点击搜索时才回顶
-                        scope.launch {
-                            listState.scrollToItem(0)
-                            gridState.scrollToItem(0)
-                        }
-                    }) {
+                    IconButton(
+                        onClick = {
+                            viewModel.search(keyword)
+                            scope.launch {
+                                listState.scrollToItem(0)
+                                gridState.scrollToItem(0)
+                            }
+                        },
+                        modifier = Modifier.size(40.dp)
+                    ) {
                         Icon(Icons.Default.Search, contentDescription = null, tint = colorScheme.primary)
                     }
                 },
+                textStyle = MaterialTheme.typography.bodyMedium,
                 colors = TextFieldDefaults.colors(
                     focusedContainerColor = colorScheme.surface.copy(alpha = 0.5f),
                     unfocusedContainerColor = colorScheme.surface.copy(alpha = 0.3f),

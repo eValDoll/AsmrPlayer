@@ -334,7 +334,7 @@ fun LibraryScreen(
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                                        .padding(horizontal = 16.dp, vertical = 4.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     OutlinedTextField(
@@ -343,7 +343,7 @@ fun LibraryScreen(
                                             searchText = it
                                             viewModel.setSearchQuery(it)
                                         },
-                                        modifier = Modifier.weight(1f).heightIn(min = 44.dp),
+                                        modifier = Modifier.weight(1f).height(44.dp),
                                         singleLine = true,
                                         leadingIcon = {
                                             Icon(
@@ -358,7 +358,8 @@ fun LibraryScreen(
                                                     onClick = {
                                                         searchText = ""
                                                         viewModel.setSearchQuery("")
-                                                    }
+                                                    },
+                                                    modifier = Modifier.size(40.dp)
                                                 ) {
                                                     Icon(
                                                         imageVector = Icons.Default.Close,
@@ -368,11 +369,12 @@ fun LibraryScreen(
                                                 }
                                             }
                                         },
-                                        placeholder = { Text("社团 / CV / 标签...", color = colorScheme.onSurface.copy(alpha = 0.6f)) }
+                                        placeholder = { Text("社团 / CV / 标签...", color = colorScheme.onSurface.copy(alpha = 0.6f)) },
+                                        textStyle = MaterialTheme.typography.bodyMedium
                                     )
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Box {
-                                        IconButton(onClick = { sortMenuExpanded = true }) {
+                                        IconButton(onClick = { sortMenuExpanded = true }, modifier = Modifier.size(40.dp)) {
                                             Icon(
                                                 imageVector = Icons.Default.SwapVert,
                                                 contentDescription = null,
@@ -407,7 +409,7 @@ fun LibraryScreen(
                                         }
                                     }
                                     Spacer(modifier = Modifier.width(4.dp))
-                                    IconButton(onClick = { showFilterSheet = true }) {
+                                    IconButton(onClick = { showFilterSheet = true }, modifier = Modifier.size(40.dp)) {
                                         Icon(
                                             imageVector = Icons.Default.FilterList,
                                             contentDescription = null,
