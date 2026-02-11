@@ -158,7 +158,14 @@ fun SearchScreen(
                         }
                     }
                 },
-                placeholder = { Text("搜索专辑、社团、CV...", color = colorScheme.textTertiary) },
+                placeholder = {
+                    Text(
+                        text = "搜索专辑、社团、CV...",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = colorScheme.textTertiary,
+                        maxLines = 1
+                    )
+                },
                 trailingIcon = {
                     IconButton(
                         onClick = {
@@ -173,7 +180,7 @@ fun SearchScreen(
                         Icon(Icons.Default.Search, contentDescription = null, tint = colorScheme.primary)
                     }
                 },
-                textStyle = MaterialTheme.typography.bodyMedium,
+                textStyle = MaterialTheme.typography.bodySmall,
                 colors = TextFieldDefaults.colors(
                     focusedContainerColor = colorScheme.surface.copy(alpha = 0.5f),
                     unfocusedContainerColor = colorScheme.surface.copy(alpha = 0.3f),

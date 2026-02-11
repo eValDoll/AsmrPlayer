@@ -369,8 +369,15 @@ fun LibraryScreen(
                                                 }
                                             }
                                         },
-                                        placeholder = { Text("社团 / CV / 标签...", color = colorScheme.onSurface.copy(alpha = 0.6f)) },
-                                        textStyle = MaterialTheme.typography.bodyMedium
+                                        placeholder = {
+                                            Text(
+                                                text = "社团 / CV / 标签...",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = colorScheme.onSurface.copy(alpha = 0.6f),
+                                                maxLines = 1
+                                            )
+                                        },
+                                        textStyle = MaterialTheme.typography.bodySmall
                                     )
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Box {
