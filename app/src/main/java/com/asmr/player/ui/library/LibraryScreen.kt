@@ -334,7 +334,7 @@ fun LibraryScreen(
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                                        .padding(horizontal = 16.dp, vertical = 8.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     OutlinedTextField(
@@ -343,7 +343,7 @@ fun LibraryScreen(
                                             searchText = it
                                             viewModel.setSearchQuery(it)
                                         },
-                                        modifier = Modifier.weight(1f),
+                                        modifier = Modifier.weight(1f).heightIn(min = 44.dp),
                                         singleLine = true,
                                         leadingIcon = {
                                             Icon(

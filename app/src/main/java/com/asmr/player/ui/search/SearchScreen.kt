@@ -117,7 +117,7 @@ fun SearchScreen(
                 onValueChange = { keyword = it },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                    .padding(horizontal = 16.dp, vertical = 4.dp)
                     .clip(RoundedCornerShape(16.dp)),
                 leadingIcon = {
                     val currentOrder = success?.order ?: SearchSortOption.Trend
@@ -128,7 +128,7 @@ fun SearchScreen(
                         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
                         colors = ButtonDefaults.textButtonColors(contentColor = colorScheme.primary)
                     ) {
-                        Text(label, style = MaterialTheme.typography.labelLarge)
+                        Text(label, style = MaterialTheme.typography.labelMedium)
                     }
                     DropdownMenu(
                         expanded = scopeMenuExpanded,
