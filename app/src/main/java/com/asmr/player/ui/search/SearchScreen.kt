@@ -117,7 +117,8 @@ fun SearchScreen(
                 onValueChange = { keyword = it },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                    .heightIn(min = 48.dp)
+                    .padding(horizontal = 16.dp, vertical = 2.dp)
                     .clip(RoundedCornerShape(16.dp)),
                 leadingIcon = {
                     val currentOrder = success?.order ?: SearchSortOption.Trend
@@ -125,10 +126,11 @@ fun SearchScreen(
                     TextButton(
                         onClick = { scopeMenuExpanded = true },
                         enabled = success != null && !(success.isPaging),
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                        modifier = Modifier.height(32.dp),
+                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
                         colors = ButtonDefaults.textButtonColors(contentColor = colorScheme.primary)
                     ) {
-                        Text(label, style = MaterialTheme.typography.labelLarge)
+                        Text(label, style = MaterialTheme.typography.labelSmall, maxLines = 1)
                     }
                     DropdownMenu(
                         expanded = scopeMenuExpanded,
@@ -156,19 +158,29 @@ fun SearchScreen(
                         }
                     }
                 },
-                placeholder = { Text("搜索专辑、社团、CV...", color = colorScheme.textTertiary) },
+                placeholder = {
+                    Text(
+                        text = "搜索专辑、社团、CV...",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = colorScheme.textTertiary,
+                        maxLines = 1
+                    )
+                },
                 trailingIcon = {
-                    IconButton(onClick = { 
-                        viewModel.search(keyword)
-                        // 只有主动点击搜索时才回顶
-                        scope.launch {
-                            listState.scrollToItem(0)
-                            gridState.scrollToItem(0)
-                        }
-                    }) {
+                    IconButton(
+                        onClick = {
+                            viewModel.search(keyword)
+                            scope.launch {
+                                listState.scrollToItem(0)
+                                gridState.scrollToItem(0)
+                            }
+                        },
+                        modifier = Modifier.size(40.dp)
+                    ) {
                         Icon(Icons.Default.Search, contentDescription = null, tint = colorScheme.primary)
                     }
                 },
+                textStyle = MaterialTheme.typography.bodySmall,
                 colors = TextFieldDefaults.colors(
                     focusedContainerColor = colorScheme.surface.copy(alpha = 0.5f),
                     unfocusedContainerColor = colorScheme.surface.copy(alpha = 0.3f),
@@ -303,19 +315,20 @@ private fun SearchPaginationHeader(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .padding(horizontal = 16.dp, vertical = 2.dp)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(14.dp))
                 .background(colorScheme.surface.copy(alpha = 0.35f))
-                .padding(horizontal = 10.dp, vertical = 6.dp),
+                .padding(horizontal = 8.dp, vertical = 2.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(
                 onClick = onPrev,
-                enabled = canGoPrev && !isPaging
+                enabled = canGoPrev && !isPaging,
+                modifier = Modifier.size(36.dp)
             ) {
                 Icon(
                     Icons.AutoMirrored.Filled.ArrowBack, 
@@ -327,13 +340,13 @@ private fun SearchPaginationHeader(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = "第 $page 页", 
-                    style = MaterialTheme.typography.titleSmall,
+                    style = MaterialTheme.typography.bodySmall,
                     color = colorScheme.textPrimary
                 )
                 if (isPaging) {
-                    Spacer(modifier = Modifier.width(12.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
                     CircularProgressIndicator(
-                        modifier = Modifier.size(16.dp), 
+                        modifier = Modifier.size(12.dp), 
                         strokeWidth = 2.dp,
                         color = colorScheme.primary
                     )
@@ -342,7 +355,8 @@ private fun SearchPaginationHeader(
             Spacer(modifier = Modifier.weight(1f))
             IconButton(
                 onClick = onNext,
-                enabled = canGoNext && !isPaging
+                enabled = canGoNext && !isPaging,
+                modifier = Modifier.size(36.dp)
             ) {
                 Icon(
                     Icons.AutoMirrored.Filled.ArrowForward, 
