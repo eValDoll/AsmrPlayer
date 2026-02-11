@@ -14,11 +14,14 @@ import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 import java.io.File
 import javax.inject.Inject
+import javax.inject.Named
 
 @HiltAndroidApp
 class AsmrApp : Application(), ImageLoaderFactory {
 
-    @Inject lateinit var okHttpClient: OkHttpClient
+    @Inject
+    @Named("image")
+    lateinit var imageOkHttpClient: OkHttpClient
 
     override fun onCreate() {
         super.onCreate()
@@ -29,7 +32,7 @@ class AsmrApp : Application(), ImageLoaderFactory {
 
     override fun newImageLoader(): ImageLoader {
         return ImageLoader.Builder(this)
-            .okHttpClient { okHttpClient }
+            .okHttpClient { imageOkHttpClient }
             .memoryCache {
                 MemoryCache.Builder(this)
                     .maxSizePercent(0.15)

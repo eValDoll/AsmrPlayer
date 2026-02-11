@@ -8,14 +8,17 @@ import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
+import okhttp3.Dispatcher
 import okhttp3.OkHttpClient
 import okhttp3.Interceptor
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import javax.inject.Singleton
+import javax.inject.Named
 
 import com.asmr.player.data.remote.TrafficStatsInterceptor
+import com.asmr.player.data.remote.NetworkHeaders
 import com.asmr.player.util.MessageManager
 import java.io.IOException
 
@@ -77,6 +80,52 @@ object NetworkModule {
         }
         return OkHttpClient.Builder()
             .addInterceptor(asmrHeaders)
+            .addInterceptor(trafficStatsInterceptor)
+            .addInterceptor(logging)
+            .build()
+    }
+
+    @Provides
+    @Singleton
+    @Named("image")
+    fun provideImageOkHttpClient(
+        trafficStatsInterceptor: TrafficStatsInterceptor
+    ): OkHttpClient {
+        val logging = HttpLoggingInterceptor().apply {
+            level = HttpLoggingInterceptor.Level.BASIC
+        }
+        val headers = Interceptor { chain ->
+            val request = chain.request()
+            val host = request.url.host.lowercase()
+
+            val builder = request.newBuilder()
+                .header("User-Agent", NetworkHeaders.USER_AGENT)
+
+            if (host.contains("asmr.one")) {
+                builder.header("Origin", "https://www.asmr.one")
+                builder.header("Referer", "https://www.asmr.one/")
+            } else if (host.contains("asmr-100.com") || host.contains("asmr-200.com") || host.contains("asmr-300.com")) {
+                builder.header("Origin", "https://www.asmr.one")
+                builder.header("Referer", "https://www.asmr.one/")
+            } else if (host.contains("dlsite.")) {
+                builder.header("Referer", NetworkHeaders.REFERER_DLSITE)
+                builder.header("Accept-Language", NetworkHeaders.ACCEPT_LANGUAGE)
+            } else if (host.contains("byteair.volces.com")) {
+                builder.header("Referer", NetworkHeaders.REFERER_DLSITE)
+                builder.header("Accept-Language", NetworkHeaders.ACCEPT_LANGUAGE)
+            }
+
+            chain.proceed(builder.build())
+        }
+
+        val dispatcher = Dispatcher().apply {
+            maxRequests = 32
+            maxRequestsPerHost = 2
+        }
+
+        return OkHttpClient.Builder()
+            .dispatcher(dispatcher)
+            .addInterceptor(headers)
             .addInterceptor(trafficStatsInterceptor)
             .addInterceptor(logging)
             .build()
