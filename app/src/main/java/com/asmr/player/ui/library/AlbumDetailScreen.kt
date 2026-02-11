@@ -119,6 +119,7 @@ fun AlbumDetailScreen(
     onPlayMediaItems: (List<MediaItem>, Int) -> Unit = { _, _ -> },
     onAddToQueue: (Album, Track) -> Boolean = { _, _ -> false },
     onOpenPlaylistPicker: (mediaId: String, uri: String, title: String, artist: String, artworkUri: String) -> Unit = { _, _, _, _, _ -> },
+    onOpenGroupPicker: (albumId: Long) -> Unit = { _ -> },
     onPlayVideo: (String, String, String, String) -> Unit = { _, _, _, _ -> },
     onOpenDlsiteLogin: () -> Unit = {},
     onOpenAlbumByRj: (String) -> Unit = {},
@@ -185,6 +186,7 @@ fun AlbumDetailScreen(
                     val album = model.displayAlbum
                     val asmrOneTree = model.asmrOneTree
                     val canSaveOnline = selectedTab != 2 && asmrOneTree.isNotEmpty()
+                    val showGroupButton = selectedTab == 0 && model.localAlbum != null
                     val availableTags by viewModel.availableTags.collectAsState()
                     val userTagsByTrackId by viewModel.userTagsByTrackId.collectAsState()
                     val libraryViewModel: LibraryViewModel = hiltViewModel()
@@ -237,6 +239,8 @@ fun AlbumDetailScreen(
                                 },
                                 downloadEnabled = (if (selectedTab == 2) model.dlsitePlayTree else asmrOneTree).isNotEmpty(),
                                 saveEnabled = canSaveOnline,
+                                showGroupButton = showGroupButton,
+                                onOpenGroupPicker = onOpenGroupPicker,
                                 onPickLocalCover = if (selectedTab == 0 && model.localAlbum != null) {
                                     { coverPicker.launch(arrayOf("image/*")) }
                                 } else null,
@@ -544,6 +548,8 @@ private fun AlbumHeader(
     onSaveClick: () -> Unit,
     downloadEnabled: Boolean,
     saveEnabled: Boolean,
+    showGroupButton: Boolean,
+    onOpenGroupPicker: (albumId: Long) -> Unit,
     onPickLocalCover: (() -> Unit)? = null,
     messageManager: MessageManager
 ) {
@@ -779,6 +785,31 @@ private fun AlbumHeader(
                         }
                     }
                     
+                    if (showGroupButton) {
+                        OutlinedButton(
+                            onClick = {
+                                val id = album.id
+                                if (id > 0L) onOpenGroupPicker(id)
+                            },
+                            enabled = album.id > 0L,
+                            modifier = Modifier
+                                .height(36.dp)
+                                .widthIn(min = 98.dp, max = 140.dp),
+                            shape = RoundedCornerShape(10.dp),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, colorScheme.primary.copy(alpha = 0.3f))
+                        ) {
+                            Icon(
+                                Icons.Default.CreateNewFolder,
+                                contentDescription = null,
+                                tint = colorScheme.primary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("分组", style = MaterialTheme.typography.labelMedium, color = colorScheme.primary)
+                        }
+                    }
+
                     listOf(
                         "DLsite" to dlsiteUrl,
                         "ONE" to asmrOneUrl

@@ -237,4 +237,45 @@ object AppDatabaseMigrations {
             db.execSQL("ALTER TABLE albums ADD COLUMN `coverThumbPath` TEXT NOT NULL DEFAULT ''")
         }
     }
+
+    val MIGRATION_15_16: Migration = object : Migration(15, 16) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `album_groups` (
+                    `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    `name` TEXT NOT NULL,
+                    `createdAt` INTEGER NOT NULL
+                )
+                """.trimIndent()
+            )
+
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `album_group_items` (
+                    `groupId` INTEGER NOT NULL,
+                    `mediaId` TEXT NOT NULL,
+                    `itemOrder` INTEGER NOT NULL DEFAULT 0,
+                    `createdAt` INTEGER NOT NULL DEFAULT 0,
+                    PRIMARY KEY(`groupId`, `mediaId`)
+                )
+                """.trimIndent()
+            )
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_album_group_items_groupId` ON `album_group_items` (`groupId`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_album_group_items_mediaId` ON `album_group_items` (`mediaId`)")
+
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_playlist_items_mediaId` ON `playlist_items` (`mediaId`)")
+
+            db.execSQL(
+                """
+                CREATE TRIGGER IF NOT EXISTS `trg_tracks_delete_cleanup_lists`
+                AFTER DELETE ON `tracks`
+                BEGIN
+                    DELETE FROM `playlist_items` WHERE `mediaId` = OLD.`path`;
+                    DELETE FROM `album_group_items` WHERE `mediaId` = OLD.`path`;
+                END
+                """.trimIndent()
+            )
+        }
+    }
 }

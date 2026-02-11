@@ -494,6 +494,7 @@ fun MainContainer(
                         Triple(Icons.Default.Search, "在线搜索", "search"),
                         Triple(Icons.Default.Favorite, "我的收藏", "playlist_system/favorites"),
                         Triple(Icons.AutoMirrored.Filled.QueueMusic, "我的列表", "playlists"),
+                        Triple(Icons.Default.Folder, "我的分组", "groups"),
                         Triple(Icons.Default.Download, "下载管理", "downloads"),
                         Triple(Icons.Default.Settings, "设置", "settings"),
                         Triple(Icons.Default.Person, "DLsite 登录", "dlsite_login")
@@ -509,6 +510,9 @@ fun MainContainer(
                         val isSelected = when (route) {
                             "library" -> currentRoute == route || isAlbumDetailFromLibrary
                             "search" -> currentRoute == route || isAlbumDetailFromSearch
+                            "groups" -> currentRoute == route ||
+                                currentRoute?.startsWith("group/") == true ||
+                                currentRoute?.startsWith("group_picker") == true
                             else -> currentRoute == route
                         }
                         NavigationDrawerItem(
@@ -725,6 +729,9 @@ fun MainContainer(
                                     "&artworkUri=${encodeRouteArg(artworkUri)}"
                             )
                         },
+                        onOpenGroupPicker = { albumId ->
+                            navController.navigateSingleTop("group_picker?albumId=$albumId")
+                        },
                         viewModel = libraryViewModel
                     )
                 }
@@ -771,6 +778,9 @@ fun MainContainer(
                                     "&artworkUri=${encodeRouteArg(artworkUri)}"
                             )
                         },
+                        onOpenGroupPicker = { albumId ->
+                            navController.navigateSingleTop("group_picker?albumId=$albumId")
+                        },
                         onPlayVideo = { title, uriOrPath, artwork, artist ->
                             playerViewModel.playVideo(title, uriOrPath, artwork, artist)
                             navController.navigateSingleTop("now_playing")
@@ -816,6 +826,9 @@ fun MainContainer(
                                     "&artworkUri=${encodeRouteArg(artworkUri)}"
                             )
                         },
+                        onOpenGroupPicker = { albumId ->
+                            navController.navigateSingleTop("group_picker?albumId=$albumId")
+                        },
                         onPlayVideo = { title, uriOrPath, artwork, artist ->
                             playerViewModel.playVideo(title, uriOrPath, artwork, artist)
                             navController.navigateSingleTop("now_playing")
@@ -855,6 +868,9 @@ fun MainContainer(
                                     "&artist=${encodeRouteArg(artist)}" +
                                     "&artworkUri=${encodeRouteArg(artworkUri)}"
                             )
+                        },
+                        onOpenGroupPicker = { albumId ->
+                            navController.navigateSingleTop("group_picker?albumId=$albumId")
                         },
                         onPlayVideo = { title, uriOrPath, artwork, artist ->
                             playerViewModel.playVideo(title, uriOrPath, artwork, artist)
@@ -960,6 +976,47 @@ fun MainContainer(
                             val encoded = URLEncoder.encode(playlist.name, "UTF-8")
                             navController.navigateSingleTop("playlist/${playlist.id}/$encoded")
                         }
+                    )
+                }
+                composable("groups") {
+                    com.asmr.player.ui.groups.AlbumGroupsScreen(
+                        windowSizeClass = windowSizeClass,
+                        onGroupClick = { group ->
+                            val encoded = encodeRouteArg(group.name)
+                            navController.navigateSingleTop("group/${group.id}/$encoded")
+                        }
+                    )
+                }
+                composable(
+                    route = "group/{groupId}/{groupName}",
+                    arguments = listOf(
+                        navArgument("groupId") { type = NavType.LongType; defaultValue = 0L },
+                        navArgument("groupName") { defaultValue = "" }
+                    )
+                ) { backStackEntry ->
+                    val groupId = backStackEntry.arguments?.getLong("groupId") ?: 0L
+                    val groupName = decodeRouteArg(backStackEntry.arguments?.getString("groupName").orEmpty())
+                    com.asmr.player.ui.groups.AlbumGroupDetailScreen(
+                        windowSizeClass = windowSizeClass,
+                        groupId = groupId,
+                        title = groupName,
+                        onPlayMediaItems = { items, startIndex ->
+                            playerViewModel.playMediaItems(items, startIndex)
+                            navController.navigateSingleTop("now_playing")
+                        }
+                    )
+                }
+                composable(
+                    route = "group_picker?albumId={albumId}",
+                    arguments = listOf(
+                        navArgument("albumId") { type = NavType.LongType; defaultValue = 0L }
+                    )
+                ) { backStackEntry ->
+                    val albumId = backStackEntry.arguments?.getLong("albumId") ?: 0L
+                    com.asmr.player.ui.groups.AlbumGroupPickerScreen(
+                        windowSizeClass = windowSizeClass,
+                        albumId = albumId,
+                        onBack = { navController.popBackStack() }
                     )
                 }
                 composable(

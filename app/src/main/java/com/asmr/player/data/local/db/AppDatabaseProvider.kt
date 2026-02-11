@@ -30,7 +30,8 @@ object AppDatabaseProvider {
                 AppDatabaseMigrations.MIGRATION_10_11,
                 AppDatabaseMigrations.MIGRATION_12_13,
                 AppDatabaseMigrations.MIGRATION_13_14,
-                AppDatabaseMigrations.MIGRATION_14_15
+                AppDatabaseMigrations.MIGRATION_14_15,
+                AppDatabaseMigrations.MIGRATION_15_16
             )
             .fallbackToDestructiveMigration()
             .fallbackToDestructiveMigrationOnDowngrade()
