@@ -185,7 +185,7 @@ fun AlbumDetailScreen(
                     val model = state.model
                     val album = model.displayAlbum
                     val asmrOneTree = model.asmrOneTree
-                    val canSaveOnline = selectedTab != 2 && asmrOneTree.isNotEmpty()
+                    val canSaveOnline = selectedTab == 1 && asmrOneTree.isNotEmpty()
                     val showGroupButton = selectedTab == 0 && model.localAlbum != null
                     val availableTags by viewModel.availableTags.collectAsState()
                     val userTagsByTrackId by viewModel.userTagsByTrackId.collectAsState()
@@ -237,7 +237,11 @@ fun AlbumDetailScreen(
                                 onSaveClick = {
                                     showOnlineSaveDialog = true
                                 },
-                                downloadEnabled = (if (selectedTab == 2) model.dlsitePlayTree else asmrOneTree).isNotEmpty(),
+                                downloadEnabled = when (selectedTab) {
+                                    1 -> asmrOneTree.isNotEmpty()
+                                    2 -> model.dlsitePlayTree.isNotEmpty()
+                                    else -> false
+                                },
                                 saveEnabled = canSaveOnline,
                                 showGroupButton = showGroupButton,
                                 onOpenGroupPicker = onOpenGroupPicker,
@@ -342,9 +346,7 @@ fun AlbumDetailScreen(
                                     onSetCoverFromImage = { pathOrUri ->
                                         viewModel.setLocalCoverPath(pathOrUri)
                                     },
-                                    onPreviewFile = { localPreviewFile = it },
-                                    dlsiteRecommendations = model.dlsiteRecommendations,
-                                    onOpenAlbumByRj = onOpenAlbumByRj
+                                    onPreviewFile = { localPreviewFile = it }
                                 )
                             } else {
                                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -432,8 +434,6 @@ fun AlbumDetailScreen(
                             onPersistScroll = { index, offset ->
                                 viewModel.persistListScrollPosition("scroll:tree:dlsitePlay:${model.baseRjCode.ifBlank { model.rjCode }.trim().uppercase()}", index, offset)
                             },
-                            dlsiteRecommendations = model.dlsiteRecommendations,
-                            onOpenAlbumByRj = onOpenAlbumByRj
                         )
                     }
                 }
@@ -1342,8 +1342,6 @@ private fun AlbumLocalTab(
     onRemoveTrack: (Track) -> Unit,
     onSetCoverFromImage: (String) -> Unit,
     onPreviewFile: (LocalTreeUiEntry.File) -> Unit,
-    dlsiteRecommendations: DlsiteRecommendations,
-    onOpenAlbumByRj: (String) -> Unit
 ) {
     val queueTracks = remember(album.id, album.tracks) {
         album.tracks.sortedBy { it.path }
@@ -1565,12 +1563,6 @@ private fun AlbumLocalTab(
                     }
                 }
             }
-        }
-        item {
-            DlsiteRecommendationsBlocks(
-                recommendations = dlsiteRecommendations,
-                onOpenAlbumByRj = onOpenAlbumByRj
-            )
         }
     }
 }
@@ -3590,8 +3582,6 @@ private fun AlbumDlsitePlayTreeTab(
     onPersistTreeState: (List<String>) -> Unit,
     initialScroll: Pair<Int, Int>,
     onPersistScroll: (Int, Int) -> Unit,
-    dlsiteRecommendations: DlsiteRecommendations,
-    onOpenAlbumByRj: (String) -> Unit
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -3815,12 +3805,6 @@ private fun AlbumDlsitePlayTreeTab(
                     }
                 }
             }
-        }
-        item {
-            DlsiteRecommendationsBlocks(
-                recommendations = dlsiteRecommendations,
-                onOpenAlbumByRj = onOpenAlbumByRj
-            )
         }
     }
 }
