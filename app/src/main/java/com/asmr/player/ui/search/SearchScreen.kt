@@ -7,6 +7,8 @@ import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan
 import androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
@@ -14,12 +16,14 @@ import androidx.compose.material.icons.automirrored.filled.ViewList
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.ViewModule
 import androidx.compose.material3.*
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.windowsizeclass.WindowSizeClass
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.asmr.player.domain.model.Album
@@ -36,9 +40,11 @@ import androidx.compose.runtime.rememberCoroutineScope
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
 import com.asmr.player.ui.common.withAddedBottomPadding
 import kotlinx.coroutines.launch
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 
 private enum class SearchResultViewMode { Grid, List }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SearchScreen(
     windowSizeClass: WindowSizeClass,
@@ -67,6 +73,29 @@ fun SearchScreen(
     
     // 屏幕尺寸判断
     val isCompact = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact
+
+    val pullToRefreshState = rememberPullToRefreshState()
+    LaunchedEffect(pullToRefreshState.isRefreshing) {
+        if (pullToRefreshState.isRefreshing) {
+            val state = uiState
+            if (state is SearchUiState.Success) {
+                viewModel.refreshPage()
+            } else {
+                viewModel.setPurchasedOnly(purchasedOnly)
+                viewModel.search(keyword)
+            }
+        }
+    }
+    LaunchedEffect(uiState) {
+        if (!pullToRefreshState.isRefreshing) return@LaunchedEffect
+        val state = uiState
+        val canEnd = when (state) {
+            is SearchUiState.Success -> !state.isPaging
+            is SearchUiState.Error -> true
+            else -> false
+        }
+        if (canEnd) pullToRefreshState.endRefresh()
+    }
 
     Box(
         modifier = Modifier.fillMaxSize(),
@@ -183,12 +212,21 @@ fun SearchScreen(
                 )
             }
     
-            Box(modifier = Modifier.fillMaxSize()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .nestedScroll(pullToRefreshState.nestedScrollConnection)
+            ) {
                 when (val state = uiState) {
-                    is SearchUiState.Loading -> CircularProgressIndicator(
-                        modifier = Modifier.align(Alignment.Center),
-                        color = colorScheme.primary
-                    )
+                    is SearchUiState.Loading -> Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .verticalScroll(rememberScrollState()),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        CircularProgressIndicator(color = colorScheme.primary)
+                    }
                     is SearchUiState.Success -> {
                         if (viewMode == 0) {
                             LazyColumn(
@@ -230,14 +268,26 @@ fun SearchScreen(
                             }
                         }
                     }
-                    is SearchUiState.Error -> Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    is SearchUiState.Error -> Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .verticalScroll(rememberScrollState()),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
                         Text(text = state.message, color = colorScheme.danger)
                     }
-                    else -> {}
+                    else -> Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .verticalScroll(rememberScrollState())
+                    ) {}
                 }
+
             }
         }
     }
+
 }
 
 @Composable
