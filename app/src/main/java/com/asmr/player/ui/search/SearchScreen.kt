@@ -315,20 +315,20 @@ private fun SearchPaginationHeader(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 4.dp)
+            .padding(horizontal = 16.dp, vertical = 2.dp)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(14.dp))
                 .background(colorScheme.surface.copy(alpha = 0.35f))
-                .padding(horizontal = 10.dp, vertical = 4.dp),
+                .padding(horizontal = 8.dp, vertical = 2.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(
                 onClick = onPrev,
                 enabled = canGoPrev && !isPaging,
-                modifier = Modifier.size(40.dp)
+                modifier = Modifier.size(36.dp)
             ) {
                 Icon(
                     Icons.AutoMirrored.Filled.ArrowBack, 
@@ -340,13 +340,13 @@ private fun SearchPaginationHeader(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = "第 $page 页", 
-                    style = MaterialTheme.typography.titleSmall,
+                    style = MaterialTheme.typography.bodySmall,
                     color = colorScheme.textPrimary
                 )
                 if (isPaging) {
-                    Spacer(modifier = Modifier.width(8.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
                     CircularProgressIndicator(
-                        modifier = Modifier.size(14.dp), 
+                        modifier = Modifier.size(12.dp), 
                         strokeWidth = 2.dp,
                         color = colorScheme.primary
                     )
@@ -356,7 +356,7 @@ private fun SearchPaginationHeader(
             IconButton(
                 onClick = onNext,
                 enabled = canGoNext && !isPaging,
-                modifier = Modifier.size(40.dp)
+                modifier = Modifier.size(36.dp)
             ) {
                 Icon(
                     Icons.AutoMirrored.Filled.ArrowForward, 
