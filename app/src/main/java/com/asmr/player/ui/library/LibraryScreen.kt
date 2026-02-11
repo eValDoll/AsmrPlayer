@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.CreateNewFolder
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.GridView
@@ -172,6 +173,7 @@ fun LibraryScreen(
     onAlbumClick: (Album) -> Unit,
     onPlayTracks: (Album, List<Track>, Track) -> Unit,
     onOpenPlaylistPicker: (mediaId: String, uri: String, title: String, artist: String, artworkUri: String) -> Unit = { _, _, _, _, _ -> },
+    onOpenGroupPicker: (albumId: Long) -> Unit = { _ -> },
     viewModel: LibraryViewModel = hiltViewModel()
 ) {
     val colorScheme = AsmrTheme.colorScheme
@@ -767,6 +769,17 @@ fun LibraryScreen(
                                 inheritedTags = inherited,
                                 userTags = user
                             )
+                        }
+                )
+                ListItem(
+                    headlineContent = { Text("添加到分组") },
+                    leadingContent = { Icon(Icons.Default.CreateNewFolder, contentDescription = null) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp)
+                        .clickable(enabled = album.id > 0L) {
+                            showAlbumActions = false
+                            onOpenGroupPicker(album.id)
                         }
                 )
                 ListItem(

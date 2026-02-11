@@ -3,6 +3,8 @@ import android.content.Context
 import com.asmr.player.data.local.db.AppDatabase
 import com.asmr.player.data.local.db.AppDatabaseProvider
 import com.asmr.player.data.local.db.dao.AlbumDao
+import com.asmr.player.data.local.db.dao.AlbumGroupDao
+import com.asmr.player.data.local.db.dao.AlbumGroupItemDao
 import com.asmr.player.data.local.db.dao.DownloadDao
 import com.asmr.player.data.local.db.dao.PlaylistDao
 import com.asmr.player.data.local.db.dao.PlaylistItemDao
@@ -36,6 +38,12 @@ object DatabaseModule {
 
     @Provides
     fun providePlaylistItemDao(database: AppDatabase): PlaylistItemDao = database.playlistItemDao()
+
+    @Provides
+    fun provideAlbumGroupDao(database: AppDatabase): AlbumGroupDao = database.albumGroupDao()
+
+    @Provides
+    fun provideAlbumGroupItemDao(database: AppDatabase): AlbumGroupItemDao = database.albumGroupItemDao()
 
     @Provides
     fun provideDownloadDao(database: AppDatabase): DownloadDao = database.downloadDao()

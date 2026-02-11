@@ -4,6 +4,8 @@ import androidx.room.Database
 import androidx.room.RoomDatabase
 import com.asmr.player.data.local.db.dao.AlbumDao
 import com.asmr.player.data.local.db.dao.AlbumFtsDao
+import com.asmr.player.data.local.db.dao.AlbumGroupDao
+import com.asmr.player.data.local.db.dao.AlbumGroupItemDao
 import com.asmr.player.data.local.db.dao.DailyStatDao
 import com.asmr.player.data.local.db.dao.DownloadDao
 import com.asmr.player.data.local.db.dao.LocalTreeCacheDao
@@ -14,6 +16,8 @@ import com.asmr.player.data.local.db.dao.TagDao
 import com.asmr.player.data.local.db.dao.TrackTagDao
 import com.asmr.player.data.local.db.dao.TrackDao
 import com.asmr.player.data.local.db.dao.RemoteSubtitleSourceDao
+import com.asmr.player.data.local.db.entities.AlbumGroupEntity
+import com.asmr.player.data.local.db.entities.AlbumGroupItemEntity
 import com.asmr.player.data.local.db.entities.AlbumEntity
 import com.asmr.player.data.local.db.entities.AlbumFtsEntity
 import com.asmr.player.data.local.db.entities.AlbumPlayStatEntity
@@ -44,13 +48,15 @@ import com.asmr.player.data.local.db.entities.RemoteSubtitleSourceEntity
         PlaylistEntity::class,
         PlaylistItemEntity::class,
         PlaylistTrackCrossRef::class,
+        AlbumGroupEntity::class,
+        AlbumGroupItemEntity::class,
         SubtitleEntity::class,
         DownloadTaskEntity::class,
         DownloadItemEntity::class,
         LocalTreeCacheEntity::class,
         RemoteSubtitleSourceEntity::class
     ],
-    version = 15,
+    version = 16,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -63,6 +69,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun trackDao(): TrackDao
     abstract fun playlistDao(): PlaylistDao
     abstract fun playlistItemDao(): PlaylistItemDao
+    abstract fun albumGroupDao(): AlbumGroupDao
+    abstract fun albumGroupItemDao(): AlbumGroupItemDao
     abstract fun downloadDao(): DownloadDao
     abstract fun localTreeCacheDao(): LocalTreeCacheDao
     abstract fun remoteSubtitleSourceDao(): RemoteSubtitleSourceDao

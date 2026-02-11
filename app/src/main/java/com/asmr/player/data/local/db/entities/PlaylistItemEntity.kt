@@ -6,7 +6,10 @@ import androidx.room.Index
 @Entity(
     tableName = "playlist_items",
     primaryKeys = ["playlistId", "mediaId"],
-    indices = [Index(value = ["playlistId"])]
+    indices = [
+        Index(value = ["playlistId"]),
+        Index(value = ["mediaId"])
+    ]
 )
 data class PlaylistItemEntity(
     val playlistId: Long,
