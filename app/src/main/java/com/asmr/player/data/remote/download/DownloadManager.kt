@@ -728,7 +728,6 @@ private suspend fun upsertDownloadedAlbumToLibrary(
             localKeyToIdNoGroup.putIfAbsent(TrackKeyNormalizer.buildKey(t.title, "", null), t.id)
         }
 
-    val onlineToDelete = ArrayList<Long>()
     allAfterInsert
         .filter { it.path.trim().startsWith("http", ignoreCase = true) }
         .forEach { online ->
@@ -754,15 +753,8 @@ private suspend fun upsertDownloadedAlbumToLibrary(
                         }
                     }
                 }
-                onlineToDelete.add(online.id)
             }
         }
-
-    if (onlineToDelete.isNotEmpty()) {
-        runCatching { db.remoteSubtitleSourceDao().deleteByTrackIds(onlineToDelete) }
-        runCatching { trackDao.deleteSubtitlesForTracks(onlineToDelete) }
-        runCatching { trackDao.deleteTracksByIds(onlineToDelete) }
-    }
 }
 
 private fun extractRjCode(text: String): String {
