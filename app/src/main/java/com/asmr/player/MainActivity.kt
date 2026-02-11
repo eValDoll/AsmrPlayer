@@ -8,6 +8,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.filled.AccessTime
@@ -480,15 +482,6 @@ fun MainContainer(
                         unselectedIconColor = itemSecondaryColor,
                         selectedIconColor = itemContentColor
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        "ASMR Player",
-                        modifier = Modifier.padding(horizontal = 28.dp, vertical = 16.dp),
-                        style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
-                        color = colorScheme.onSurface
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    
                     val navItems = listOf(
                         Triple(Icons.Default.Home, "本地库", "library"),
                         Triple(Icons.Default.Search, "在线搜索", "search"),
@@ -500,40 +493,54 @@ fun MainContainer(
                         Triple(Icons.Default.Person, "DLsite 登录", "dlsite_login")
                     )
 
-                    navItems.forEach { (icon, label, route) ->
-                        val isAlbumDetailFromSearch =
-                            currentRoute?.startsWith("album_detail_rj") == true ||
-                                currentRoute?.startsWith("album_detail_online") == true
-                        val isAlbumDetailFromLibrary =
-                            currentRoute?.startsWith("album_detail/") == true &&
-                                currentRoute?.startsWith("album_detail_rj") != true
-                        val isSelected = when (route) {
-                            "library" -> currentRoute == route || isAlbumDetailFromLibrary
-                            "search" -> currentRoute == route || isAlbumDetailFromSearch
-                            "groups" -> currentRoute == route ||
-                                currentRoute?.startsWith("group/") == true ||
-                                currentRoute?.startsWith("group_picker") == true
-                            else -> currentRoute == route
-                        }
-                        NavigationDrawerItem(
-                            icon = { Icon(icon, contentDescription = null) },
-                            label = { Text(label) },
-                            selected = isSelected,
-                            colors = itemColors,
-                            modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding),
-                            onClick = {
-                                navController.navigateSingleTop(route, popUpToRoute = "library")
-                                scope.launch { drawerState.close() }
-                            }
+                    Column(modifier = Modifier.fillMaxSize()) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            "ASMR Player",
+                            modifier = Modifier.padding(horizontal = 28.dp, vertical = 16.dp),
+                            style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
+                            color = colorScheme.onSurface
                         )
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        LazyColumn(
+                            modifier = Modifier.weight(1f).fillMaxWidth(),
+                            contentPadding = PaddingValues(vertical = 4.dp)
+                        ) {
+                            items(navItems, key = { it.third }) { (icon, label, route) ->
+                                val isAlbumDetailFromSearch =
+                                    currentRoute?.startsWith("album_detail_rj") == true ||
+                                        currentRoute?.startsWith("album_detail_online") == true
+                                val isAlbumDetailFromLibrary =
+                                    currentRoute?.startsWith("album_detail/") == true &&
+                                        currentRoute?.startsWith("album_detail_rj") != true
+                                val isSelected = when (route) {
+                                    "library" -> currentRoute == route || isAlbumDetailFromLibrary
+                                    "search" -> currentRoute == route || isAlbumDetailFromSearch
+                                    "groups" -> currentRoute == route ||
+                                        currentRoute?.startsWith("group/") == true ||
+                                        currentRoute?.startsWith("group_picker") == true
+                                    else -> currentRoute == route
+                                }
+                                NavigationDrawerItem(
+                                    icon = { Icon(icon, contentDescription = null) },
+                                    label = { Text(label) },
+                                    selected = isSelected,
+                                    colors = itemColors,
+                                    modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding),
+                                    onClick = {
+                                        navController.navigateSingleTop(route, popUpToRoute = "library")
+                                        scope.launch { drawerState.close() }
+                                    }
+                                )
+                            }
+                        }
+
+                        DailyStatisticsFooter(statisticsViewModel, modifier = Modifier.padding(horizontal = 18.dp))
+                        Spacer(modifier = Modifier.height(10.dp))
+                        DrawerSiteStatusFooter(drawerStatusViewModel, modifier = Modifier.padding(horizontal = 18.dp))
+                        Spacer(modifier = Modifier.height(18.dp))
                     }
-
-                    Spacer(modifier = Modifier.weight(1f))
-
-                    DailyStatisticsFooter(statisticsViewModel, modifier = Modifier.padding(horizontal = 18.dp))
-                    Spacer(modifier = Modifier.height(10.dp))
-                    DrawerSiteStatusFooter(drawerStatusViewModel, modifier = Modifier.padding(horizontal = 18.dp))
-                    Spacer(modifier = Modifier.height(18.dp))
                 }
             }
         }
@@ -1203,14 +1210,14 @@ private fun DrawerSiteStatusFooter(
                     ) {
                         Text(
                             text = "asmr-$site",
-                            style = MaterialTheme.typography.bodyMedium,
+                            style = MaterialTheme.typography.bodySmall,
                             color = colorScheme.textPrimary,
                             maxLines = 1
                         )
                         Icon(
                             imageVector = Icons.Default.ArrowDropDown,
                             contentDescription = null,
-                            modifier = Modifier.size(20.dp),
+                            modifier = Modifier.size(18.dp),
                             tint = colorScheme.textSecondary
                         )
                     }
@@ -1296,7 +1303,7 @@ private fun DrawerSiteRow(
         if (name != null) {
             Text(
                 text = name,
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.bodySmall,
                 color = colorScheme.textPrimary,
                 maxLines = 1
             )
@@ -1315,10 +1322,10 @@ private fun DrawerSiteRow(
         )
         TextButton(
             onClick = onTest,
-            modifier = Modifier.height(32.dp),
-            contentPadding = PaddingValues(horizontal = 8.dp)
+            modifier = Modifier.height(30.dp).widthIn(min = 44.dp),
+            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp)
         ) { 
-            Text("测试", style = MaterialTheme.typography.labelMedium) 
+            Text(text = "测试", style = MaterialTheme.typography.labelSmall, maxLines = 1) 
         }
         if (trailing != null) {
             Box(modifier = Modifier.height(32.dp)) {
