@@ -343,7 +343,7 @@ fun LibraryScreen(
                                             searchText = it
                                             viewModel.setSearchQuery(it)
                                         },
-                                        modifier = Modifier.weight(1f).height(44.dp),
+                                        modifier = Modifier.weight(1f).heightIn(min = 48.dp),
                                         singleLine = true,
                                         leadingIcon = {
                                             Icon(

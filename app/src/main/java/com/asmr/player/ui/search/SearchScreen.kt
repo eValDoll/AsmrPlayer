@@ -117,7 +117,7 @@ fun SearchScreen(
                 onValueChange = { keyword = it },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(44.dp)
+                    .heightIn(min = 48.dp)
                     .padding(horizontal = 16.dp, vertical = 2.dp)
                     .clip(RoundedCornerShape(16.dp)),
                 leadingIcon = {
