@@ -315,19 +315,20 @@ private fun SearchPaginationHeader(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .padding(horizontal = 16.dp, vertical = 4.dp)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(14.dp))
                 .background(colorScheme.surface.copy(alpha = 0.35f))
-                .padding(horizontal = 10.dp, vertical = 6.dp),
+                .padding(horizontal = 10.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(
                 onClick = onPrev,
-                enabled = canGoPrev && !isPaging
+                enabled = canGoPrev && !isPaging,
+                modifier = Modifier.size(40.dp)
             ) {
                 Icon(
                     Icons.AutoMirrored.Filled.ArrowBack, 
@@ -343,9 +344,9 @@ private fun SearchPaginationHeader(
                     color = colorScheme.textPrimary
                 )
                 if (isPaging) {
-                    Spacer(modifier = Modifier.width(12.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
                     CircularProgressIndicator(
-                        modifier = Modifier.size(16.dp), 
+                        modifier = Modifier.size(14.dp), 
                         strokeWidth = 2.dp,
                         color = colorScheme.primary
                     )
@@ -354,7 +355,8 @@ private fun SearchPaginationHeader(
             Spacer(modifier = Modifier.weight(1f))
             IconButton(
                 onClick = onNext,
-                enabled = canGoNext && !isPaging
+                enabled = canGoNext && !isPaging,
+                modifier = Modifier.size(40.dp)
             ) {
                 Icon(
                     Icons.AutoMirrored.Filled.ArrowForward, 
