@@ -22,7 +22,6 @@ app/.cxx/
 *.aab
 *.dex
 *.class
-!releases/**/*.apk
 
 *.log
 crash.txt
