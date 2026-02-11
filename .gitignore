@@ -2,6 +2,7 @@
 .vscode/
 .trae/
 *.iml
+.worktrees/
 
 local.properties
 keystore.properties

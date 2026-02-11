@@ -149,28 +149,25 @@ class DownloadManager @Inject constructor(
             }
             val hasSucceededWork = workInfos.any { it.state == WorkInfo.State.SUCCEEDED }
 
-            if (existingItem != null && (existingItem.state == WorkInfo.State.SUCCEEDED.name || existingItem.state == WorkInfo.State.RUNNING.name)) {
-                return@launch
-            }
-            if (existingItem != null && existingItem.state == WorkInfo.State.ENQUEUED.name && hasActiveWork) {
-                return@launch
-            }
-            if (hasActiveWork || hasSucceededWork) {
-                if (existingItem != null && !hasActiveWork) {
-                    val file = File(existingItem.filePath.ifBlank { filePath })
-                    if (file.exists() && file.isFile) {
-                        val size = file.length().coerceAtLeast(0L)
-                        downloadDao.updateItemProgress(
-                            workId = existingItem.workId,
-                            state = WorkInfo.State.SUCCEEDED.name,
-                            downloaded = size,
-                            total = size,
-                            speed = 0L,
-                            updatedAt = now
-                        )
-                    }
+            if (hasActiveWork) return@launch
+            if (hasSucceededWork && existingItem != null) {
+                val file = File(existingItem.filePath.ifBlank { filePath })
+                if (file.exists() && file.isFile) {
+                    val size = file.length().coerceAtLeast(0L)
+                    downloadDao.updateItemProgress(
+                        workId = existingItem.workId,
+                        state = WorkInfo.State.SUCCEEDED.name,
+                        downloaded = size,
+                        total = size,
+                        speed = 0L,
+                        updatedAt = now
+                    )
+                    return@launch
                 }
-                return@launch
+            }
+            if (existingItem != null && existingItem.state == WorkInfo.State.SUCCEEDED.name) {
+                val file = File(existingItem.filePath.ifBlank { filePath })
+                if (file.exists() && file.isFile) return@launch
             }
 
             val inputData = workDataOf(
@@ -460,35 +457,28 @@ class DownloadWorker(context: Context, parameters: WorkerParameters) : Coroutine
                 updatedAt = now
             )
             runCatching {
-                val task = dao.getTaskByKey(resolvedTaskKey)
-                if (task != null) {
-                    val items = dao.getItemsForTask(task.id)
-                    val done = items.isNotEmpty() && items.all { it.state == WorkInfo.State.SUCCEEDED.name }
-                    if (done) {
-                        val db = AppDatabaseProvider.get(applicationContext)
-                        db.withTransaction {
-                            upsertDownloadedAlbumToLibrary(
-                                db = db,
-                                appContext = applicationContext,
-                                rootDir = resolvedRootDir,
-                                taskTitle = resolvedTitle,
-                                taskSubtitle = resolvedSubtitle,
-                                albumTitle = albumTitle,
-                                albumCircle = albumCircle,
-                                albumCv = albumCv,
-                                albumTagsCsv = albumTagsCsv,
-                                albumCoverUrl = albumCoverUrl,
-                                albumDescription = albumDescription,
-                                albumWorkId = albumWorkId,
-                                albumRjCode = albumRjCode
-                            )
-                        }
-                        runCatching {
-                            val marker = File(resolvedRootDir, ".download_complete")
-                            if (!marker.exists()) marker.createNewFile()
-                        }
-                    }
-                }
+                val finalizeInput = workDataOf(
+                    "taskKey" to resolvedTaskKey,
+                    "taskTitle" to resolvedTitle,
+                    "taskSubtitle" to resolvedSubtitle,
+                    "taskRootDir" to resolvedRootDir,
+                    "albumTitle" to albumTitle,
+                    "albumCircle" to albumCircle,
+                    "albumCv" to albumCv,
+                    "albumTagsCsv" to albumTagsCsv,
+                    "albumCoverUrl" to albumCoverUrl,
+                    "albumDescription" to albumDescription,
+                    "albumWorkId" to albumWorkId,
+                    "albumRjCode" to albumRjCode
+                )
+                val request = OneTimeWorkRequestBuilder<FinalizeDownloadTaskWorker>()
+                    .setInputData(finalizeInput)
+                    .addTag("download_finalize")
+                    .addTag(resolvedTaskKey)
+                    .build()
+                val unique = "download_finalize_${resolvedTaskKey.hashCode()}"
+                WorkManager.getInstance(applicationContext)
+                    .enqueueUniqueWork(unique, ExistingWorkPolicy.REPLACE, request)
             }
             ListenableWorker.Result.success(
                 workDataOf(
@@ -515,6 +505,65 @@ class DownloadWorker(context: Context, parameters: WorkerParameters) : Coroutine
                     "taskKey" to taskKey
                 )
             )
+        }
+    }
+}
+
+class FinalizeDownloadTaskWorker(context: Context, parameters: WorkerParameters) : CoroutineWorker(context, parameters) {
+    override suspend fun doWork(): ListenableWorker.Result {
+        val taskKey = inputData.getString("taskKey").orEmpty()
+        val taskTitle = inputData.getString("taskTitle").orEmpty()
+        val taskSubtitle = inputData.getString("taskSubtitle").orEmpty()
+        val taskRootDir = inputData.getString("taskRootDir").orEmpty()
+        val albumTitle = inputData.getString("albumTitle").orEmpty()
+        val albumCircle = inputData.getString("albumCircle").orEmpty()
+        val albumCv = inputData.getString("albumCv").orEmpty()
+        val albumTagsCsv = inputData.getString("albumTagsCsv").orEmpty()
+        val albumCoverUrl = inputData.getString("albumCoverUrl").orEmpty()
+        val albumDescription = inputData.getString("albumDescription").orEmpty()
+        val albumWorkId = inputData.getString("albumWorkId").orEmpty()
+        val albumRjCode = inputData.getString("albumRjCode").orEmpty()
+
+        if (taskKey.isBlank() && taskRootDir.isBlank()) return ListenableWorker.Result.success()
+
+        return try {
+            val db = AppDatabaseProvider.get(applicationContext)
+            db.withTransaction {
+                val dao = db.downloadDao()
+                val task = if (taskKey.isNotBlank()) {
+                    dao.getTaskByKey(taskKey)
+                } else {
+                    dao.getTaskByRootDir(taskRootDir)
+                } ?: return@withTransaction
+
+                val items = dao.getItemsForTask(task.id)
+                val done = items.isNotEmpty() && items.all { it.state == WorkInfo.State.SUCCEEDED.name }
+                if (!done) return@withTransaction
+
+                upsertDownloadedAlbumToLibrary(
+                    db = db,
+                    appContext = applicationContext,
+                    rootDir = task.rootDir.ifBlank { taskRootDir },
+                    taskTitle = task.title.ifBlank { taskTitle },
+                    taskSubtitle = task.subtitle.ifBlank { taskSubtitle },
+                    albumTitle = albumTitle,
+                    albumCircle = albumCircle,
+                    albumCv = albumCv,
+                    albumTagsCsv = albumTagsCsv,
+                    albumCoverUrl = albumCoverUrl,
+                    albumDescription = albumDescription,
+                    albumWorkId = albumWorkId,
+                    albumRjCode = albumRjCode
+                )
+
+                runCatching {
+                    val marker = File(task.rootDir.ifBlank { taskRootDir }, ".download_complete")
+                    if (!marker.exists()) marker.createNewFile()
+                }
+            }
+            ListenableWorker.Result.success()
+        } catch (_: Exception) {
+            ListenableWorker.Result.success()
         }
     }
 }

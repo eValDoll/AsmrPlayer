@@ -78,6 +78,9 @@ interface DownloadDao {
     @Query("DELETE FROM download_items WHERE workId = :workId")
     suspend fun deleteItemByWorkId(workId: String)
 
+    @Query("DELETE FROM download_items WHERE filePath = :filePath")
+    suspend fun deleteItemsByFilePath(filePath: String)
+
     @Query("DELETE FROM download_items WHERE taskId = :taskId")
     suspend fun deleteItemsForTask(taskId: Long)
 

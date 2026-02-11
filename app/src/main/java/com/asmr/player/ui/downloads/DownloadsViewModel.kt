@@ -13,6 +13,7 @@ import androidx.work.WorkManager
 import com.asmr.player.data.local.db.AppDatabaseProvider
 import com.asmr.player.data.local.db.dao.DownloadDao
 import com.asmr.player.data.remote.download.DownloadWorker
+import com.asmr.player.data.remote.download.FinalizeDownloadTaskWorker
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -254,7 +255,28 @@ class DownloadsViewModel @Inject constructor(
                 deletePathSafely(File(item.targetDir, item.fileName).absolutePath)
             }
             downloadDao.deleteItemByWorkId(workId)
+            downloadDao.deleteItemsByFilePath(primary)
             syncLibraryAfterDownloadedFileDeleted(primary, task?.rootDir.orEmpty())
+            if (task != null && task.taskKey.isNotBlank()) {
+                runCatching {
+                    val finalizeInput = workDataOf(
+                        "taskKey" to task.taskKey,
+                        "taskTitle" to task.title,
+                        "taskSubtitle" to task.subtitle,
+                        "taskRootDir" to task.rootDir
+                    )
+                    val request = OneTimeWorkRequestBuilder<FinalizeDownloadTaskWorker>()
+                        .setInputData(finalizeInput)
+                        .addTag("download_finalize")
+                        .addTag(task.taskKey)
+                        .build()
+                    workManager.enqueueUniqueWork(
+                        "download_finalize_${task.taskKey.hashCode()}",
+                        ExistingWorkPolicy.REPLACE,
+                        request
+                    )
+                }
+            }
             val remaining = downloadDao.countItemsForTask(item.taskId)
             if (remaining == 0) {
                 downloadDao.deleteTaskById(item.taskId)
