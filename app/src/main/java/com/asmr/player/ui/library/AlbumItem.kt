@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -52,6 +51,7 @@ import coil.request.ImageRequest
 import com.asmr.player.domain.model.Album
 import com.asmr.player.data.remote.NetworkHeaders
 import com.asmr.player.ui.common.AsmrAsyncImage
+ import com.asmr.player.ui.common.CoverContentRow
 import com.asmr.player.ui.common.rememberDominantColor
 
 import com.asmr.player.ui.theme.AsmrTheme
@@ -92,33 +92,33 @@ fun AlbumItem(
                 onLongClick = onLongClick
             )
     ) {
-        Row(
+        CoverContentRow(
+            coverWidth = coverSize,
+            minHeight = coverSize,
+            spacing = 16.dp,
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(min = coverSize),
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(coverSize)
-                    .clip(RoundedCornerShape(16.dp))
-            ) {
-                AsmrAsyncImage(
-                    model = imageModel,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    placeholderCornerRadius = 16,
-                    modifier = Modifier.fillMaxSize(),
-                )
-            }
-
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(top = 8.dp, bottom = 8.dp, end = 12.dp),
-                verticalArrangement = Arrangement.Center
-            ) {
+            cover = {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clip(RoundedCornerShape(16.dp))
+                ) {
+                    AsmrAsyncImage(
+                        model = imageModel,
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        placeholderCornerRadius = 16,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
+            },
+            content = {
+                Column(
+                    modifier = Modifier.padding(top = 8.dp, bottom = 8.dp, end = 12.dp),
+                    verticalArrangement = Arrangement.Center
+                ) {
                 val rj = album.rjCode.ifBlank { album.workId }
                 Text(
                     text = album.title,
@@ -215,8 +215,9 @@ fun AlbumItem(
                         }
                     }
                 }
-            }
-        }
+                }
+            },
+        )
         
         if (album.hasAsmrOne) {
             CollectedStamp(

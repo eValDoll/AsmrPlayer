@@ -47,6 +47,7 @@ import com.asmr.player.util.Formatting
 import com.asmr.player.ui.common.SubtitleStamp
 import com.asmr.player.ui.common.DiscPlaceholder
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
+import com.asmr.player.ui.common.CoverContentRow
 import com.asmr.player.ui.common.withAddedBottomPadding
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ListItem
@@ -1213,66 +1214,66 @@ private fun AlbumItem(
                 onLongClick = onLongClick
             )
     ) {
-        Row(
+        CoverContentRow(
+            coverWidth = coverSize,
+            minHeight = coverSize,
+            spacing = 16.dp,
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(min = coverSize),
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(coverSize)
-                    .clip(RoundedCornerShape(16.dp))
-            ) {
-                val coverModel = remember(album.coverThumbPath, album.coverPath, album.coverUrl) {
-                    album.coverThumbPath.ifBlank { album.coverPath }.ifBlank { album.coverUrl }.trim().ifBlank { null }
-                }
-                AsmrAsyncImage(
-                    model = coverModel,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    placeholderCornerRadius = 16,
-                    modifier = Modifier.fillMaxSize(),
-                )
-                
-                if (syncStatus is SyncStatus.Syncing) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(Color.Black.copy(alpha = 0.4f))
-                            .blur(2.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(16.dp),
-                            color = Color.White,
-                            strokeWidth = 2.dp
-                        )
+            cover = {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clip(RoundedCornerShape(16.dp))
+                ) {
+                    val coverModel = remember(album.coverThumbPath, album.coverPath, album.coverUrl) {
+                        album.coverThumbPath.ifBlank { album.coverPath }.ifBlank { album.coverUrl }.trim().ifBlank { null }
                     }
-                } else if (syncStatus is SyncStatus.Error) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(Color.Red.copy(alpha = 0.3f)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.ErrorOutline,
-                            contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(16.dp)
-                        )
+                    AsmrAsyncImage(
+                        model = coverModel,
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        placeholderCornerRadius = 16,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                    
+                    if (syncStatus is SyncStatus.Syncing) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(Color.Black.copy(alpha = 0.4f))
+                                .blur(2.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                color = Color.White,
+                                strokeWidth = 2.dp
+                            )
+                        }
+                    } else if (syncStatus is SyncStatus.Error) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(Color.Red.copy(alpha = 0.3f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.ErrorOutline,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
                     }
                 }
-            }
-
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(top = 8.dp, bottom = 8.dp, end = 12.dp),
-                verticalArrangement = Arrangement.Center
-            ) {
+            },
+            content = {
+                Column(
+                    modifier = Modifier.padding(top = 8.dp, bottom = 8.dp, end = 12.dp),
+                    verticalArrangement = Arrangement.Center
+                ) {
                 Text(
                     text = album.title,
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
@@ -1369,7 +1370,8 @@ private fun AlbumItem(
                         }
                     }
                 }
-            }
-        }
+                }
+            },
+        )
     }
 }
