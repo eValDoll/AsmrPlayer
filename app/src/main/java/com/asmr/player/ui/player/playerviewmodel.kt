@@ -36,11 +36,20 @@ import android.os.Bundle
 import java.io.File
 
 import com.asmr.player.data.repository.PlaylistRepository
+import com.asmr.player.data.repository.TrackSliceRepository
+import com.asmr.player.data.repository.SliceOverlapException
 import com.asmr.player.data.settings.EqualizerSettings
 import com.asmr.player.data.settings.AsmrPreset
+import com.asmr.player.playback.SlicePlaybackController
 
 import com.asmr.player.util.MessageManager
 import kotlin.math.roundToLong
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.onEach
+import com.asmr.player.domain.model.Slice
 
 @HiltViewModel
 @OptIn(FlowPreview::class)
@@ -49,6 +58,8 @@ class PlayerViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository,
     private val playlistRepository: PlaylistRepository,
     private val trackDao: TrackDao,
+    private val trackSliceRepository: TrackSliceRepository,
+    private val slicePlaybackController: SlicePlaybackController,
     private val messageManager: MessageManager
 ) : ViewModel() {
     val playback: StateFlow<PlaybackSnapshot> = playerConnection.snapshot
@@ -85,6 +96,54 @@ class PlayerViewModel @Inject constructor(
     val customPresets: StateFlow<List<AsmrPreset>> = settingsRepository.customEqualizerPresets
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
+    private val tempStartMs = MutableStateFlow<Long?>(null)
+    private val selectedSliceId = MutableStateFlow<Long?>(null)
+    private val editDrag = MutableStateFlow(SliceEditDrag.None)
+
+    private val _sliceUiEvents = MutableSharedFlow<SliceUiEvent>(extraBufferCapacity = 8)
+    val sliceUiEvents: SharedFlow<SliceUiEvent> = _sliceUiEvents.asSharedFlow()
+
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    private val trackMediaIdFlow = playback
+        .map { it.currentMediaItem?.mediaId?.takeIf { id -> id.isNotBlank() } }
+        .distinctUntilChanged()
+        .onEach {
+            tempStartMs.value = null
+            selectedSliceId.value = null
+            editDrag.value = SliceEditDrag.None
+            slicePlaybackController.setUserScrubbing(false)
+            slicePlaybackController.clearPreview()
+        }
+
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    private val slicesForCurrentTrack = trackMediaIdFlow.flatMapLatest { mediaId ->
+        if (mediaId == null) flowOf(emptyList()) else trackSliceRepository.observeSlices(mediaId)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    private val baseSliceUiState: StateFlow<SliceUiState> = combine(
+        trackMediaIdFlow,
+        slicesForCurrentTrack,
+        tempStartMs,
+        slicePlaybackController.sliceModeEnabled,
+        selectedSliceId
+    ) { mediaId, slices, tempStart, enabled, selectedId ->
+        SliceUiState(
+            trackMediaId = mediaId,
+            slices = slices,
+            tempStartMs = tempStart,
+            sliceModeEnabled = enabled,
+            selectedSliceId = selectedId
+        )
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SliceUiState())
+
+    val sliceUiState: StateFlow<SliceUiState> = combine(
+        baseSliceUiState,
+        editDrag,
+        slicePlaybackController.userScrubbing
+    ) { base, drag, scrubbing ->
+        base.copy(editDrag = drag, userScrubbing = scrubbing)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SliceUiState())
+
     init {
         viewModelScope.launch {
             _sessionEqualizer
@@ -110,6 +169,11 @@ class PlayerViewModel @Inject constructor(
                     playerConnection.sendCustomCommand("UPDATE_SESSION_EQ", bundle)
                 }
         }
+
+        viewModelScope.launch {
+            trackMediaIdFlow.collect { }
+        }
+
     }
 
     @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
@@ -189,6 +253,133 @@ class PlayerViewModel @Inject constructor(
     fun setPlaybackSpeed(speed: Float) = playerConnection.setPlaybackSpeed(speed)
     fun setPlaybackPitch(pitch: Float) = playerConnection.setPlaybackPitch(pitch)
     fun setPlaybackParameters(speed: Float, pitch: Float) = playerConnection.setPlaybackParameters(speed, pitch)
+
+    fun setUserScrubbing(scrubbing: Boolean) {
+        slicePlaybackController.setUserScrubbing(scrubbing)
+    }
+
+    fun toggleSliceMode() {
+        val enabled = slicePlaybackController.sliceModeEnabled.value
+        if (!enabled) {
+            slicePlaybackController.setSliceModeEnabled(true)
+        } else {
+            slicePlaybackController.setSliceModeEnabled(false)
+        }
+    }
+
+    fun playSlicePreview(slice: Slice) {
+        slicePlaybackController.startPreview(slice)
+        seekTo(slice.startMs)
+        play()
+    }
+
+    fun selectSlice(sliceId: Long?) {
+        selectedSliceId.value = sliceId
+        editDrag.value = SliceEditDrag.None
+    }
+
+    fun deleteSlice(sliceId: Long) {
+        viewModelScope.launch {
+            runCatching { trackSliceRepository.deleteSlice(sliceId) }
+                .onSuccess {
+                    if (selectedSliceId.value == sliceId) {
+                        selectedSliceId.value = null
+                        editDrag.value = SliceEditDrag.None
+                    }
+                    messageManager.showInfo("已删除切片")
+                }
+                .onFailure { messageManager.showError("删除切片失败") }
+        }
+    }
+
+    fun clearSlicesForCurrentTrack() {
+        val mediaId = sliceUiState.value.trackMediaId ?: return
+        viewModelScope.launch {
+            runCatching { trackSliceRepository.clearTrack(mediaId) }
+                .onSuccess {
+                    selectedSliceId.value = null
+                    editDrag.value = SliceEditDrag.None
+                    tempStartMs.value = null
+                    messageManager.showInfo("已清空切片")
+                }
+                .onFailure { messageManager.showError("清空切片失败") }
+        }
+    }
+
+    fun updateSliceRange(sliceId: Long, startMs: Long, endMs: Long, durationMs: Long) {
+        val safeDuration = durationMs.coerceAtLeast(0L)
+        val start = startMs.coerceIn(0L, safeDuration.takeIf { it > 0 } ?: Long.MAX_VALUE)
+        val end = endMs.coerceIn(0L, safeDuration.takeIf { it > 0 } ?: Long.MAX_VALUE)
+        if (end <= start) {
+            messageManager.showInfo("结束时间不能早于开始时间")
+            return
+        }
+        viewModelScope.launch {
+            runCatching { trackSliceRepository.updateSliceRange(sliceId, start, end) }
+                .onFailure { e ->
+                    if (e is SliceOverlapException) {
+                        messageManager.showInfo("切片与已有切片重叠")
+                    } else {
+                        messageManager.showError("更新切片失败")
+                    }
+                }
+        }
+    }
+
+    fun onCutPressed(durationMs: Long) {
+        val mediaId = sliceUiState.value.trackMediaId ?: run {
+            messageManager.showInfo("暂无可播放曲目")
+            return
+        }
+        if (durationMs <= 0L) {
+            messageManager.showInfo("无法获取时长")
+            return
+        }
+        val pos = playback.value.positionMs.coerceAtLeast(0L)
+        val start = tempStartMs.value
+        val existing = sliceUiState.value.slices
+        if (start == null) {
+            val clamped = pos.coerceIn(0L, durationMs)
+            val hit = existing.any { s -> clamped >= s.startMs && clamped < s.endMs }
+            if (hit) {
+                _sliceUiEvents.tryEmit(SliceUiEvent.CutInvalidRange)
+                messageManager.showInfo("起点落在已有切片内")
+                return
+            }
+            tempStartMs.value = clamped
+            _sliceUiEvents.tryEmit(SliceUiEvent.CutStartMarked)
+            messageManager.showInfo("已标记起点")
+            return
+        }
+        val end = pos.coerceIn(0L, durationMs)
+        if (end <= start) {
+            _sliceUiEvents.tryEmit(SliceUiEvent.CutInvalidRange)
+            messageManager.showInfo("结束时间不能早于开始时间")
+            return
+        }
+        val overlap = existing.any { s -> start < s.endMs && end > s.startMs }
+        if (overlap) {
+            _sliceUiEvents.tryEmit(SliceUiEvent.CutInvalidRange)
+            messageManager.showInfo("切片与已有切片重叠")
+            return
+        }
+        viewModelScope.launch {
+            runCatching {
+                trackSliceRepository.appendSlice(trackMediaId = mediaId, startMs = start, endMs = end)
+            }.onSuccess {
+                tempStartMs.value = null
+                _sliceUiEvents.tryEmit(SliceUiEvent.CutSliceCreated)
+                messageManager.showSuccess("已创建切片")
+            }.onFailure {
+                if (it is SliceOverlapException) {
+                    _sliceUiEvents.tryEmit(SliceUiEvent.CutInvalidRange)
+                    messageManager.showInfo("切片与已有切片重叠")
+                } else {
+                    messageManager.showError("创建切片失败")
+                }
+            }
+        }
+    }
 
     fun updateSessionEqualizer(settings: EqualizerSettings) {
         _sessionEqualizer.value = settings

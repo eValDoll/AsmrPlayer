@@ -9,6 +9,7 @@ import com.asmr.player.data.local.db.dao.DownloadDao
 import com.asmr.player.data.local.db.dao.PlaylistDao
 import com.asmr.player.data.local.db.dao.PlaylistItemDao
 import com.asmr.player.data.local.db.dao.RemoteSubtitleSourceDao
+import com.asmr.player.data.local.db.dao.TrackSliceDao
 import com.asmr.player.data.local.db.dao.TrackDao
 import dagger.Module
 import dagger.Provides
@@ -50,4 +51,7 @@ object DatabaseModule {
 
     @Provides
     fun provideRemoteSubtitleSourceDao(database: AppDatabase): RemoteSubtitleSourceDao = database.remoteSubtitleSourceDao()
+
+    @Provides
+    fun provideTrackSliceDao(database: AppDatabase): TrackSliceDao = database.trackSliceDao()
 }
