@@ -19,6 +19,7 @@ import com.asmr.player.data.local.db.entities.TrackTagEntity
 import com.asmr.player.data.remote.api.AsmrOneTrackNodeResponse
 import com.asmr.player.data.remote.crawler.AsmrOneCrawler
 import com.asmr.player.data.remote.dlsite.DlsitePlayWorkClient
+import com.asmr.player.data.remote.dlsite.DlsitePlayTreeResult
 import com.asmr.player.data.remote.dlsite.DlsiteLanguageEdition
 import com.asmr.player.data.remote.dlsite.DlsiteProductInfoClient
 import com.asmr.player.data.remote.download.DownloadManager
@@ -31,6 +32,7 @@ import com.asmr.player.util.OnlineLyricsStore
 import com.asmr.player.util.RemoteSubtitleSource
 import com.asmr.player.util.SyncCoordinator
 import com.asmr.player.util.TrackKeyNormalizer
+import com.asmr.player.util.DlsiteWorkNo
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Job
@@ -164,6 +166,7 @@ class AlbumDetailViewModel @Inject constructor(
                         dlsiteTrialTracks = emptyList(),
                         dlsiteRecommendations = DlsiteRecommendations(),
                         dlsiteWorkno = rj,
+                        dlsitePlayWorkno = "",
                         dlsiteEditions = defaultDlsiteEditions(rj),
                         dlsiteSelectedLang = "JPN",
                         asmrOneWorkId = null,
@@ -530,6 +533,7 @@ class AlbumDetailViewModel @Inject constructor(
             model = current.model.copy(
                 dlsiteSelectedLang = target?.lang ?: normalized,
                 dlsiteWorkno = workno,
+                dlsitePlayWorkno = "",
                 rjCode = workno,
                 dlsiteInfo = null,
                 dlsiteGalleryUrls = emptyList(),
@@ -640,18 +644,70 @@ class AlbumDetailViewModel @Inject constructor(
 
     fun ensureDlsitePlayLoaded() {
         val current = _uiState.value as? AlbumDetailUiState.Success ?: return
-        val rj = current.model.rjCode.trim().uppercase()
-        if (rj.isBlank() || current.model.dlsitePlayTree.isNotEmpty() || current.model.isLoadingDlsitePlay) return
+        val baseRj = current.model.baseRjCode.trim().uppercase()
+        val candidates0 = DlsiteWorkNo.normalizeCandidates(
+            listOf(
+                current.model.dlsitePlayWorkno,
+                current.model.dlsiteWorkno,
+                current.model.rjCode,
+                baseRj
+            )
+        )
+
+        if (candidates0.isEmpty() || current.model.dlsitePlayTree.isNotEmpty() || current.model.isLoadingDlsitePlay) return
         viewModelScope.launch {
             _uiState.value = AlbumDetailUiState.Success(model = current.model.copy(isLoadingDlsitePlay = true))
             try {
-                val result = dlsitePlayWorkClient.fetchPlayableTree(rj)
+                val editions = runCatching {
+                    if (current.model.dlsiteEditions.size > 1) {
+                        current.model.dlsiteEditions
+                    } else if (baseRj.isNotBlank()) {
+                        dlsiteProductInfoClient.fetchLanguageEditions(baseRj)
+                    } else {
+                        emptyList()
+                    }
+                }.getOrDefault(emptyList())
+                val editionWorknos = editions
+                    .asSequence()
+                    .map { it.workno.trim().uppercase() }
+                    .filter { it.isNotBlank() }
+                    .distinct()
+                    .sortedBy { if (it.startsWith("RJ", ignoreCase = true)) 0 else 1 }
+                    .toList()
+                val candidates = (candidates0 + editionWorknos).distinct()
+
+                var pickedWorkno: String? = null
+                var pickedResult: DlsitePlayTreeResult? = null
+                var lastError: Exception? = null
+                for (workno in candidates) {
+                    val res = try {
+                        dlsitePlayWorkClient.fetchPlayableTree(workno)
+                    } catch (e: Exception) {
+                        lastError = e
+                        continue
+                    }
+                    if (res.tree.isNotEmpty()) {
+                        pickedWorkno = workno
+                        pickedResult = res
+                        break
+                    }
+                }
+
+                val result = pickedResult ?: DlsitePlayTreeResult(emptyList(), emptyMap())
                 result.subtitlesByUrl.forEach { (url, subs) ->
                     if (subs.isNotEmpty()) OnlineLyricsStore.set(url, subs)
                 }
                 val updated = (_uiState.value as? AlbumDetailUiState.Success)?.model ?: return@launch
+                if (pickedResult == null && lastError != null) {
+                    val errMsg = lastError?.message?.trim().orEmpty().ifBlank { "未知错误" }
+                    messageManager.showError("DLsite Play 加载失败：$errMsg")
+                }
                 _uiState.value = AlbumDetailUiState.Success(
-                    model = updated.copy(dlsitePlayTree = result.tree, isLoadingDlsitePlay = false)
+                    model = updated.copy(
+                        dlsitePlayTree = result.tree,
+                        dlsitePlayWorkno = pickedWorkno?.trim().orEmpty(),
+                        isLoadingDlsitePlay = false
+                    )
                 )
             } catch (e: Exception) {
                 val updated = (_uiState.value as? AlbumDetailUiState.Success)?.model ?: return@launch
@@ -1473,6 +1529,7 @@ data class AlbumDetailModel(
     val dlsiteTrialTracks: List<Track>,
     val dlsiteRecommendations: DlsiteRecommendations,
     val dlsiteWorkno: String,
+    val dlsitePlayWorkno: String,
     val dlsiteEditions: List<DlsiteLanguageEdition>,
     val dlsiteSelectedLang: String,
     val asmrOneWorkId: String?,

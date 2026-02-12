@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import com.asmr.player.data.remote.api.AsmrOneTrackNodeResponse
 import com.asmr.player.data.remote.auth.DlsiteAuthStore
+import com.asmr.player.util.DlsiteWorkNo
 import com.asmr.player.util.RemoteSubtitleSource
 import com.google.gson.Gson
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -25,7 +26,7 @@ class DlsitePlayWorkClient @Inject constructor(
     private val gson = Gson()
 
     suspend fun fetchPlayableTree(workno: String): DlsitePlayTreeResult = withContext(Dispatchers.IO) {
-        val clean = workno.trim().uppercase()
+        val clean = DlsiteWorkNo.extractRjCode(workno)
         if (clean.isBlank()) return@withContext DlsitePlayTreeResult(emptyList(), emptyMap())
 
         val cookie = authStore.getPlayCookie().trim()
@@ -34,9 +35,6 @@ class DlsitePlayWorkClient @Inject constructor(
         }
 
         val (baseUrl, params, revision) = fetchDownloadSign(clean, cookie)
-        if (baseUrl.isBlank() || params.isEmpty()) {
-            return@withContext DlsitePlayTreeResult(emptyList(), emptyMap())
-        }
 
         val ziptree = fetchZiptree(baseUrl, params, cookie)
         val tree = (ziptree["tree"] as? List<*>)?.mapNotNull { it as? Map<*, *> }.orEmpty()
@@ -207,8 +205,8 @@ class DlsitePlayWorkClient @Inject constructor(
         okHttpClient.newCall(request).execute().use { resp ->
             val body = resp.body?.string().orEmpty()
             if (!resp.isSuccessful) {
-                Log.w(TAG, "sign/url failed: ${resp.code}, body=$body")
-                return Triple("", emptyMap(), "")
+                Log.w(TAG, "sign/url failed: ${resp.code}, body=${body.take(300)}")
+                throw IllegalStateException("DLsite Play 获取签名失败（${resp.code}）")
             }
             val obj = runCatching { gson.fromJson(body, Map::class.java) as? Map<*, *> }.getOrNull().orEmpty()
             val baseUrl = (obj["url"] as? String).orEmpty().trim()
@@ -221,6 +219,9 @@ class DlsitePlayWorkClient @Inject constructor(
                 }
                 ?.toMap()
                 .orEmpty()
+            if (baseUrl.isBlank() || params.isEmpty()) {
+                throw IllegalStateException("DLsite Play 获取签名返回缺少 url/params")
+            }
 
             val nowSec = TimeUnit.MILLISECONDS.toSeconds(System.currentTimeMillis())
             val ziptreeV = (nowSec - (nowSec % 60)).toString()
@@ -246,7 +247,7 @@ class DlsitePlayWorkClient @Inject constructor(
             val body = resp.body?.string().orEmpty()
             if (!resp.isSuccessful) {
                 Log.w(TAG, "ziptree.json failed: ${resp.code}, body=${body.take(300)}")
-                return emptyMap()
+                throw IllegalStateException("DLsite Play 获取目录树失败（${resp.code}）")
             }
             @Suppress("UNCHECKED_CAST")
             return runCatching { gson.fromJson(body, Map::class.java) as? Map<String, Any?> }.getOrNull().orEmpty()
