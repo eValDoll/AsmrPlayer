@@ -2,11 +2,13 @@ package com.asmr.player.playback
 
 import android.content.ComponentName
 import android.content.Context
+import android.os.SystemClock
 import androidx.core.content.ContextCompat
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
+import com.asmr.player.data.repository.TrackSliceRepository
 import com.asmr.player.data.settings.SettingsRepository
 import com.asmr.player.service.PlaybackService
 import com.asmr.player.util.MessageManager
@@ -19,6 +21,10 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -27,12 +33,16 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import javax.inject.Inject
 import javax.inject.Singleton
+import com.asmr.player.domain.model.Slice
 
 @Singleton
+@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 class PlayerConnection @Inject constructor(
     @ApplicationContext private val context: Context,
     private val settingsRepository: SettingsRepository,
+    private val trackSliceRepository: TrackSliceRepository,
+    private val slicePlaybackController: SlicePlaybackController,
     private val messageManager: MessageManager
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -45,10 +55,21 @@ class PlayerConnection @Inject constructor(
     private var controller: MediaController? = null
     private var lastErrorAtMs: Long = 0L
     private var lastErrorKey: String = ""
+    private val sliceLoopEngine = SliceLoopEngine()
+    private val currentSlices = MutableStateFlow<List<Slice>>(emptyList())
 
     init {
         scope.launch {
             connect()
+        }
+        scope.launch {
+            snapshot
+                .map { it.currentMediaItem?.mediaId?.takeIf { id -> id.isNotBlank() } }
+                .distinctUntilChanged()
+                .flatMapLatest { mediaId ->
+                    if (mediaId == null) flowOf(emptyList()) else trackSliceRepository.observeSlices(mediaId)
+                }
+                .collect { slices -> currentSlices.value = slices }
         }
         scope.launch {
             while (isActive) {
@@ -81,6 +102,8 @@ class PlayerConnection @Inject constructor(
                         playbackSpeed = c.playbackParameters.speed,
                         playbackPitch = c.playbackParameters.pitch
                     )
+
+                    applySliceLoopIfNeeded(c)
                 }
                 delay(250)
             }
@@ -269,6 +292,32 @@ class PlayerConnection @Inject constructor(
     private fun updateQueue() {
         val c = controller ?: return
         _queue.value = (0 until c.mediaItemCount).map { idx -> c.getMediaItemAt(idx) }
+    }
+
+    private fun applySliceLoopIfNeeded(c: MediaController) {
+        val preview = slicePlaybackController.previewSlice.value
+        val action = sliceLoopEngine.decide(
+            nowElapsedMs = SystemClock.elapsedRealtime(),
+            input = SliceLoopInput(
+                sliceModeEnabled = slicePlaybackController.sliceModeEnabled.value,
+                userScrubbing = slicePlaybackController.userScrubbing.value,
+                mediaId = c.currentMediaItem?.mediaId,
+                positionMs = c.currentPosition.coerceAtLeast(0L),
+                durationMs = c.duration.coerceAtLeast(0L),
+                repeatMode = c.repeatMode,
+                previewSlice = preview,
+                slices = currentSlices.value
+            )
+        )
+        when (action) {
+            is SliceLoopAction.SeekTo -> c.seekTo(action.positionMs)
+            SliceLoopAction.SkipToNext -> c.seekToNext()
+            SliceLoopAction.PauseAndClearPreview -> {
+                c.pause()
+                slicePlaybackController.clearPreview()
+            }
+            SliceLoopAction.None -> Unit
+        }
     }
 }
 

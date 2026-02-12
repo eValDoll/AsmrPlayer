@@ -31,22 +31,31 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -60,6 +69,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.media3.common.Player
 import androidx.media3.common.VideoSize
 import androidx.media3.ui.PlayerView
+import com.asmr.player.R
 import com.asmr.player.ui.common.AsmrAsyncImage
 import com.asmr.player.playback.PlaybackSnapshot
 import com.asmr.player.ui.common.EqualizerPanel
@@ -95,6 +105,7 @@ fun NowPlayingScreen(
 ) {
     val playback by viewModel.playback.collectAsState()
     val resolvedDurationMs by viewModel.resolvedDurationMs.collectAsState()
+    val sliceUiState by viewModel.sliceUiState.collectAsState()
     val isFavorite by viewModel.isFavorite.collectAsState()
     val lyricsState by lyricsViewModel.uiState.collectAsState()
     val item = playback.currentMediaItem
@@ -141,6 +152,20 @@ fun NowPlayingScreen(
         playback.durationMs > 0L -> playback.durationMs
         else -> resolvedDurationMs
     }
+
+    val haptic = LocalHapticFeedback.current
+    LaunchedEffect(Unit) {
+        viewModel.sliceUiEvents.collect { event ->
+            when (event) {
+                SliceUiEvent.CutStartMarked -> haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                SliceUiEvent.CutSliceCreated -> haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                SliceUiEvent.CutInvalidRange -> haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+            }
+        }
+    }
+
+    var showSliceSheet by remember { mutableStateOf(false) }
+    var timeEditTarget by remember { mutableStateOf<Pair<Long, Boolean>?>(null) }
     
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
@@ -256,7 +281,18 @@ fun NowPlayingScreen(
                             PlayerProgress(
                                 positionMs = playback.positionMs,
                                 durationMs = progressDurationMs,
+                                sliceUiState = sliceUiState,
                                 onSeekTo = { viewModel.seekTo(it) },
+                                onCutPressed = { viewModel.onCutPressed(progressDurationMs) },
+                                onScrubbingChanged = { viewModel.setUserScrubbing(it) },
+                                onSelectSlice = { viewModel.selectSlice(it) },
+                                onLongPressSlice = {
+                                    viewModel.selectSlice(it)
+                                    showSliceSheet = true
+                                },
+                                onUpdateSliceRange = { sliceId, startMs, endMs ->
+                                    viewModel.updateSliceRange(sliceId, startMs, endMs, progressDurationMs)
+                                },
                                 activeColor = accentColor,
                                 inactiveColor = accentColor.copy(alpha = 0.2f)
                             )
@@ -356,6 +392,7 @@ fun NowPlayingScreen(
                                 val fallback = metadata?.title?.toString().orEmpty()
                                 tagViewModel.openForMediaId(mediaId, fallback)
                             },
+                            sliceUiState = sliceUiState,
                             showActionRow = false,
                             bottomPadding = 40.dp,
                             primaryColor = accentColor,
@@ -440,7 +477,18 @@ fun NowPlayingScreen(
                             PlayerProgress(
                                 positionMs = playback.positionMs,
                                 durationMs = progressDurationMs,
+                                sliceUiState = sliceUiState,
                                 onSeekTo = { viewModel.seekTo(it) },
+                                onCutPressed = { viewModel.onCutPressed(progressDurationMs) },
+                                onScrubbingChanged = { viewModel.setUserScrubbing(it) },
+                                onSelectSlice = { viewModel.selectSlice(it) },
+                                onLongPressSlice = {
+                                    viewModel.selectSlice(it)
+                                    showSliceSheet = true
+                                },
+                                onUpdateSliceRange = { sliceId, startMs, endMs ->
+                                    viewModel.updateSliceRange(sliceId, startMs, endMs, progressDurationMs)
+                                },
                                 activeColor = accentColor,
                                 inactiveColor = accentColor.copy(alpha = 0.2f)
                             )
@@ -531,6 +579,7 @@ fun NowPlayingScreen(
                                 val fallback = metadata?.title?.toString().orEmpty()
                                 tagViewModel.openForMediaId(mediaId, fallback)
                             },
+                            sliceUiState = sliceUiState,
                             showActionRow = false,
                             bottomPadding = 28.dp,
                             primaryColor = accentColor,
@@ -669,7 +718,18 @@ fun NowPlayingScreen(
                         PlayerProgress(
                             positionMs = playback.positionMs,
                             durationMs = progressDurationMs,
+                            sliceUiState = sliceUiState,
                             onSeekTo = { viewModel.seekTo(it) },
+                            onCutPressed = { viewModel.onCutPressed(progressDurationMs) },
+                            onScrubbingChanged = { viewModel.setUserScrubbing(it) },
+                            onSelectSlice = { viewModel.selectSlice(it) },
+                            onLongPressSlice = {
+                                viewModel.selectSlice(it)
+                                showSliceSheet = true
+                            },
+                            onUpdateSliceRange = { sliceId, startMs, endMs ->
+                                viewModel.updateSliceRange(sliceId, startMs, endMs, progressDurationMs)
+                            },
                             activeColor = accentColor,
                             inactiveColor = accentColor.copy(alpha = 0.2f)
                         )
@@ -696,6 +756,7 @@ fun NowPlayingScreen(
                             val fallback = metadata?.title?.toString().orEmpty()
                             tagViewModel.openForMediaId(mediaId, fallback)
                         },
+                        sliceUiState = sliceUiState,
                         primaryColor = accentColor,
                         onPrimaryColor = onAccentColor
                     )
@@ -716,6 +777,159 @@ fun NowPlayingScreen(
                 onDismiss = { tagViewModel.dismiss() },
                 onApplyUserTags = { tagViewModel.applyUserTags(it) }
             )
+        }
+
+        if (showSliceSheet) {
+            val sheetMinHeight = (configuration.screenHeightDp.dp * 0.66f).coerceAtLeast(320.dp)
+            ModalBottomSheet(
+                onDismissRequest = { showSliceSheet = false },
+                sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+                containerColor = colorScheme.surface,
+                contentColor = colorScheme.onSurface
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = sheetMinHeight)
+                        .padding(horizontal = 16.dp, vertical = 12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "切片管理",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = colorScheme.onSurface
+                        )
+                        Spacer(modifier = Modifier.weight(1f))
+                        TextButton(onClick = { viewModel.clearSlicesForCurrentTrack() }) {
+                            Text("清空")
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    SliceOverviewBar(
+                        positionMs = playback.positionMs,
+                        durationMs = progressDurationMs,
+                        slices = sliceUiState.slices,
+                        selectedSliceId = sliceUiState.selectedSliceId,
+                        activeColor = accentColor,
+                        inactiveColor = accentColor.copy(alpha = 0.18f),
+                        onSeekTo = { viewModel.seekTo(it) },
+                        onSelectSlice = { viewModel.selectSlice(it) },
+                        onLongPressSlice = { id ->
+                            viewModel.selectSlice(id)
+                        }
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    if (sliceUiState.slices.isEmpty()) {
+                        Text(
+                            text = "暂无切片",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = colorScheme.textTertiary,
+                            modifier = Modifier.padding(vertical = 18.dp)
+                        )
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier.fillMaxWidth().weight(1f, fill = true),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            itemsIndexed(sliceUiState.slices, key = { _, s -> s.id }) { index, slice ->
+                                val selected = slice.id == sliceUiState.selectedSliceId
+                                val bg = if (selected) accentColor.copy(alpha = 0.12f) else colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                                Surface(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    color = bg,
+                                    shape = RoundedCornerShape(16.dp)
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable { viewModel.selectSlice(slice.id) }
+                                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                    ) {
+                                        Text(
+                                            text = (index + 1).toString(),
+                                            style = MaterialTheme.typography.labelMedium,
+                                            color = colorScheme.textTertiary,
+                                            modifier = Modifier.widthIn(min = 18.dp)
+                                        )
+
+                                        TextButton(
+                                            onClick = { timeEditTarget = slice.id to true },
+                                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+                                        ) {
+                                            Text(Formatting.formatTrackTime(slice.startMs))
+                                        }
+
+                                        Text(
+                                            text = "→",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = colorScheme.textTertiary
+                                        )
+
+                                        TextButton(
+                                            onClick = { timeEditTarget = slice.id to false },
+                                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+                                        ) {
+                                            Text(Formatting.formatTrackTime(slice.endMs))
+                                        }
+
+                                        Spacer(modifier = Modifier.weight(1f))
+
+                                        IconButton(onClick = { viewModel.playSlicePreview(slice) }) {
+                                            Icon(
+                                                imageVector = Icons.Default.PlayArrow,
+                                                contentDescription = "播放切片",
+                                                tint = colorScheme.onSurface
+                                            )
+                                        }
+
+                                        IconButton(onClick = { viewModel.deleteSlice(slice.id) }) {
+                                            Icon(
+                                                imageVector = Icons.Outlined.DeleteOutline,
+                                                contentDescription = "删除切片",
+                                                tint = colorScheme.onSurface.copy(alpha = 0.8f)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                            item { Spacer(modifier = Modifier.height(18.dp)) }
+                        }
+                    }
+                }
+            }
+        }
+
+        val edit = timeEditTarget
+        if (edit != null) {
+            val slice = sliceUiState.slices.firstOrNull { it.id == edit.first }
+            if (slice != null) {
+                SliceTimeEditDialog(
+                    title = if (edit.second) "修改起点" else "修改终点",
+                    durationMs = progressDurationMs,
+                    currentMs = playback.positionMs,
+                    initialMs = if (edit.second) slice.startMs else slice.endMs,
+                    onDismiss = { timeEditTarget = null },
+                    onConfirm = { newMs ->
+                        if (edit.second) {
+                            viewModel.updateSliceRange(slice.id, newMs, slice.endMs, progressDurationMs)
+                        } else {
+                            viewModel.updateSliceRange(slice.id, slice.startMs, newMs, progressDurationMs)
+                        }
+                        timeEditTarget = null
+                    }
+                )
+            } else {
+                timeEditTarget = null
+            }
         }
 
         if (showEqualizer) {
@@ -835,6 +1049,7 @@ private fun PlaybackControls(
     onShowPlaylistPicker: () -> Unit,
     onShowEqualizer: () -> Unit,
     onManageTags: () -> Unit,
+    sliceUiState: SliceUiState,
     modifier: Modifier = Modifier,
     showActionRow: Boolean = true,
     bottomPadding: Dp = 0.dp,
@@ -921,6 +1136,29 @@ private fun PlaybackControls(
                         tint = colorScheme.onSurface.copy(alpha = 0.8f),
                         modifier = Modifier.size(24.dp)
                     )
+                }
+
+                val sliceEnabled = sliceUiState.sliceModeEnabled
+                val hasSlices = sliceUiState.slices.isNotEmpty()
+                val targetBg = if (sliceEnabled) primaryColor.copy(alpha = 0.18f) else Color.Transparent
+                val bg by animateColorAsState(targetValue = targetBg, animationSpec = tween(240, easing = FastOutSlowInEasing), label = "sliceModeBg")
+                val tint by animateColorAsState(
+                    targetValue = if (sliceEnabled) primaryColor else colorScheme.onSurface.copy(alpha = if (hasSlices) 0.8f else 0.45f),
+                    animationSpec = tween(240, easing = FastOutSlowInEasing),
+                    label = "sliceModeTint"
+                )
+                Surface(
+                    color = bg,
+                    contentColor = tint,
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    IconButton(onClick = { viewModel.toggleSliceMode() }) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_segment),
+                            contentDescription = "切片播放",
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
                 }
             }
         }
@@ -1456,7 +1694,13 @@ private fun VolumeControl(modifier: Modifier = Modifier, accentColor: Color) {
 private fun PlayerProgress(
     positionMs: Long,
     durationMs: Long,
+    sliceUiState: SliceUiState,
     onSeekTo: (Long) -> Unit,
+    onCutPressed: () -> Unit,
+    onScrubbingChanged: (Boolean) -> Unit,
+    onSelectSlice: (Long?) -> Unit,
+    onLongPressSlice: (Long) -> Unit,
+    onUpdateSliceRange: (sliceId: Long, startMs: Long, endMs: Long) -> Unit,
     activeColor: Color,
     inactiveColor: Color
 ) {
@@ -1490,29 +1734,50 @@ private fun PlayerProgress(
     }
 
     Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        ScrubbableSeekBar(
-            enabled = rangeDuration > 0L,
-            fraction = sliderValue.coerceIn(0f, 1f),
-            rangeDurationMs = rangeDuration,
-            activeColor = activeColor,
-            inactiveColor = inactiveColor,
-            onScrubStart = { f ->
-                isDragging = true
-                dragFraction = f
-            },
-            onScrub = { f ->
-                isDragging = true
-                dragFraction = f
-            },
-            onScrubStop = { f ->
-                if (rangeDuration > 0L) {
-                    val seekMs = (f.toDouble() * rangeDuration.toDouble()).roundToLong().coerceIn(0L, rangeDuration)
-                    pendingSeekMs = seekMs
-                    onSeekTo(seekMs)
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            SliceScrubbableSeekBar(
+                enabled = rangeDuration > 0L,
+                fraction = sliderValue.coerceIn(0f, 1f),
+                positionMs = effectivePosition,
+                rangeDurationMs = rangeDuration,
+                activeColor = activeColor,
+                inactiveColor = inactiveColor,
+                slices = sliceUiState.slices,
+                tempStartMs = sliceUiState.tempStartMs,
+                selectedSliceId = sliceUiState.selectedSliceId,
+                onSelectSlice = onSelectSlice,
+                onLongPressSlice = onLongPressSlice,
+                onEditCommit = onUpdateSliceRange,
+                onGestureActiveChanged = onScrubbingChanged,
+                modifier = Modifier.weight(1f),
+                onScrubStart = { f ->
+                    onScrubbingChanged(true)
+                    isDragging = true
+                    dragFraction = f
+                },
+                onScrub = { f ->
+                    isDragging = true
+                    dragFraction = f
+                },
+                onScrubStop = { f ->
+                    if (rangeDuration > 0L) {
+                        val seekMs = (f.toDouble() * rangeDuration.toDouble()).roundToLong().coerceIn(0L, rangeDuration)
+                        pendingSeekMs = seekMs
+                        onSeekTo(seekMs)
+                    }
+                    isDragging = false
+                    onScrubbingChanged(false)
                 }
-                isDragging = false
+            )
+            IconButton(onClick = onCutPressed, enabled = rangeDuration > 0L) {
+                Icon(
+                    imageVector = Icons.Outlined.ContentCut,
+                    contentDescription = "Cut",
+                    tint = if (sliceUiState.tempStartMs != null) activeColor else colorScheme.onSurface.copy(alpha = 0.85f),
+                    modifier = Modifier.size(22.dp)
+                )
             }
-        )
+        }
         Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(
                 Formatting.formatTrackTime(displayPosition),
@@ -1534,12 +1799,21 @@ private fun PlayerProgress(
 }
 
 @Composable
-private fun ScrubbableSeekBar(
+private fun SliceScrubbableSeekBar(
     enabled: Boolean,
     fraction: Float,
+    positionMs: Long,
     rangeDurationMs: Long,
     activeColor: Color,
     inactiveColor: Color,
+    slices: List<com.asmr.player.domain.model.Slice>,
+    tempStartMs: Long?,
+    selectedSliceId: Long?,
+    onSelectSlice: (Long?) -> Unit,
+    onLongPressSlice: (Long) -> Unit,
+    onEditCommit: (sliceId: Long, startMs: Long, endMs: Long) -> Unit,
+    onGestureActiveChanged: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
     onScrubStart: (Float) -> Unit,
     onScrub: (Float) -> Unit,
     onScrubStop: (Float) -> Unit
@@ -1549,38 +1823,131 @@ private fun ScrubbableSeekBar(
 
     val thumbRadius = 8.dp
     val trackHeight = 4.dp
+    val density = LocalDensity.current
+    val tooltipTextSizePx = remember(density) { with(density) { 12.sp.toPx() } }
+    val tooltipPadX = remember(density) { with(density) { 8.dp.toPx() } }
+    val tooltipPadY = remember(density) { with(density) { 6.dp.toPx() } }
+    val tooltipRadius = remember(density) { with(density) { 10.dp.toPx() } }
+    val tooltipTextPaint = remember(tooltipTextSizePx) {
+        android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+            textSize = tooltipTextSizePx
+        }
+    }
+
+    // 荧光效果 Paint
+    val blurRadius = remember(density) { with(density) { 6.dp.toPx() } }
+    val glowPaint = remember(blurRadius) {
+        android.graphics.Paint().apply {
+            isAntiAlias = true
+            style = android.graphics.Paint.Style.FILL
+            maskFilter = android.graphics.BlurMaskFilter(blurRadius, android.graphics.BlurMaskFilter.Blur.NORMAL)
+            // 使用 SCREEN 混合模式，使光晕叠加后变亮，产生发光感
+            xfermode = android.graphics.PorterDuffXfermode(android.graphics.PorterDuff.Mode.SCREEN)
+        }
+    }
+    val corePaint = remember {
+        android.graphics.Paint().apply {
+            isAntiAlias = true
+            style = android.graphics.Paint.Style.FILL
+        }
+    }
+    val androidPath = remember { android.graphics.Path() }
+
+    val selectedSlice = remember(selectedSliceId, slices) {
+        val id = selectedSliceId ?: return@remember null
+        slices.firstOrNull { it.id == id }
+    }
+    var editStartMs by remember(selectedSlice?.id, selectedSlice?.startMs) {
+        mutableLongStateOf(selectedSlice?.startMs ?: 0L)
+    }
+    var editEndMs by remember(selectedSlice?.id, selectedSlice?.endMs) {
+        mutableLongStateOf(selectedSlice?.endMs ?: 0L)
+    }
+    var tooltipMs by remember { mutableLongStateOf(-1L) }
+    var tooltipX by remember { mutableFloatStateOf(0f) }
+    var tooltipY by remember { mutableFloatStateOf(0f) }
+
+    val inSlice = remember(positionMs, slices) { slices.any { positionMs >= it.startMs && positionMs < it.endMs } }
+    val infinite = rememberInfiniteTransition(label = "slice_breath")
+    val breathAlpha by infinite.animateFloat(
+        initialValue = 0.18f,
+        targetValue = 0.28f,
+        animationSpec = infiniteRepeatable(animation = tween(1200, easing = LinearEasing), repeatMode = RepeatMode.Reverse),
+        label = "slice_breath_alpha"
+    )
 
     Canvas(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .height(32.dp)
-            .pointerInput(enabled, rangeDurationMs) {
+            .pointerInput(enabled, rangeDurationMs, slices, selectedSliceId) {
                 if (!enabled) return@pointerInput
                 val thumbRadiusPx = thumbRadius.toPx()
-                detectTapGestures { offset ->
-                    val w = size.width.toFloat()
-                    val startX = thumbRadiusPx
-                    val endX = (w - thumbRadiusPx).coerceAtLeast(startX)
-                    val nf = if (endX > startX) {
-                        ((offset.x - startX) / (endX - startX)).coerceIn(0f, 1f)
-                    } else 0f
-                    onScrubStart(nf)
-                    onScrubStop(nf)
-                }
-            }
-            .pointerInput(enabled, rangeDurationMs) {
-                if (!enabled) return@pointerInput
-                val thumbRadiusPx = thumbRadius.toPx()
-                detectDragGestures(
-                    onDragStart = { offset ->
+                detectTapGestures(
+                    onTap = { offset ->
                         val w = size.width.toFloat()
                         val startX = thumbRadiusPx
                         val endX = (w - thumbRadiusPx).coerceAtLeast(startX)
                         val nf = if (endX > startX) {
                             ((offset.x - startX) / (endX - startX)).coerceIn(0f, 1f)
                         } else 0f
-                        lastFraction = nf
                         onScrubStart(nf)
+                        onScrubStop(nf)
+                    },
+                    onLongPress = { offset ->
+                        val w = size.width.toFloat()
+                        val startX = thumbRadiusPx
+                        val endX = (w - thumbRadiusPx).coerceAtLeast(startX)
+                        val nf = if (endX > startX) {
+                            ((offset.x - startX) / (endX - startX)).coerceIn(0f, 1f)
+                        } else 0f
+                        if (rangeDurationMs <= 0L) return@detectTapGestures
+                        val ms = (nf.toDouble() * rangeDurationMs.toDouble()).roundToLong().coerceIn(0L, rangeDurationMs)
+                        val hit = slices
+                            .asSequence()
+                            .filter { s -> ms >= s.startMs && ms <= s.endMs }
+                            .maxByOrNull { it.id }
+                        if (hit != null) {
+                            onSelectSlice(hit.id)
+                            onLongPressSlice(hit.id)
+                        }
+                    }
+                )
+            }
+            .pointerInput(enabled, rangeDurationMs, slices, selectedSliceId) {
+                if (!enabled) return@pointerInput
+                val thumbRadiusPx = thumbRadius.toPx()
+                val hitRadiusPx = 16.dp.toPx()
+                var mode = 0
+                detectDragGestures(
+                    onDragStart = { offset ->
+                        val w = size.width.toFloat()
+                        val startX = thumbRadiusPx
+                        val endX = (w - thumbRadiusPx).coerceAtLeast(startX)
+                        fun toFraction(x: Float): Float {
+                            return if (endX > startX) ((x - startX) / (endX - startX)).coerceIn(0f, 1f) else 0f
+                        }
+                        val nf = toFraction(offset.x)
+                        val sel = selectedSlice
+                        mode = 0
+                        if (sel != null && rangeDurationMs > 0L) {
+                            val selStartX = startX + (endX - startX) * (sel.startMs.toFloat() / rangeDurationMs.toFloat()).coerceIn(0f, 1f)
+                            val selEndX = startX + (endX - startX) * (sel.endMs.toFloat() / rangeDurationMs.toFloat()).coerceIn(0f, 1f)
+                            mode = when {
+                                kotlin.math.abs(offset.x - selStartX) <= hitRadiusPx -> 1
+                                kotlin.math.abs(offset.x - selEndX) <= hitRadiusPx -> 2
+                                else -> 0
+                            }
+                        }
+                        onGestureActiveChanged(true)
+                        if (mode == 0) {
+                            lastFraction = nf
+                            onScrubStart(nf)
+                        } else {
+                            tooltipMs = if (mode == 1) editStartMs else editEndMs
+                            tooltipX = offset.x
+                            tooltipY = offset.y
+                        }
                     },
                     onDrag = { change, _ ->
                         val w = size.width.toFloat()
@@ -1590,13 +1957,43 @@ private fun ScrubbableSeekBar(
                             ((change.position.x - startX) / (endX - startX)).coerceIn(0f, 1f)
                         } else 0f
                         lastFraction = nf
-                        onScrub(nf)
+                        if (mode == 0) {
+                            onScrub(nf)
+                        } else if (rangeDurationMs > 0L) {
+                            val ms = (nf.toDouble() * rangeDurationMs.toDouble()).roundToLong().coerceIn(0L, rangeDurationMs)
+                            if (mode == 1) {
+                                editStartMs = ms
+                            } else {
+                                editEndMs = ms
+                            }
+                            tooltipMs = ms
+                            tooltipX = change.position.x
+                            tooltipY = change.position.y
+                        }
                     },
                     onDragCancel = {
+                        tooltipMs = -1L
+                        mode = 0
+                        onGestureActiveChanged(false)
                         onScrubStop(lastFraction)
                     },
                     onDragEnd = {
-                        onScrubStop(lastFraction)
+                        val sel = selectedSlice
+                        if (mode == 0) {
+                            onScrubStop(lastFraction)
+                        } else if (sel != null) {
+                            val start = editStartMs
+                            val end = editEndMs
+                            if (end > start) {
+                                onEditCommit(sel.id, start, end)
+                            } else {
+                                editStartMs = sel.startMs
+                                editEndMs = sel.endMs
+                            }
+                        }
+                        tooltipMs = -1L
+                        mode = 0
+                        onGestureActiveChanged(false)
                     }
                 )
             }
@@ -1614,6 +2011,275 @@ private fun ScrubbableSeekBar(
             startX + (endX - startX) * f
         } else {
             startX
+        }
+
+        val sliceAlpha = if (inSlice) breathAlpha else 0.20f
+        // 切片高度调整：原为 trackHeightPx * 3.2f，现减小以收窄
+        val sliceHeightPx = (trackHeightPx * 1.8f).coerceAtLeast(trackHeightPx + 1f)
+        val sliceTop = centerY - sliceHeightPx / 2f
+        val sliceCorner = sliceHeightPx / 2f
+
+        if (rangeDurationMs > 0L) {
+            val span = (endX - startX).coerceAtLeast(1f)
+            for (s in slices) {
+                val sf = (s.startMs.toFloat() / rangeDurationMs.toFloat()).coerceIn(0f, 1f)
+                val ef = (s.endMs.toFloat() / rangeDurationMs.toFloat()).coerceIn(0f, 1f)
+                val sx = startX + span * sf
+                val ex = startX + span * ef
+                val w = (ex - sx).coerceAtLeast(1f)
+                val isSelected = s.id == selectedSliceId
+                val a = if (isSelected) (sliceAlpha + 0.15f).coerceAtMost(0.50f) else sliceAlpha
+
+                // 1. 绘制切片区域的光晕背景 (荧光)
+                drawIntoCanvas { canvas ->
+                    glowPaint.color = activeColor.toArgb()
+                    // 提高 Alpha 并利用 SCREEN 模式叠加
+                    glowPaint.alpha = 200
+                    val rect = android.graphics.RectF(sx, sliceTop, sx + w, sliceTop + sliceHeightPx)
+                    canvas.nativeCanvas.drawRoundRect(rect, sliceCorner, sliceCorner, glowPaint)
+                    // 叠加第二层增强亮度
+                    glowPaint.alpha = 100
+                    canvas.nativeCanvas.drawRoundRect(rect, sliceCorner, sliceCorner, glowPaint)
+                }
+
+                // 2. 绘制切片实体
+                val brush = Brush.horizontalGradient(
+                    colors = listOf(
+                        activeColor.copy(alpha = (a * 0.9f).coerceIn(0f, 1f)),
+                        activeColor.copy(alpha = (a * 1.2f).coerceAtMost(1f))
+                    ),
+                    startX = sx,
+                    endX = ex
+                )
+                drawRoundRect(
+                    brush = brush,
+                    topLeft = Offset(sx, sliceTop),
+                    size = Size(w, sliceHeightPx),
+                    cornerRadius = CornerRadius(sliceCorner, sliceCorner)
+                )
+
+                // 三角形参数 (缩小尺寸)
+                val tipY = (centerY - trackHeightPx * 0.55f).coerceAtLeast(14.dp.toPx())
+                val markerW = (trackHeightPx * 2.8f).coerceAtLeast(8f)
+                val markerH = (trackHeightPx * 2.4f).coerceAtLeast(7f)
+                val baseY = tipY - markerH
+                
+                // 绘制起止三角形
+                drawIntoCanvas { canvas ->
+                    val nativeCanvas = canvas.nativeCanvas
+                    // 核心颜色改回 activeColor
+                    val colorInt = activeColor.toArgb()
+                    
+                    val pulse = ((breathAlpha - 0.18f) / 0.10f).coerceIn(0f, 1f)
+                    val glowAlpha = (180 + 75 * pulse).toInt().coerceIn(0, 255)
+                    
+                    glowPaint.color = colorInt
+                    glowPaint.alpha = glowAlpha
+                    corePaint.color = colorInt
+                    corePaint.alpha = 255
+
+                    // Start Triangle
+                    androidPath.reset()
+                    androidPath.moveTo(sx, tipY)
+                    androidPath.lineTo(sx - markerW / 2f, baseY)
+                    androidPath.lineTo(sx + markerW / 2f, baseY)
+                    androidPath.close()
+                    // 绘制多层光晕
+                    nativeCanvas.drawPath(androidPath, glowPaint)
+                    nativeCanvas.drawPath(androidPath, glowPaint) 
+                    // 绘制核心
+                    nativeCanvas.drawPath(androidPath, corePaint)
+
+                    // End Triangle
+                    androidPath.reset()
+                    androidPath.moveTo(ex, tipY)
+                    androidPath.lineTo(ex - markerW / 2f, baseY)
+                    androidPath.lineTo(ex + markerW / 2f, baseY)
+                    androidPath.close()
+                    // 绘制多层光晕
+                    nativeCanvas.drawPath(androidPath, glowPaint)
+                    nativeCanvas.drawPath(androidPath, glowPaint)
+                    // 绘制核心
+                    nativeCanvas.drawPath(androidPath, corePaint)
+                }
+            }
+
+            val tmp = tempStartMs
+            if (tmp != null) {
+                val tf = (tmp.toFloat() / rangeDurationMs.toFloat()).coerceIn(0f, 1f)
+                val tx = startX + span * tf
+                
+                val tipY = (centerY - trackHeightPx * 0.55f).coerceAtLeast(14.dp.toPx())
+                val markerW = (trackHeightPx * 2.8f).coerceAtLeast(8f)
+                val markerH = (trackHeightPx * 2.4f).coerceAtLeast(7f)
+                val baseY = tipY - markerH
+
+                drawIntoCanvas { canvas ->
+                    val nativeCanvas = canvas.nativeCanvas
+                    
+                    val colorInt = activeColor.toArgb()
+                    glowPaint.color = colorInt
+                    glowPaint.alpha = 255 
+                    corePaint.color = colorInt
+                    corePaint.alpha = 255
+                    
+                    androidPath.reset()
+                    androidPath.moveTo(tx, tipY)
+                    androidPath.lineTo(tx - markerW / 2f, baseY)
+                    androidPath.lineTo(tx + markerW / 2f, baseY)
+                    androidPath.close()
+                    
+                    nativeCanvas.drawPath(androidPath, glowPaint)
+                    nativeCanvas.drawPath(androidPath, glowPaint)
+                    nativeCanvas.drawPath(androidPath, corePaint)
+                }
+            }
+        }
+
+        drawLine(
+            color = inactiveColor,
+            start = Offset(startX, centerY),
+            end = Offset(endX, centerY),
+            strokeWidth = trackHeightPx,
+            cap = androidx.compose.ui.graphics.StrokeCap.Round
+        )
+        drawLine(
+            color = if (inSlice) activeColor else activeColor.copy(alpha = 0.85f),
+            start = Offset(startX, centerY),
+            end = Offset(x, centerY),
+            strokeWidth = trackHeightPx,
+            cap = androidx.compose.ui.graphics.StrokeCap.Round
+        )
+        drawCircle(
+            color = activeColor,
+            radius = thumbRadiusPx,
+            center = Offset(x, centerY)
+        )
+        drawCircle(
+            color = Color.White.copy(alpha = 0.85f),
+            radius = (thumbRadiusPx * 0.45f).coerceAtLeast(1f),
+            center = Offset(x, centerY)
+        )
+
+        if (tooltipMs >= 0L) {
+            val t = Formatting.formatTrackTime(tooltipMs)
+            val textWidth = tooltipTextPaint.measureText(t).coerceAtLeast(1f)
+            val boxW = textWidth + tooltipPadX * 2f
+            val boxH = tooltipTextSizePx + tooltipPadY * 2f
+            val bx = (tooltipX - boxW / 2f).coerceIn(0f, width - boxW)
+            val by = (centerY - sliceHeightPx / 2f - boxH - 6.dp.toPx()).coerceAtLeast(0f)
+            drawRoundRect(
+                color = Color.Black.copy(alpha = 0.55f),
+                topLeft = Offset(bx, by),
+                size = Size(boxW, boxH),
+                cornerRadius = CornerRadius(tooltipRadius, tooltipRadius)
+            )
+            drawIntoCanvas { canvas ->
+                tooltipTextPaint.color = android.graphics.Color.WHITE
+                canvas.nativeCanvas.drawText(
+                    t,
+                    bx + tooltipPadX,
+                    by + tooltipPadY + tooltipTextSizePx * 0.82f,
+                    tooltipTextPaint
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SliceOverviewBar(
+    positionMs: Long,
+    durationMs: Long,
+    slices: List<com.asmr.player.domain.model.Slice>,
+    selectedSliceId: Long?,
+    activeColor: Color,
+    inactiveColor: Color,
+    onSeekTo: (Long) -> Unit,
+    onSelectSlice: (Long?) -> Unit,
+    onLongPressSlice: (Long) -> Unit
+) {
+    val safeDuration = durationMs.coerceAtLeast(0L)
+    val safePosition = positionMs.coerceIn(0L, safeDuration.takeIf { it > 0 } ?: Long.MAX_VALUE)
+    val fraction = remember(safePosition, safeDuration) {
+        if (safeDuration > 0L) (safePosition.toDouble() / safeDuration.toDouble()).toFloat().coerceIn(0f, 1f) else 0f
+    }
+    val thumbRadius = 7.dp
+    val trackHeight = 3.dp
+
+    Canvas(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(28.dp)
+            .pointerInput(safeDuration, slices) {
+                if (safeDuration <= 0L) return@pointerInput
+                val thumbRadiusPx = thumbRadius.toPx()
+                detectTapGestures(
+                    onTap = { offset ->
+                        val w = size.width.toFloat()
+                        val startX = thumbRadiusPx
+                        val endX = (w - thumbRadiusPx).coerceAtLeast(startX)
+                        val nf = if (endX > startX) ((offset.x - startX) / (endX - startX)).coerceIn(0f, 1f) else 0f
+                        val ms = (nf.toDouble() * safeDuration.toDouble()).roundToLong().coerceIn(0L, safeDuration)
+                        onSeekTo(ms)
+                    },
+                    onLongPress = { offset ->
+                        val w = size.width.toFloat()
+                        val startX = thumbRadiusPx
+                        val endX = (w - thumbRadiusPx).coerceAtLeast(startX)
+                        val nf = if (endX > startX) ((offset.x - startX) / (endX - startX)).coerceIn(0f, 1f) else 0f
+                        val ms = (nf.toDouble() * safeDuration.toDouble()).roundToLong().coerceIn(0L, safeDuration)
+                        val hit = slices
+                            .asSequence()
+                            .filter { s -> ms >= s.startMs && ms <= s.endMs }
+                            .maxByOrNull { it.id }
+                        if (hit != null) {
+                            onSelectSlice(hit.id)
+                            onLongPressSlice(hit.id)
+                        }
+                    }
+                )
+            }
+    ) {
+        val width = size.width
+        val height = size.height
+        if (width <= 0f || height <= 0f) return@Canvas
+
+        val trackHeightPx = trackHeight.toPx()
+        val thumbRadiusPx = thumbRadius.toPx()
+        val centerY = height / 2f
+        val startX = thumbRadiusPx
+        val endX = (width - thumbRadiusPx).coerceAtLeast(startX)
+        val span = (endX - startX).coerceAtLeast(1f)
+        val x = startX + span * fraction
+
+        if (safeDuration > 0L) {
+            val sliceHeightPx = (trackHeightPx * 3.0f).coerceAtLeast(trackHeightPx + 2f)
+            val top = centerY - sliceHeightPx / 2f
+            val corner = sliceHeightPx / 2f
+            for (s in slices) {
+                val sf = (s.startMs.toFloat() / safeDuration.toFloat()).coerceIn(0f, 1f)
+                val ef = (s.endMs.toFloat() / safeDuration.toFloat()).coerceIn(0f, 1f)
+                val sx = startX + span * sf
+                val ex = startX + span * ef
+                val w = (ex - sx).coerceAtLeast(1f)
+                val selected = s.id == selectedSliceId
+                val a = if (selected) 0.32f else 0.20f
+                val brush = Brush.horizontalGradient(
+                    colors = listOf(
+                        activeColor.copy(alpha = a * 0.65f),
+                        activeColor.copy(alpha = a)
+                    ),
+                    startX = sx,
+                    endX = ex
+                )
+                drawRoundRect(
+                    brush = brush,
+                    topLeft = Offset(sx, top),
+                    size = Size(w, sliceHeightPx),
+                    cornerRadius = CornerRadius(corner, corner)
+                )
+            }
         }
 
         drawLine(
@@ -1641,4 +2307,141 @@ private fun ScrubbableSeekBar(
             center = Offset(x, centerY)
         )
     }
+}
+
+@Composable
+private fun SliceTimeEditDialog(
+    title: String,
+    durationMs: Long,
+    currentMs: Long,
+    initialMs: Long,
+    onDismiss: () -> Unit,
+    onConfirm: (Long) -> Unit
+) {
+    val safeDuration = durationMs.coerceAtLeast(0L)
+    val boundedInitial = if (safeDuration > 0L) initialMs.coerceIn(0L, safeDuration) else initialMs.coerceAtLeast(0L)
+    var selectedMs by remember(boundedInitial) { mutableLongStateOf(boundedInitial) }
+    var fraction by remember(boundedInitial, safeDuration) {
+        mutableFloatStateOf(if (safeDuration > 0L) (boundedInitial.toDouble() / safeDuration.toDouble()).toFloat().coerceIn(0f, 1f) else 0f)
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    text = Formatting.formatTrackTime(selectedMs),
+                    style = MaterialTheme.typography.titleLarge,
+                    color = AsmrTheme.colorScheme.onSurface
+                )
+
+                if (safeDuration > 0L) {
+                    Slider(
+                        value = fraction,
+                        onValueChange = { f ->
+                            fraction = f.coerceIn(0f, 1f)
+                            selectedMs = (fraction.toDouble() * safeDuration.toDouble()).roundToLong().coerceIn(0L, safeDuration)
+                        },
+                        valueRange = 0f..1f,
+                        colors = SliderDefaults.colors(
+                            thumbColor = AsmrTheme.colorScheme.primary,
+                            activeTrackColor = AsmrTheme.colorScheme.primary,
+                            inactiveTrackColor = AsmrTheme.colorScheme.primary.copy(alpha = 0.18f)
+                        )
+                    )
+                } else {
+                    LinearProgressIndicator(
+                        progress = { 0f },
+                        modifier = Modifier.fillMaxWidth(),
+                        color = AsmrTheme.colorScheme.primary,
+                        trackColor = AsmrTheme.colorScheme.primary.copy(alpha = 0.18f)
+                    )
+                }
+
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(
+                        onClick = {
+                            val v = (selectedMs - 5_000L).coerceAtLeast(0L)
+                            selectedMs = if (safeDuration > 0L) v.coerceAtMost(safeDuration) else v
+                            if (safeDuration > 0L) fraction = (selectedMs.toDouble() / safeDuration.toDouble()).toFloat().coerceIn(0f, 1f)
+                        },
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+                    ) { Text("-5s") }
+                    OutlinedButton(
+                        onClick = {
+                            val v = (selectedMs - 1_000L).coerceAtLeast(0L)
+                            selectedMs = if (safeDuration > 0L) v.coerceAtMost(safeDuration) else v
+                            if (safeDuration > 0L) fraction = (selectedMs.toDouble() / safeDuration.toDouble()).toFloat().coerceIn(0f, 1f)
+                        },
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+                    ) { Text("-1s") }
+                    OutlinedButton(
+                        onClick = {
+                            val v = (selectedMs - 200L).coerceAtLeast(0L)
+                            selectedMs = if (safeDuration > 0L) v.coerceAtMost(safeDuration) else v
+                            if (safeDuration > 0L) fraction = (selectedMs.toDouble() / safeDuration.toDouble()).toFloat().coerceIn(0f, 1f)
+                        },
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+                    ) { Text("-0.2s") }
+                    OutlinedButton(
+                        onClick = {
+                            val v = selectedMs + 200L
+                            selectedMs = if (safeDuration > 0L) v.coerceIn(0L, safeDuration) else v
+                            if (safeDuration > 0L) fraction = (selectedMs.toDouble() / safeDuration.toDouble()).toFloat().coerceIn(0f, 1f)
+                        },
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+                    ) { Text("+0.2s") }
+                    OutlinedButton(
+                        onClick = {
+                            val v = selectedMs + 1_000L
+                            selectedMs = if (safeDuration > 0L) v.coerceIn(0L, safeDuration) else v
+                            if (safeDuration > 0L) fraction = (selectedMs.toDouble() / safeDuration.toDouble()).toFloat().coerceIn(0f, 1f)
+                        },
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+                    ) { Text("+1s") }
+                    OutlinedButton(
+                        onClick = {
+                            val v = selectedMs + 5_000L
+                            selectedMs = if (safeDuration > 0L) v.coerceIn(0L, safeDuration) else v
+                            if (safeDuration > 0L) fraction = (selectedMs.toDouble() / safeDuration.toDouble()).toFloat().coerceIn(0f, 1f)
+                        },
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+                    ) { Text("+5s") }
+                }
+
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    TextButton(
+                        onClick = {
+                            val v = currentMs.coerceAtLeast(0L)
+                            selectedMs = if (safeDuration > 0L) v.coerceAtMost(safeDuration) else v
+                            if (safeDuration > 0L) fraction = (selectedMs.toDouble() / safeDuration.toDouble()).toFloat().coerceIn(0f, 1f)
+                        }
+                    ) { Text("设为当前") }
+                    TextButton(
+                        onClick = {
+                            selectedMs = 0L
+                            fraction = 0f
+                        }
+                    ) { Text("设为 0") }
+                    if (safeDuration > 0L) {
+                        TextButton(
+                            onClick = {
+                                selectedMs = safeDuration
+                                fraction = 1f
+                            }
+                        ) { Text("设为末尾") }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    onConfirm(selectedMs)
+                }
+            ) { Text("确定") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } }
+    )
 }

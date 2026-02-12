@@ -278,4 +278,22 @@ object AppDatabaseMigrations {
             )
         }
     }
+
+    val MIGRATION_16_17: Migration = object : Migration(16, 17) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `track_slices` (
+                    `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    `trackMediaId` TEXT NOT NULL,
+                    `startMs` INTEGER NOT NULL,
+                    `endMs` INTEGER NOT NULL,
+                    `createdAt` INTEGER NOT NULL,
+                    `updatedAt` INTEGER NOT NULL
+                )
+                """.trimIndent()
+            )
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_track_slices_trackMediaId` ON `track_slices` (`trackMediaId`)")
+        }
+    }
 }
