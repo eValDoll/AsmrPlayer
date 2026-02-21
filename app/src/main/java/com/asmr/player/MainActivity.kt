@@ -1034,7 +1034,7 @@ fun MainContainer(
                     )
                 ) { backStackEntry ->
                     val playlistId = backStackEntry.arguments?.getLong("playlistId") ?: 0L
-                    val playlistName = backStackEntry.arguments?.getString("playlistName").orEmpty()
+                    val playlistName = decodeRouteArg(backStackEntry.arguments?.getString("playlistName").orEmpty())
                     PlaylistDetailScreen(
                         windowSizeClass = windowSizeClass,
                         playlistId = playlistId,
@@ -1066,11 +1066,11 @@ fun MainContainer(
                         navArgument("artworkUri") { defaultValue = "" }
                     )
                 ) { backStackEntry ->
-                    val mediaId = backStackEntry.arguments?.getString("mediaId").orEmpty()
-                    val uri = backStackEntry.arguments?.getString("uri").orEmpty()
+                    val mediaId = decodeRouteArg(backStackEntry.arguments?.getString("mediaId").orEmpty())
+                    val uri = decodeRouteArg(backStackEntry.arguments?.getString("uri").orEmpty())
                     val title = decodeRouteArg(backStackEntry.arguments?.getString("title").orEmpty())
                     val artist = decodeRouteArg(backStackEntry.arguments?.getString("artist").orEmpty())
-                    val artworkUri = backStackEntry.arguments?.getString("artworkUri").orEmpty()
+                    val artworkUri = decodeRouteArg(backStackEntry.arguments?.getString("artworkUri").orEmpty())
                     PlaylistPickerScreen(
                         windowSizeClass = windowSizeClass,
                         mediaId = mediaId,

@@ -37,6 +37,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import java.io.File
+import java.net.URLDecoder
 import java.util.concurrent.CancellationException
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
@@ -244,9 +245,10 @@ class PlayerConnection @Inject constructor(
         if (c.mediaItemCount > 0) return false
 
         val saved = playbackStateStore.load() ?: return false
-        val ids = saved.queueMediaIds.map { it.trim() }.filter { it.isNotBlank() }
-        if (ids.isEmpty()) return false
-        val items = buildMediaItemsFromIds(ids)
+        val persisted = saved.queue.map { it.copy(mediaId = it.mediaId.trim(), uri = it.uri.trim()) }
+            .filter { it.mediaId.isNotBlank() }
+        if (persisted.isEmpty()) return false
+        val items = buildMediaItemsFromPersistedItems(persisted)
         if (items.isEmpty()) return false
 
         val index = saved.currentIndex.coerceIn(0, items.lastIndex)
@@ -266,9 +268,9 @@ class PlayerConnection @Inject constructor(
         return true
     }
 
-    private suspend fun buildMediaItemsFromIds(ids: List<String>): List<MediaItem> {
-        return ids.mapNotNull { mediaId ->
-            val id = mediaId.trim()
+    private suspend fun buildMediaItemsFromPersistedItems(items: List<PersistedPlaybackQueueItem>): List<MediaItem> {
+        return items.mapNotNull { persisted ->
+            val id = persisted.mediaId.trim()
             if (id.isBlank()) return@mapNotNull null
             val track = runCatching { trackDao.getTrackByPathOnce(id) }.getOrNull()
             if (track != null) {
@@ -298,16 +300,57 @@ class PlayerConnection @Inject constructor(
                 )
                 MediaItemFactory.fromTrack(album, t)
             } else {
-                val uri = toPlayableUri(id)
-                val title = runCatching { File(id).nameWithoutExtension }.getOrNull().orEmpty().ifBlank { id }
-                val meta = MediaMetadata.Builder().setTitle(title).build()
+                val uri = toPlayableUri(persisted.uri.ifBlank { id })
+                val title = persisted.title.orEmpty().ifBlank { deriveTitleFromId(id) }
+                val meta = MediaMetadata.Builder()
+                    .setTitle(title)
+                    .setArtist(persisted.artist.orEmpty())
+                    .setAlbumTitle(persisted.albumTitle.orEmpty())
+                    .setArtworkUri(parsePossiblyEncodedUri(persisted.artworkUri))
+                    .setExtras(
+                        android.os.Bundle().apply {
+                            if (persisted.albumId != null) putLong("album_id", persisted.albumId)
+                            if (persisted.trackId != null) putLong("track_id", persisted.trackId)
+                            if (!persisted.rjCode.isNullOrBlank()) putString("rj_code", persisted.rjCode)
+                        }
+                    )
+                    .build()
                 MediaItem.Builder()
                     .setUri(uri)
                     .setMediaId(id)
+                    .setMimeType(persisted.mimeType)
                     .setMediaMetadata(meta)
                     .build()
             }
         }
+    }
+
+    private fun deriveTitleFromId(mediaId: String): String {
+        val id = mediaId.trim()
+        if (id.isBlank()) return ""
+        if (id.startsWith("http", ignoreCase = true)) {
+            val last = runCatching { id.toUri().lastPathSegment }.getOrNull().orEmpty().ifBlank { id.substringAfterLast('/') }
+            val clean = last.substringBefore('?').substringBefore('#')
+            val decoded = runCatching { URLDecoder.decode(clean, "UTF-8") }.getOrDefault(clean)
+            return decoded.substringBeforeLast('.', decoded).ifBlank { id }
+        }
+        return runCatching { File(id).nameWithoutExtension }.getOrDefault(id).ifBlank { id }
+    }
+
+    private fun parsePossiblyEncodedUri(value: String?): Uri? {
+        val raw = value.orEmpty().trim()
+        if (raw.isBlank()) return null
+        val decoded = if (
+            raw.startsWith("http%3A", ignoreCase = true) ||
+                raw.startsWith("https%3A", ignoreCase = true) ||
+                raw.startsWith("content%3A", ignoreCase = true) ||
+                raw.startsWith("file%3A", ignoreCase = true)
+        ) {
+            runCatching { URLDecoder.decode(raw, "UTF-8") }.getOrDefault(raw)
+        } else {
+            raw
+        }
+        return runCatching { decoded.toUri() }.getOrNull()
     }
 
     private fun toPlayableUri(path: String): Uri {
@@ -323,17 +366,38 @@ class PlayerConnection @Inject constructor(
         val c = controller ?: return
         val items = _queue.value.ifEmpty { (0 until c.mediaItemCount).map { idx -> c.getMediaItemAt(idx) } }
         if (items.isEmpty()) return
-        val ids = items.map { it.mediaId }.map { it.trim() }.filter { it.isNotBlank() }
-        if (ids.isEmpty()) return
+        val persistedQueue = items.mapNotNull { item ->
+            val mediaId = item.mediaId.trim()
+            if (mediaId.isBlank()) return@mapNotNull null
+            val uri = item.localConfiguration?.uri?.toString().orEmpty().trim().ifBlank { mediaId }
+            val meta = item.mediaMetadata
+            val extras = meta.extras
+            val albumId = if (extras?.containsKey("album_id") == true) extras.getLong("album_id") else null
+            val trackId = if (extras?.containsKey("track_id") == true) extras.getLong("track_id") else null
+            val rjCode = if (extras?.containsKey("rj_code") == true) extras.getString("rj_code") else null
+            PersistedPlaybackQueueItem(
+                mediaId = mediaId,
+                uri = uri,
+                mimeType = item.localConfiguration?.mimeType,
+                title = meta.title?.toString(),
+                artist = meta.artist?.toString(),
+                albumTitle = meta.albumTitle?.toString(),
+                artworkUri = meta.artworkUri?.toString(),
+                albumId = albumId,
+                trackId = trackId,
+                rjCode = rjCode
+            )
+        }
+        if (persistedQueue.isEmpty()) return
 
         val index0 = c.currentMediaItemIndex
-        val index = if (index0 in ids.indices) index0 else 0
+        val index = if (index0 in persistedQueue.indices) index0 else 0
         val speed = c.playbackParameters.speed.takeIf { it.isFinite() }?.coerceIn(0.5f, 2f) ?: 1f
         val pitch = c.playbackParameters.pitch.takeIf { it.isFinite() }?.coerceIn(0.5f, 2f) ?: 1f
 
         playbackStateStore.save(
-            PersistedPlaybackState(
-                queueMediaIds = ids,
+            PersistedPlaybackStateV2(
+                queue = persistedQueue,
                 currentIndex = index,
                 positionMs = c.currentPosition.coerceAtLeast(0L),
                 playWhenReady = c.playWhenReady,
