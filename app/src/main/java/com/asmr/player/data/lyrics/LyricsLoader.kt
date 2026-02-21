@@ -184,6 +184,10 @@ class LyricsLoader @Inject constructor(
         return (parsed.firstOrNull() ?: emptyList()).distinctBy { it.startMs to (it.endMs to it.text) }
     }
 
+    suspend fun fetchTextForPreview(url: String): String? {
+        return fetchText(url)
+    }
+
     private suspend fun fetchText(url: String): String? = withContext(Dispatchers.IO) {
         val lowerUrl = url.lowercase()
         val authStore = DlsiteAuthStore(context)
