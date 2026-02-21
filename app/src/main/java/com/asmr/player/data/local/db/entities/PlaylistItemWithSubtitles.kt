@@ -7,6 +7,7 @@ data class PlaylistItemWithSubtitles(
     val artist: String = "",
     val uri: String,
     val artworkUri: String = "",
+    val playbackArtworkUri: String = "",
     val itemOrder: Int = 0,
     val hasSubtitles: Boolean
 )
