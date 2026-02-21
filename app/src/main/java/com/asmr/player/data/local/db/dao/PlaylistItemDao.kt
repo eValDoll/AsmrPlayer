@@ -28,6 +28,12 @@ interface PlaylistItemDao {
                 NULLIF(a.coverUrl, ''),
                 NULLIF(pi.artworkUri, '')
             ) AS artworkUri,
+            COALESCE(
+                NULLIF(a.coverPath, ''),
+                NULLIF(a.coverUrl, ''),
+                NULLIF(pi.artworkUri, ''),
+                NULLIF(a.coverThumbPath, '')
+            ) AS playbackArtworkUri,
             pi.itemOrder,
             (
                 EXISTS(

@@ -63,7 +63,7 @@ fun PlaylistDetailScreen(
                 title = it.title,
                 artist = it.artist,
                 uri = it.uri,
-                artworkUri = it.artworkUri,
+                artworkUri = it.playbackArtworkUri.ifBlank { it.artworkUri },
                 itemOrder = it.itemOrder
             )
         }
@@ -108,7 +108,7 @@ fun PlaylistDetailScreen(
                         title = item.title,
                         artist = item.artist,
                         uri = item.uri,
-                        artworkUri = item.artworkUri,
+                        artworkUri = item.playbackArtworkUri.ifBlank { item.artworkUri },
                         itemOrder = item.itemOrder
                     )
                     PlaylistItemRow(

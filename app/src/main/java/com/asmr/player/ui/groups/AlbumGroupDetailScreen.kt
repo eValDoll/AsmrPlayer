@@ -337,9 +337,9 @@ private fun GroupTrackRow(
 
 private fun AlbumGroupTrackRow.toMediaItem(): MediaItem {
     val uri = toPlayableUri(trackPath)
-    val artwork = albumCoverThumbPath.orEmpty()
-        .ifBlank { albumCoverPath.orEmpty() }
+    val artwork = albumCoverPath.orEmpty()
         .ifBlank { albumCoverUrl.orEmpty() }
+        .ifBlank { albumCoverThumbPath.orEmpty() }
         .trim()
     val metadata = MediaMetadata.Builder()
         .setTitle(trackTitle)
