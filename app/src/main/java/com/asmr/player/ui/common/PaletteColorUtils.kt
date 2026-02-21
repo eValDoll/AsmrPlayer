@@ -13,20 +13,6 @@ internal fun pickBestColorInt(
     preferDarkBackground: Boolean,
     hintColorInt: Int? = null
 ): Int {
-    val candidates = listOfNotNull(
-        palette.mutedSwatch?.rgb,
-        palette.vibrantSwatch?.rgb,
-        palette.dominantSwatch?.rgb
-    )
-    val pickedFromPriority = candidates.firstOrNull { rgb ->
-        val hsl = FloatArray(3)
-        ColorUtils.colorToHSL(rgb, hsl)
-        val saturation = hsl[1]
-        val lightness = hsl[2]
-        saturation >= 0.08f && lightness in 0.08f..0.92f
-    }
-    if (pickedFromPriority != null) return pickedFromPriority
-
     val swatches = palette.swatches
     if (swatches.isEmpty()) {
         return palette.mutedSwatch?.rgb
@@ -35,15 +21,26 @@ internal fun pickBestColorInt(
             ?: fallbackColorInt
     }
 
+    val candidates = run {
+        val tmp = FloatArray(3)
+        swatches.filterNot { swatch ->
+            ColorUtils.colorToHSL(swatch.rgb, tmp)
+            val s = tmp[1]
+            val l = tmp[2]
+            l <= 0.06f || l >= 0.94f || s <= 0.08f
+        }
+    }
+    if (candidates.isEmpty()) return fallbackColorInt
+
     val targetLightness = if (preferDarkBackground) 0.48f else 0.40f
-    val maxPopulation = swatches.maxOfOrNull { it.population }?.coerceAtLeast(1) ?: 1
+    val maxPopulation = candidates.maxOfOrNull { it.population }?.coerceAtLeast(1) ?: 1
 
     var bestRgb: Int? = null
     var bestScore = -1f
     val hsl = FloatArray(3)
     val hintLab = if (hintColorInt != null) DoubleArray(3).also { ColorUtils.colorToLAB(hintColorInt, it) } else null
     val tmpLab = if (hintLab != null) DoubleArray(3) else null
-    for (swatch in swatches) {
+    for (swatch in candidates) {
         val rgb = swatch.rgb
         ColorUtils.colorToHSL(rgb, hsl)
         val saturation = hsl[1]
@@ -51,18 +48,32 @@ internal fun pickBestColorInt(
 
         val saturationScore = ((saturation - 0.12f) / 0.88f).coerceIn(0f, 1f)
         val lightnessScore = (1f - (abs(lightness - targetLightness) / 0.55f)).coerceIn(0f, 1f)
-        val populationScore = sqrt(swatch.population.toFloat() / maxPopulation.toFloat())
+        val populationScore = (swatch.population.toFloat() / maxPopulation.toFloat()).coerceIn(0f, 1f)
+        val popRatio = populationScore
 
-        val grayPenalty = if (saturation < 0.10f) 0.25f else 1f
+        val grayPenalty = when {
+            saturation < 0.06f -> 0.60f
+            saturation < 0.10f -> 0.75f
+            else -> 1f
+        }
         val extremePenalty = if (lightness < 0.04f || lightness > 0.96f) 0.2f else 1f
         val brightPenalty = when {
-            lightness > 0.82f -> 0.30f
-            lightness > 0.74f && saturation > 0.22f -> 0.55f
-            lightness > 0.68f && saturation > 0.55f -> 0.70f
+            lightness > 0.88f && popRatio < 0.35f -> 0.08f
+            lightness > 0.82f && popRatio < 0.35f -> 0.16f
+            lightness > 0.82f -> 0.35f
+            lightness > 0.74f && saturation > 0.22f -> 0.60f
+            lightness > 0.68f && saturation > 0.55f -> 0.72f
             else -> 1f
         }
 
-        var score = populationScore * (0.62f * saturationScore + 0.38f * lightnessScore) * grayPenalty * extremePenalty * brightPenalty
+        val textLikePenalty = when {
+            lightness > 0.90f && popRatio < 0.60f -> 0.12f
+            lightness > 0.86f && popRatio < 0.45f -> 0.25f
+            lightness > 0.78f && popRatio < 0.30f -> 0.45f
+            else -> 1f
+        }
+
+        var score = populationScore * (0.58f * saturationScore + 0.42f * lightnessScore) * grayPenalty * extremePenalty * brightPenalty * textLikePenalty
         if (hintLab != null && tmpLab != null) {
             ColorUtils.colorToLAB(rgb, tmpLab)
             val dl = (tmpLab[0] - hintLab[0]).toFloat()
@@ -70,7 +81,7 @@ internal fun pickBestColorInt(
             val db = (tmpLab[2] - hintLab[2]).toFloat()
             val dist = sqrt(dl * dl + da * da + db * db)
             val hintScore = (1f - (dist / 55f)).coerceIn(0f, 1f)
-            score *= (0.65f + 0.35f * hintScore)
+            score *= (0.80f + 0.20f * hintScore)
         }
         if (score > bestScore) {
             bestScore = score
@@ -90,9 +101,9 @@ internal fun adjustHslForUi(hsl: FloatArray, preferDarkBackground: Boolean) {
     val lightness = hsl[2].coerceIn(0f, 1f)
 
     val boostedSaturation = when {
-        saturation < 0.14f && lightness in 0.15f..0.9f -> 0.34f
-        saturation < 0.28f -> 0.38f
-        saturation < 0.5f -> (saturation * 1.12f).coerceAtMost(0.72f)
+        saturation < 0.10f -> saturation
+        saturation < 0.28f -> (saturation * 1.30f).coerceAtMost(0.44f)
+        saturation < 0.5f -> (saturation * 1.12f).coerceAtMost(0.70f)
         else -> saturation.coerceAtMost(0.9f)
     }
 
@@ -140,8 +151,31 @@ internal fun adjustHslForUi(hsl: FloatArray, preferDarkBackground: Boolean) {
 
     val adjustedSaturation = if (isNeonLike) boostedSaturation.coerceAtMost(0.72f) else boostedSaturation
 
-    hsl[1] = adjustedSaturation
-    hsl[2] = adjustedLightness
+    var finalSaturation = adjustedSaturation
+    var finalLightness = adjustedLightness
+    val brightThreshold = if (preferDarkBackground) 0.54f else 0.50f
+    if (finalLightness > brightThreshold && finalSaturation > 0.18f) {
+        val t = ((finalLightness - brightThreshold) / (1f - brightThreshold)).coerceIn(0f, 1f)
+        val satScale = (1f - 0.30f * t).coerceIn(0.64f, 1f)
+        finalSaturation = (finalSaturation * satScale).coerceAtMost(0.70f)
+        finalLightness = finalLightness.coerceAtMost(if (preferDarkBackground) 0.54f else 0.48f)
+    }
+
+    val darken = run {
+        val pivot = if (preferDarkBackground) 0.34f else 0.26f
+        val t = ((finalLightness - pivot) / (1f - pivot)).coerceIn(0f, 1f)
+        val smooth = t * t * (3f - 2f * t)
+        val minDarken = if (preferDarkBackground) 0.020f else 0.015f
+        val maxDarken = if (preferDarkBackground) 0.095f else 0.075f
+        minDarken + (maxDarken - minDarken) * smooth
+    }
+    finalLightness = (finalLightness - darken).coerceIn(
+        minimumValue = if (preferDarkBackground) 0.16f else 0.10f,
+        maximumValue = if (preferDarkBackground) 0.62f else 0.54f
+    )
+
+    hsl[1] = finalSaturation
+    hsl[2] = finalLightness
 }
 
 internal fun computeCenterWeightedHintColorInt(bitmap: android.graphics.Bitmap, centerRegionRatio: Float): Int? {
@@ -167,6 +201,7 @@ internal fun computeCenterWeightedHintColorInt(bitmap: android.graphics.Bitmap, 
     var sumR = 0f
     var sumG = 0f
     var sumB = 0f
+    val tmpHsl = FloatArray(3)
 
     val step = if (regionW * regionH <= 24_000) 1 else 2
     for (y in 0 until regionH step step) {
@@ -176,6 +211,11 @@ internal fun computeCenterWeightedHintColorInt(bitmap: android.graphics.Bitmap, 
             val argb = pixels[row + x]
             val a = (argb ushr 24) and 0xFF
             if (a < 32) continue
+            ColorUtils.colorToHSL(argb, tmpHsl)
+            val s = tmpHsl[1]
+            val l = tmpHsl[2]
+            if (l < 0.03f || l > 0.93f) continue
+            if (l > 0.78f && s < 0.10f) continue
 
             val xn = (x - cx) / (cx.coerceAtLeast(1f))
             val w = exp(-(xn * xn + yn * yn) * inv2Sigma2)

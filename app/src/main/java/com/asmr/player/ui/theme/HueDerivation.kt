@@ -38,7 +38,9 @@ internal fun deriveHuePalette(
             ThemeMode.Dark -> 0.05f
             ThemeMode.SoftDark -> 0.04f
         }
-        hsl[1] = (hsl[1] + saturationBoost).coerceIn(0f, 1f)
+        if (hsl[1] >= 0.12f) {
+            hsl[1] = (hsl[1] + saturationBoost).coerceIn(0f, 1f)
+        }
         hsl[2] = (hsl[2] + lightnessShift).coerceIn(0f, 1f)
         clampPrimaryHslForMode(hsl, mode)
         val target = Color(ColorUtils.HSLToColor(hsl))
@@ -83,7 +85,7 @@ internal fun clampPrimaryHslForMode(hsl: FloatArray, mode: ThemeMode) {
         ThemeMode.Dark -> 0.80f
         ThemeMode.SoftDark -> 0.78f
     }
-    hsl[1] = hsl[1].coerceIn(0.10f, saturationMax)
+    hsl[1] = hsl[1].coerceIn(0f, saturationMax)
     hsl[2] = hsl[2].coerceIn(lightnessMin, lightnessMax)
 }
 
