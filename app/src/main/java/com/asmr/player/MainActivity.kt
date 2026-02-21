@@ -431,8 +431,8 @@ fun MainContainer(
         activity?.let { act ->
             if (isPhone) {
                 if (currentRoute == "now_playing" || currentRoute == "lyrics") {
-                    // 手机端在播放页和歌词页允许横屏 (由传感器决定)
-                    act.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR
+                    // 手机端在播放页和歌词页允许横屏（遵守系统自动旋转/旋转锁定设置）
+                    act.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_FULL_USER
                 } else {
                     // 手机端其他页面强制锁定竖屏
                     act.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT

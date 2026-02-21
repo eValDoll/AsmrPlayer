@@ -271,7 +271,7 @@ fun NowPlayingScreen(
                                 metadata = metadata,
                                 viewModel = viewModel,
                                 onOpenLyrics = onOpenLyrics,
-                                edgeBlendEnabled = isLandscape && !isVideo,
+                                edgeBlendEnabled = false,
                                 edgeBlendColor = if (coverBackgroundEnabled) accentColor else colorScheme.background,
                                 videoBackdropColor = videoBackdropColor
                             )
@@ -467,7 +467,7 @@ fun NowPlayingScreen(
                                 metadata = metadata,
                                 viewModel = viewModel,
                                 onOpenLyrics = onOpenLyrics,
-                                edgeBlendEnabled = isLandscape && !isVideo,
+                                edgeBlendEnabled = false,
                                 edgeBlendColor = if (coverBackgroundEnabled) accentColor else colorScheme.background,
                                 videoBackdropColor = videoBackdropColor
                             )
@@ -697,7 +697,7 @@ fun NowPlayingScreen(
                                 metadata = metadata,
                                 viewModel = viewModel,
                                 onOpenLyrics = onOpenLyrics,
-                                edgeBlendEnabled = isLandscape && !isVideo,
+                                edgeBlendEnabled = false,
                                 edgeBlendColor = if (coverBackgroundEnabled) accentColor else colorScheme.background,
                                 videoBackdropColor = videoBackdropColor
                             )
