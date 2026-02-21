@@ -26,6 +26,7 @@ import com.asmr.player.data.remote.download.DownloadManager
 import com.asmr.player.data.remote.scraper.DLSiteScraper
 import com.asmr.player.data.remote.scraper.DlsiteRecommendedWork
 import com.asmr.player.data.remote.scraper.DlsiteRecommendations
+import com.asmr.player.data.lyrics.LyricsLoader
 import com.asmr.player.domain.model.Album
 import com.asmr.player.domain.model.Track
 import com.asmr.player.util.OnlineLyricsStore
@@ -65,6 +66,7 @@ class AlbumDetailViewModel @Inject constructor(
     private val dlsiteProductInfoClient: DlsiteProductInfoClient,
     private val dlsitePlayWorkClient: DlsitePlayWorkClient,
     private val downloadManager: DownloadManager,
+    private val lyricsLoader: LyricsLoader,
     private val syncCoordinator: SyncCoordinator,
     val messageManager: MessageManager,
     @ApplicationContext private val context: Context
@@ -117,6 +119,12 @@ class AlbumDetailViewModel @Inject constructor(
     fun clearTreeState(stateKey: String) {
         treeExpandedByKey.remove(stateKey)
         treeInitializedKeys.remove(stateKey)
+    }
+
+    suspend fun loadOnlineTextPreview(url: String): String? {
+        val u = url.trim()
+        if (u.isBlank()) return null
+        return lyricsLoader.fetchTextForPreview(u)
     }
 
     fun getListScrollPosition(stateKey: String): Pair<Int, Int> {

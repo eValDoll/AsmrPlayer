@@ -476,6 +476,8 @@ fun AlbumDetailScreen(
                         title = localPreviewFile!!.title,
                         absolutePath = localPreviewFile!!.absolutePath,
                         fileType = localPreviewFile!!.fileType,
+                        messageManager = viewModel.messageManager,
+                        loadOnlineText = viewModel::loadOnlineTextPreview,
                         onDismiss = { localPreviewFile = null }
                     )
                 }
@@ -485,6 +487,8 @@ fun AlbumDetailScreen(
                         title = onlinePreviewFile!!.title,
                         absolutePath = onlinePreviewFile!!.url ?: "",
                         fileType = onlinePreviewFile!!.fileType,
+                        messageManager = viewModel.messageManager,
+                        loadOnlineText = viewModel::loadOnlineTextPreview,
                         onDismiss = { onlinePreviewFile = null }
                     )
                 }
@@ -1729,7 +1733,7 @@ private sealed class LocalTreeUiEntry {
     ) : LocalTreeUiEntry()
 }
 
-private enum class TreeFileType {
+internal enum class TreeFileType {
     Audio,
     Video,
     Image,
@@ -1739,11 +1743,11 @@ private enum class TreeFileType {
     Other
 }
 
-private fun treeFileTypeForName(fileName: String): TreeFileType {
+internal fun treeFileTypeForName(fileName: String): TreeFileType {
     val ext = fileName.substringAfterLast('.', "").lowercase()
     return when (ext) {
         "mp3", "wav", "flac", "m4a", "ogg", "aac", "opus" -> TreeFileType.Audio
-        "mp4", "mkv", "webm" -> TreeFileType.Video
+        "mp4", "mkv", "webm", "mov", "m4v" -> TreeFileType.Video
         "jpg", "jpeg", "png", "webp", "gif" -> TreeFileType.Image
         "lrc", "srt", "vtt" -> TreeFileType.Subtitle
         "txt", "md", "nfo" -> TreeFileType.Text
@@ -1752,7 +1756,7 @@ private fun treeFileTypeForName(fileName: String): TreeFileType {
     }
 }
 
-private fun treeFileTypeForNode(title: String, url: String?): TreeFileType {
+internal fun treeFileTypeForNode(title: String, url: String?): TreeFileType {
     val t = title.trim()
     val fromTitle = treeFileTypeForName(t)
 
@@ -3897,6 +3901,8 @@ private fun FilePreviewDialog(
     title: String,
     absolutePath: String,
     fileType: TreeFileType,
+    messageManager: MessageManager,
+    loadOnlineText: (suspend (String) -> String?)? = null,
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
@@ -3972,20 +3978,45 @@ private fun FilePreviewDialog(
     }
     
     fun openWithOtherApp() {
-        val intent = Intent(Intent.ACTION_VIEW).apply {
-            val uri = if (currentPath.startsWith("content://")) {
-                Uri.parse(currentPath)
-            } else {
-                androidx.core.content.FileProvider.getUriForFile(
-                    context,
-                    "${context.packageName}.fileprovider",
-                    File(currentPath)
-                )
-            }
-            setDataAndType(uri, context.contentResolver.getType(uri) ?: "*/*")
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        val path = currentPath.trim()
+        if (path.isBlank()) {
+            messageManager.showError("无法打开：路径为空")
+            return
         }
-        runCatching { context.startActivity(Intent.createChooser(intent, "打开文件")) }
+
+        runCatching {
+            val uri = when {
+                path.startsWith("content://", ignoreCase = true) -> Uri.parse(path)
+                path.startsWith("http://", ignoreCase = true) || path.startsWith("https://", ignoreCase = true) -> Uri.parse(path)
+                else -> {
+                    val f = File(path)
+                    if (!f.exists()) throw java.io.FileNotFoundException(path)
+                    androidx.core.content.FileProvider.getUriForFile(
+                        context,
+                        "${context.packageName}.fileprovider",
+                        f
+                    )
+                }
+            }
+
+            val mimeType = runCatching { context.contentResolver.getType(uri) }.getOrNull()
+                ?: currentName.substringAfterLast('.', "").lowercase().takeIf { it.isNotBlank() }?.let { ext ->
+                    android.webkit.MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext)
+                }
+                ?: "*/*"
+
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, mimeType)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            context.startActivity(Intent.createChooser(intent, "打开文件"))
+        }.onFailure { t ->
+            when (t) {
+                is android.content.ActivityNotFoundException -> messageManager.showInfo("未找到可打开的应用")
+                is java.io.FileNotFoundException -> messageManager.showError("文件不存在")
+                else -> messageManager.showError("无法打开该文件")
+            }
+        }
     }
     
     Dialog(
@@ -4110,7 +4141,12 @@ private fun FilePreviewDialog(
                                                 input.bufferedReader().readText()
                                             }
                                         } else if (currentPath.startsWith("http")) {
-                                            "在线文件暂不支持内容预览，请使用外部应用打开"
+                                            val loader = loadOnlineText
+                                            if (loader != null) {
+                                                loader(currentPath)?.takeIf { it.isNotBlank() } ?: "内容为空"
+                                            } else {
+                                                "在线文件暂不支持内容预览，请使用外部应用打开"
+                                            }
                                         } else {
                                             java.io.File(currentPath).readText()
                                         }
