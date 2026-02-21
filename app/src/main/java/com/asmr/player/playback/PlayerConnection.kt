@@ -2,15 +2,23 @@ package com.asmr.player.playback
 
 import android.content.ComponentName
 import android.content.Context
+import android.net.Uri
 import android.os.SystemClock
 import androidx.core.content.ContextCompat
+import androidx.core.net.toUri
+import androidx.media3.common.MediaItem
+import androidx.media3.common.MediaMetadata
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
+import com.asmr.player.data.local.db.dao.AlbumDao
+import com.asmr.player.data.local.db.dao.TrackDao
 import com.asmr.player.data.repository.TrackSliceRepository
 import com.asmr.player.data.settings.SettingsRepository
 import com.asmr.player.service.PlaybackService
+import com.asmr.player.domain.model.Album
+import com.asmr.player.domain.model.Track
 import com.asmr.player.util.MessageManager
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
@@ -28,6 +36,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
+import java.io.File
 import java.util.concurrent.CancellationException
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
@@ -43,7 +52,10 @@ class PlayerConnection @Inject constructor(
     private val settingsRepository: SettingsRepository,
     private val trackSliceRepository: TrackSliceRepository,
     private val slicePlaybackController: SlicePlaybackController,
-    private val messageManager: MessageManager
+    private val messageManager: MessageManager,
+    private val playbackStateStore: PlaybackStateStore,
+    private val trackDao: TrackDao,
+    private val albumDao: AlbumDao
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val _snapshot = MutableStateFlow(PlaybackSnapshot())
@@ -57,6 +69,7 @@ class PlayerConnection @Inject constructor(
     private var lastErrorKey: String = ""
     private val sliceLoopEngine = SliceLoopEngine()
     private val currentSlices = MutableStateFlow<List<Slice>>(emptyList())
+    private var didRestorePlaybackState: Boolean = false
 
     init {
         scope.launch {
@@ -106,6 +119,40 @@ class PlayerConnection @Inject constructor(
                     applySliceLoopIfNeeded(c)
                 }
                 delay(250)
+            }
+        }
+        scope.launch {
+            queue
+                .map { items -> items.map { it.mediaId } }
+                .distinctUntilChanged()
+                .collect {
+                    savePlaybackState()
+                }
+        }
+        scope.launch {
+            snapshot
+                .map { s ->
+                    PlaybackStateKey(
+                        currentMediaId = s.currentMediaItem?.mediaId.orEmpty(),
+                        isPlaying = s.isPlaying,
+                        repeatMode = s.repeatMode,
+                        shuffleEnabled = s.shuffleEnabled,
+                        speed = s.playbackSpeed,
+                        pitch = s.playbackPitch
+                    )
+                }
+                .distinctUntilChanged()
+                .collect {
+                    savePlaybackState()
+                }
+        }
+        scope.launch {
+            while (isActive) {
+                delay(5_000)
+                val c = controller ?: continue
+                if (c.isPlaying || c.playWhenReady) {
+                    savePlaybackState()
+                }
             }
         }
     }
@@ -171,8 +218,11 @@ class PlayerConnection @Inject constructor(
         _snapshot.value = c.toSnapshot(isConnected = true, audioSessionId = _snapshot.value.audioSessionId)
         updateQueue()
 
-        val mode = runCatching { settingsRepository.playMode.first() }.getOrDefault(0)
-        applyPlayModeToController(c, mode)
+        val restored = restorePlaybackStateIfNeeded(c)
+        if (!restored) {
+            val mode = runCatching { settingsRepository.playMode.first() }.getOrDefault(0)
+            applyPlayModeToController(c, mode)
+        }
         
         try {
             val cmd = androidx.media3.session.SessionCommand("GET_AUDIO_SESSION_ID", android.os.Bundle.EMPTY)
@@ -186,6 +236,114 @@ class PlayerConnection @Inject constructor(
         } catch (e: Exception) {
             e.printStackTrace()
         }
+    }
+
+    private suspend fun restorePlaybackStateIfNeeded(c: MediaController): Boolean {
+        if (didRestorePlaybackState) return false
+        didRestorePlaybackState = true
+        if (c.mediaItemCount > 0) return false
+
+        val saved = playbackStateStore.load() ?: return false
+        val ids = saved.queueMediaIds.map { it.trim() }.filter { it.isNotBlank() }
+        if (ids.isEmpty()) return false
+        val items = buildMediaItemsFromIds(ids)
+        if (items.isEmpty()) return false
+
+        val index = saved.currentIndex.coerceIn(0, items.lastIndex)
+        val pos = saved.positionMs.coerceAtLeast(0L)
+        val speed = saved.speed.takeIf { it.isFinite() }?.coerceIn(0.5f, 2f) ?: 1f
+        val pitch = saved.pitch.takeIf { it.isFinite() }?.coerceIn(0.5f, 2f) ?: 1f
+
+        c.setMediaItems(items, index, pos)
+        c.repeatMode = saved.repeatMode
+        c.shuffleModeEnabled = saved.shuffleEnabled
+        c.setPlaybackParameters(PlaybackParameters(speed, pitch))
+        c.prepare()
+        c.playWhenReady = false
+
+        _queue.value = items
+        _snapshot.value = c.toSnapshot(isConnected = true, audioSessionId = _snapshot.value.audioSessionId)
+        return true
+    }
+
+    private suspend fun buildMediaItemsFromIds(ids: List<String>): List<MediaItem> {
+        return ids.mapNotNull { mediaId ->
+            val id = mediaId.trim()
+            if (id.isBlank()) return@mapNotNull null
+            val track = runCatching { trackDao.getTrackByPathOnce(id) }.getOrNull()
+            if (track != null) {
+                val albumEntity = runCatching { albumDao.getAlbumById(track.albumId) }.getOrNull()
+                val album = Album(
+                    id = albumEntity?.id ?: 0L,
+                    title = albumEntity?.title.orEmpty(),
+                    path = albumEntity?.path.orEmpty(),
+                    localPath = albumEntity?.localPath,
+                    downloadPath = albumEntity?.downloadPath,
+                    circle = albumEntity?.circle.orEmpty(),
+                    cv = albumEntity?.cv.orEmpty(),
+                    tags = albumEntity?.tags?.split(",")?.filter { it.isNotBlank() }.orEmpty(),
+                    coverUrl = albumEntity?.coverUrl.orEmpty(),
+                    coverPath = albumEntity?.coverPath.orEmpty(),
+                    coverThumbPath = albumEntity?.coverThumbPath.orEmpty(),
+                    workId = albumEntity?.workId.orEmpty(),
+                    rjCode = albumEntity?.rjCode.orEmpty().ifBlank { albumEntity?.workId.orEmpty() }
+                )
+                val t = Track(
+                    id = track.id,
+                    albumId = track.albumId,
+                    title = track.title,
+                    path = track.path,
+                    duration = track.duration,
+                    group = track.group
+                )
+                MediaItemFactory.fromTrack(album, t)
+            } else {
+                val uri = toPlayableUri(id)
+                val title = runCatching { File(id).nameWithoutExtension }.getOrNull().orEmpty().ifBlank { id }
+                val meta = MediaMetadata.Builder().setTitle(title).build()
+                MediaItem.Builder()
+                    .setUri(uri)
+                    .setMediaId(id)
+                    .setMediaMetadata(meta)
+                    .build()
+            }
+        }
+    }
+
+    private fun toPlayableUri(path: String): Uri {
+        val trimmed = path.trim()
+        return if (trimmed.startsWith("http", ignoreCase = true) || trimmed.startsWith("content://")) {
+            trimmed.toUri()
+        } else {
+            Uri.fromFile(File(trimmed))
+        }
+    }
+
+    private suspend fun savePlaybackState() {
+        val c = controller ?: return
+        val items = _queue.value.ifEmpty { (0 until c.mediaItemCount).map { idx -> c.getMediaItemAt(idx) } }
+        if (items.isEmpty()) return
+        val ids = items.map { it.mediaId }.map { it.trim() }.filter { it.isNotBlank() }
+        if (ids.isEmpty()) return
+
+        val index0 = c.currentMediaItemIndex
+        val index = if (index0 in ids.indices) index0 else 0
+        val speed = c.playbackParameters.speed.takeIf { it.isFinite() }?.coerceIn(0.5f, 2f) ?: 1f
+        val pitch = c.playbackParameters.pitch.takeIf { it.isFinite() }?.coerceIn(0.5f, 2f) ?: 1f
+
+        playbackStateStore.save(
+            PersistedPlaybackState(
+                queueMediaIds = ids,
+                currentIndex = index,
+                positionMs = c.currentPosition.coerceAtLeast(0L),
+                playWhenReady = c.playWhenReady,
+                repeatMode = c.repeatMode,
+                shuffleEnabled = c.shuffleModeEnabled,
+                speed = speed,
+                pitch = pitch,
+                savedAtEpochMs = System.currentTimeMillis()
+            )
+        )
     }
 
     fun getControllerOrNull(): MediaController? = controller
@@ -353,6 +511,15 @@ private fun Player.toSnapshot(isConnected: Boolean, audioSessionId: Int): Playba
         audioSessionId = audioSessionId
     )
 }
+
+private data class PlaybackStateKey(
+    val currentMediaId: String,
+    val isPlaying: Boolean,
+    val repeatMode: Int,
+    val shuffleEnabled: Boolean,
+    val speed: Float,
+    val pitch: Float
+)
 
 private suspend fun awaitMediaController(
     context: Context,
