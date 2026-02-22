@@ -1,7 +1,9 @@
 package com.asmr.player.data.remote.api
 
 import com.google.gson.annotations.SerializedName
+import com.asmr.player.data.remote.NetworkHeaders
 import retrofit2.http.GET
+import retrofit2.http.Header
 import retrofit2.http.Path
 import retrofit2.http.Query
 
@@ -11,14 +13,21 @@ interface AsmrOneApi {
         @Path("keyword") keyword: String,
         @Query("page") page: Int = 1,
         @Query("order") order: String = "release",
-        @Query("sort") sort: String = "desc"
+        @Query("sort") sort: String = "desc",
+        @Header(NetworkHeaders.HEADER_SILENT_IO_ERROR) silentIoError: String? = null
     ): SearchResponse
 
     @GET("work/{workId}")
-    suspend fun getWorkDetails(@Path("workId") workId: String): WorkDetailsResponse
+    suspend fun getWorkDetails(
+        @Path("workId") workId: String,
+        @Header(NetworkHeaders.HEADER_SILENT_IO_ERROR) silentIoError: String? = null
+    ): WorkDetailsResponse
 
     @GET("tracks/{workId}")
-    suspend fun getTracks(@Path("workId") workId: String): List<AsmrOneTrackNodeResponse>
+    suspend fun getTracks(
+        @Path("workId") workId: String,
+        @Header(NetworkHeaders.HEADER_SILENT_IO_ERROR) silentIoError: String? = null
+    ): List<AsmrOneTrackNodeResponse>
 
     companion object {
         const val BASE_URL = "https://api.asmr.one/api/"

@@ -38,12 +38,14 @@ object NetworkModule {
         val asmrHeaders = Interceptor { chain ->
             val request = chain.request()
             val host = request.url.host.lowercase()
+            val silentIoError = request.header(NetworkHeaders.HEADER_SILENT_IO_ERROR) == NetworkHeaders.SILENT_IO_ERROR_ON
             
             val builder = request.newBuilder()
-                .header(
-                    "User-Agent",
-                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-                )
+                .header("User-Agent", NetworkHeaders.USER_AGENT)
+
+            if (silentIoError) {
+                builder.removeHeader(NetworkHeaders.HEADER_SILENT_IO_ERROR)
+            }
 
             if (host.contains("asmr.one")) {
                 builder.header("Origin", "https://www.asmr.one")
@@ -72,7 +74,7 @@ object NetworkModule {
             } catch (e: IOException) {
                 val canceled = runCatching { chain.call().isCanceled() }.getOrDefault(false)
                 val canceledByMessage = e.message?.contains("canceled", ignoreCase = true) == true
-                if (!canceled && !canceledByMessage) {
+                if (!silentIoError && !canceled && !canceledByMessage) {
                     messageManager.showError("网络连接失败，请检查网络")
                 }
                 throw e
