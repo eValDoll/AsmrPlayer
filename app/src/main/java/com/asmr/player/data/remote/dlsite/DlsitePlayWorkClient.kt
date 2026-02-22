@@ -2,6 +2,7 @@ package com.asmr.player.data.remote.dlsite
 
 import android.content.Context
 import android.util.Log
+import com.asmr.player.data.remote.NetworkHeaders
 import com.asmr.player.data.remote.api.AsmrOneTrackNodeResponse
 import com.asmr.player.data.remote.auth.DlsiteAuthStore
 import com.asmr.player.util.DlsiteWorkNo
@@ -199,6 +200,7 @@ class DlsitePlayWorkClient @Inject constructor(
             .header("Referer", "https://play.dlsite.com/")
             .header("Accept", "application/json, text/plain, */*")
             .header("User-Agent", UA)
+            .header(NetworkHeaders.HEADER_SILENT_IO_ERROR, NetworkHeaders.SILENT_IO_ERROR_ON)
             .get()
             .build()
 
@@ -240,6 +242,7 @@ class DlsitePlayWorkClient @Inject constructor(
             .header("Referer", "https://play.dlsite.com/")
             .header("Accept", "application/json, text/plain, */*")
             .header("User-Agent", UA)
+            .header(NetworkHeaders.HEADER_SILENT_IO_ERROR, NetworkHeaders.SILENT_IO_ERROR_ON)
             .get()
             .build()
 

@@ -5,6 +5,8 @@ import java.util.Locale
 object NetworkHeaders {
     const val USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     const val REFERER_DLSITE = "https://www.dlsite.com/"
+    const val HEADER_SILENT_IO_ERROR = "X-Silent-IO-Error"
+    const val SILENT_IO_ERROR_ON = "1"
 
     val ACCEPT_LANGUAGE: String
         get() = getAcceptLanguage()

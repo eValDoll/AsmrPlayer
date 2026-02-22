@@ -634,7 +634,18 @@ class AlbumDetailViewModel @Inject constructor(
             } catch (e: Exception) {
                 asmrOneAttemptedRj.remove(keyRj)
                 val updated = (_uiState.value as? AlbumDetailUiState.Success)?.model ?: return@launch
-                _uiState.value = AlbumDetailUiState.Success(model = updated.copy(isLoadingAsmrOne = false))
+                val updatedKey = updated.rjCode.trim().uppercase()
+                if (updatedKey.equals(keyRj, ignoreCase = true)) {
+                    if (updated.asmrOneTree.isEmpty()) {
+                        val errMsg = e.message?.trim().orEmpty().ifBlank { "未知错误" }
+                        messageManager.showError("在线资源加载失败：$errMsg")
+                    }
+                    if (updated.isLoadingAsmrOne) {
+                        _uiState.value = AlbumDetailUiState.Success(model = updated.copy(isLoadingAsmrOne = false))
+                    }
+                } else if (updated.isLoadingAsmrOne) {
+                    _uiState.value = AlbumDetailUiState.Success(model = updated.copy(isLoadingAsmrOne = false))
+                }
             }
         }
     }

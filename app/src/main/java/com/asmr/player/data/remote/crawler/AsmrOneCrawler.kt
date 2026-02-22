@@ -1,5 +1,6 @@
 package com.asmr.player.data.remote.crawler
 
+import com.asmr.player.data.remote.NetworkHeaders
 import com.asmr.player.data.remote.api.Asmr100Api
 import com.asmr.player.data.remote.api.Asmr200Api
 import com.asmr.player.data.remote.api.AsmrOneApi
@@ -25,7 +26,9 @@ class AsmrOneCrawler @Inject constructor(
 ) {
     suspend fun search(keyword: String, page: Int = 1): SearchResponse {
         val normalized = keyword.trim()
-        val primary = runCatching { api.search(keyword = normalized, page = page) }.getOrNull()
+        val primary = runCatching {
+            api.search(keyword = normalized, page = page, silentIoError = NetworkHeaders.SILENT_IO_ERROR_ON)
+        }.getOrNull()
         if (primary != null && primary.works.isNotEmpty()) return primary
 
         val isRj = normalized.startsWith("RJ", ignoreCase = true)
@@ -34,7 +37,13 @@ class AsmrOneCrawler @Inject constructor(
         val preferredSite = runCatching { settingsRepository.asmrOneSite.first() }.getOrDefault(200)
         val backupApis = backupApisInOrder(preferredSite, asmr100Api, asmr200Api, asmr300Api)
         for (backupApi in backupApis) {
-            val from = runCatching { backupApi.search(keyword = " $normalized", page = page) }.getOrNull()
+            val from = runCatching {
+                backupApi.search(
+                    keyword = " $normalized",
+                    page = page,
+                    silentIoError = NetworkHeaders.SILENT_IO_ERROR_ON
+                )
+            }.getOrNull()
             val mapped = mapBackupWorks(from?.works.orEmpty(), normalized)
             if (mapped.isNotEmpty()) {
                 return SearchResponse(
@@ -51,10 +60,12 @@ class AsmrOneCrawler @Inject constructor(
         val normalized = workId.trim()
         val preferredSite = runCatching { settingsRepository.asmrOneSite.first() }.getOrDefault(200)
         val backupApis = backupApisInOrder(preferredSite, asmr100Api, asmr200Api, asmr300Api)
-        return runCatching { api.getWorkDetails(normalized) }.getOrElse {
+        return runCatching { api.getWorkDetails(normalized, silentIoError = NetworkHeaders.SILENT_IO_ERROR_ON) }.getOrElse {
             var last: Throwable = it
             for (backupApi in backupApis) {
-                val result = runCatching { backupApi.getWorkDetails(normalized) }.getOrElse { e ->
+                val result = runCatching {
+                    backupApi.getWorkDetails(normalized, silentIoError = NetworkHeaders.SILENT_IO_ERROR_ON)
+                }.getOrElse { e ->
                     last = e
                     null
                 }
@@ -68,10 +79,12 @@ class AsmrOneCrawler @Inject constructor(
         val normalized = workId.trim()
         val preferredSite = runCatching { settingsRepository.asmrOneSite.first() }.getOrDefault(200)
         val backupApis = backupApisInOrder(preferredSite, asmr100Api, asmr200Api, asmr300Api)
-        return runCatching { api.getTracks(normalized) }.getOrElse {
+        return runCatching { api.getTracks(normalized, silentIoError = NetworkHeaders.SILENT_IO_ERROR_ON) }.getOrElse {
             var last: Throwable = it
             for (backupApi in backupApis) {
-                val result = runCatching { backupApi.getTracks(normalized) }.getOrElse { e ->
+                val result = runCatching {
+                    backupApi.getTracks(normalized, silentIoError = NetworkHeaders.SILENT_IO_ERROR_ON)
+                }.getOrElse { e ->
                     last = e
                     null
                 }
@@ -83,27 +96,40 @@ class AsmrOneCrawler @Inject constructor(
 }
 
 private interface AsmrBackupApi {
-    suspend fun search(keyword: String, page: Int = 1): com.asmr.player.data.remote.api.Asmr200SearchResponse
-    suspend fun getWorkDetails(workId: String): WorkDetailsResponse
-    suspend fun getTracks(workId: String): List<AsmrOneTrackNodeResponse>
+    suspend fun search(
+        keyword: String,
+        page: Int = 1,
+        silentIoError: String? = null
+    ): com.asmr.player.data.remote.api.Asmr200SearchResponse
+    suspend fun getWorkDetails(workId: String, silentIoError: String? = null): WorkDetailsResponse
+    suspend fun getTracks(workId: String, silentIoError: String? = null): List<AsmrOneTrackNodeResponse>
 }
 
 private fun Asmr100Api.asBackup(): AsmrBackupApi = object : AsmrBackupApi {
-    override suspend fun search(keyword: String, page: Int) = this@asBackup.search(keyword = keyword, page = page)
-    override suspend fun getWorkDetails(workId: String) = this@asBackup.getWorkDetails(workId)
-    override suspend fun getTracks(workId: String) = this@asBackup.getTracks(workId)
+    override suspend fun search(keyword: String, page: Int, silentIoError: String?) =
+        this@asBackup.search(keyword = keyword, page = page, silentIoError = silentIoError)
+    override suspend fun getWorkDetails(workId: String, silentIoError: String?) =
+        this@asBackup.getWorkDetails(workId, silentIoError = silentIoError)
+    override suspend fun getTracks(workId: String, silentIoError: String?) =
+        this@asBackup.getTracks(workId, silentIoError = silentIoError)
 }
 
 private fun Asmr200Api.asBackup(): AsmrBackupApi = object : AsmrBackupApi {
-    override suspend fun search(keyword: String, page: Int) = this@asBackup.search(keyword = keyword, page = page)
-    override suspend fun getWorkDetails(workId: String) = this@asBackup.getWorkDetails(workId)
-    override suspend fun getTracks(workId: String) = this@asBackup.getTracks(workId)
+    override suspend fun search(keyword: String, page: Int, silentIoError: String?) =
+        this@asBackup.search(keyword = keyword, page = page, silentIoError = silentIoError)
+    override suspend fun getWorkDetails(workId: String, silentIoError: String?) =
+        this@asBackup.getWorkDetails(workId, silentIoError = silentIoError)
+    override suspend fun getTracks(workId: String, silentIoError: String?) =
+        this@asBackup.getTracks(workId, silentIoError = silentIoError)
 }
 
 private fun Asmr300Api.asBackup(): AsmrBackupApi = object : AsmrBackupApi {
-    override suspend fun search(keyword: String, page: Int) = this@asBackup.search(keyword = keyword, page = page)
-    override suspend fun getWorkDetails(workId: String) = this@asBackup.getWorkDetails(workId)
-    override suspend fun getTracks(workId: String) = this@asBackup.getTracks(workId)
+    override suspend fun search(keyword: String, page: Int, silentIoError: String?) =
+        this@asBackup.search(keyword = keyword, page = page, silentIoError = silentIoError)
+    override suspend fun getWorkDetails(workId: String, silentIoError: String?) =
+        this@asBackup.getWorkDetails(workId, silentIoError = silentIoError)
+    override suspend fun getTracks(workId: String, silentIoError: String?) =
+        this@asBackup.getTracks(workId, silentIoError = silentIoError)
 }
 
 private fun backupApisInOrder(
