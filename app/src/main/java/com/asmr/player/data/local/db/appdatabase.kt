@@ -17,6 +17,7 @@ import com.asmr.player.data.local.db.dao.TrackTagDao
 import com.asmr.player.data.local.db.dao.TrackDao
 import com.asmr.player.data.local.db.dao.RemoteSubtitleSourceDao
 import com.asmr.player.data.local.db.dao.TrackSliceDao
+import com.asmr.player.data.local.db.dao.TrackPlaybackProgressDao
 import com.asmr.player.data.local.db.entities.AlbumGroupEntity
 import com.asmr.player.data.local.db.entities.AlbumGroupItemEntity
 import com.asmr.player.data.local.db.entities.AlbumEntity
@@ -36,6 +37,7 @@ import com.asmr.player.data.local.db.entities.TrackTagEntity
 import com.asmr.player.data.local.db.entities.TrackEntity
 import com.asmr.player.data.local.db.entities.RemoteSubtitleSourceEntity
 import com.asmr.player.data.local.db.entities.TrackSliceEntity
+import com.asmr.player.data.local.db.entities.TrackPlaybackProgressEntity
 
 @Database(
     entities = [
@@ -57,9 +59,10 @@ import com.asmr.player.data.local.db.entities.TrackSliceEntity
         DownloadItemEntity::class,
         LocalTreeCacheEntity::class,
         RemoteSubtitleSourceEntity::class,
-        TrackSliceEntity::class
+        TrackSliceEntity::class,
+        TrackPlaybackProgressEntity::class
     ],
-    version = 17,
+    version = 18,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -78,6 +81,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun localTreeCacheDao(): LocalTreeCacheDao
     abstract fun remoteSubtitleSourceDao(): RemoteSubtitleSourceDao
     abstract fun trackSliceDao(): TrackSliceDao
+    abstract fun trackPlaybackProgressDao(): TrackPlaybackProgressDao
 
     companion object {
         const val DATABASE_NAME = "asmr_player.db"

@@ -39,6 +39,8 @@ import androidx.compose.foundation.lazy.items as lazyItems
 import androidx.compose.runtime.rememberCoroutineScope
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
 import com.asmr.player.ui.common.withAddedBottomPadding
+import com.asmr.player.ui.sidepanel.RecentAlbumsPanel
+import com.asmr.player.ui.sidepanel.LandscapeRightPanelHost
 import kotlinx.coroutines.launch
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 
@@ -97,21 +99,51 @@ fun SearchScreen(
         if (canEnd) pullToRefreshState.endRefresh()
     }
 
-    Box(
+    LandscapeRightPanelHost(
+        windowSizeClass = windowSizeClass,
         modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.TopCenter // 仅用于平板适配：居中显示内容
-    ) {
-        Column(
-            modifier = if (isCompact) {
-                Modifier.fillMaxSize()
-            } else {
-                // 仅用于平板适配：限制内容区域最大宽度并填充可用空间
-                Modifier
-                    .fillMaxHeight()
-                    .widthIn(max = 720.dp)
-                    .fillMaxWidth()
-            }
+        topPanel = {
+            RecentAlbumsPanel(
+                onOpenAlbum = { a ->
+                    onAlbumClick(
+                        Album(
+                            id = a.id,
+                            title = a.title,
+                            path = a.path,
+                            localPath = a.localPath,
+                            downloadPath = a.downloadPath,
+                            circle = a.circle,
+                            cv = a.cv,
+                            coverUrl = a.coverUrl,
+                            coverPath = a.coverPath,
+                            coverThumbPath = a.coverThumbPath,
+                            workId = a.workId,
+                            rjCode = a.rjCode,
+                            description = a.description
+                        )
+                    )
+                },
+                modifier = Modifier.fillMaxHeight()
+            )
+        },
+        bottomPanel = null
+    ) { contentModifier, hasRightPanel ->
+        Box(
+            modifier = contentModifier,
+            contentAlignment = if (hasRightPanel) Alignment.TopStart else Alignment.TopCenter
         ) {
+            Column(
+                modifier = if (isCompact) {
+                    Modifier.fillMaxSize()
+                } else if (hasRightPanel) {
+                    Modifier.fillMaxSize()
+                } else {
+                    Modifier
+                        .fillMaxHeight()
+                        .widthIn(max = 720.dp)
+                        .fillMaxWidth()
+                }
+            ) {
             TextField(
                 value = keyword,
                 onValueChange = { keyword = it },
@@ -299,7 +331,7 @@ fun SearchScreen(
             }
         }
     }
-
+    }
 }
 
 @Composable

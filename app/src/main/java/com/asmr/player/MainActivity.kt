@@ -58,6 +58,7 @@ import com.asmr.player.ui.player.MiniPlayer
 import com.asmr.player.ui.player.NowPlayingScreen
 import com.asmr.player.ui.player.PlayerViewModel
 import com.asmr.player.ui.player.LyricsPage
+import com.asmr.player.ui.sidepanel.LocalRightPanelExpandedState
 import com.asmr.player.ui.common.rememberDominantColorCenterWeighted
 import com.asmr.player.ui.downloads.DownloadsScreen
 import com.asmr.player.ui.dlsite.DlsiteLoginScreen
@@ -106,6 +107,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
 import androidx.compose.animation.*
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.ui.input.pointer.pointerInteropFilter
 
@@ -547,8 +549,10 @@ fun MainContainer(
     ) {
         val hazeState = remember { HazeState() }
         val miniPlayerVisible = playback.currentMediaItem != null && currentRoute != "now_playing" && currentRoute != "lyrics"
+        val rightPanelExpandedState = remember { mutableStateOf(true) }
         CompositionLocalProvider(
-            LocalBottomOverlayPadding provides (if (miniPlayerVisible) MiniPlayerOverlayHeight else 0.dp)
+            LocalBottomOverlayPadding provides (if (miniPlayerVisible) MiniPlayerOverlayHeight else 0.dp),
+            LocalRightPanelExpandedState provides rightPanelExpandedState
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
                 Box(modifier = Modifier.fillMaxSize().haze(hazeState)) {
@@ -1155,20 +1159,44 @@ fun MainContainer(
         }
 
         if (miniPlayerVisible) {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-            ) {
-                MiniPlayer(
-                    onClick = {
-                        if (currentRoute != "now_playing") {
-                            navController.navigateSingleTop("now_playing")
-                        }
-                    },
-                    onOpenQueue = onShowQueue,
-                    hazeState = hazeState
+            BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                val isCompactWidth = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact
+                val canUseRightPanel = !isCompactWidth &&
+                    !isPhone &&
+                    isLandscape &&
+                    (currentRoute == "library" || currentRoute == "search")
+                val rightPanelExpanded = rightPanelExpandedState.value
+                val rightPanelWidth = (maxWidth - 560.dp).coerceAtMost(420.dp)
+                val showRightPanel = canUseRightPanel && rightPanelWidth >= 300.dp
+                val reservedRightTarget = if (!showRightPanel) {
+                    0.dp
+                } else if (rightPanelExpanded) {
+                    rightPanelWidth + 12.dp
+                } else {
+                    36.dp + 12.dp
+                }
+                val reservedRight by animateDpAsState(
+                    targetValue = reservedRightTarget,
+                    animationSpec = tween(durationMillis = if (rightPanelExpanded) 220 else 180),
+                    label = "miniPlayerReservedRight"
                 )
+                val miniWidth = (maxWidth - reservedRight).coerceAtLeast(0.dp)
+                val miniAlignment = if (showRightPanel) Alignment.BottomStart else Alignment.BottomCenter
+                Box(
+                    modifier = Modifier
+                        .align(miniAlignment)
+                        .width(miniWidth)
+                ) {
+                    MiniPlayer(
+                        onClick = {
+                            if (currentRoute != "now_playing") {
+                                navController.navigateSingleTop("now_playing")
+                            }
+                        },
+                        onOpenQueue = onShowQueue,
+                        hazeState = hazeState
+                    )
+                }
             }
         }
     }

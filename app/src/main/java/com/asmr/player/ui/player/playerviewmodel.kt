@@ -436,6 +436,32 @@ class PlayerViewModel @Inject constructor(
     }
 
     fun playTracks(album: Album, tracks: List<Track>, startTrack: Track) {
+        playTracks(album = album, tracks = tracks, startTrack = startTrack, startPositionMs = 0L)
+    }
+
+    fun playAlbumResume(album: Album, resumeMediaId: String?, startPositionMs: Long) {
+        viewModelScope.launch {
+            val trackEntities = runCatching { trackDao.getTracksForAlbumOnce(album.id) }.getOrNull().orEmpty()
+            val tracks = trackEntities.map {
+                Track(
+                    id = it.id,
+                    albumId = it.albumId,
+                    title = it.title,
+                    path = it.path,
+                    duration = it.duration,
+                    group = it.group
+                )
+            }
+            if (tracks.isEmpty()) {
+                messageManager.showError("未找到可播放的音轨")
+                return@launch
+            }
+            val startTrack = resumeMediaId?.let { mid -> tracks.firstOrNull { it.path == mid } } ?: tracks.first()
+            playTracks(album = album, tracks = tracks, startTrack = startTrack, startPositionMs = startPositionMs)
+        }
+    }
+
+    fun playTracks(album: Album, tracks: List<Track>, startTrack: Track, startPositionMs: Long) {
         if (playerConnection.getControllerOrNull() == null) {
             messageManager.showError("播放器未连接")
             return
@@ -446,7 +472,7 @@ class PlayerViewModel @Inject constructor(
         }
         val items = tracks.map { MediaItemFactory.fromTrack(album, it) }
         val index = tracks.indexOfFirst { it.path == startTrack.path }.coerceAtLeast(0)
-        playerConnection.setQueue(items, index, playWhenReady = true)
+        playerConnection.setQueue(items = items, startIndex = index, startPositionMs = startPositionMs, playWhenReady = true)
     }
 
     fun playVideo(title: String, uriOrPath: String) {
