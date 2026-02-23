@@ -296,4 +296,26 @@ object AppDatabaseMigrations {
             db.execSQL("CREATE INDEX IF NOT EXISTS `index_track_slices_trackMediaId` ON `track_slices` (`trackMediaId`)")
         }
     }
+
+    val MIGRATION_17_18: Migration = object : Migration(17, 18) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `track_playback_progress` (
+                    `mediaId` TEXT NOT NULL,
+                    `albumId` INTEGER,
+                    `trackId` INTEGER,
+                    `positionMs` INTEGER NOT NULL,
+                    `durationMs` INTEGER NOT NULL,
+                    `completed` INTEGER NOT NULL,
+                    `createdAt` INTEGER NOT NULL,
+                    `updatedAt` INTEGER NOT NULL,
+                    PRIMARY KEY(`mediaId`)
+                )
+                """.trimIndent()
+            )
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_track_playback_progress_albumId` ON `track_playback_progress` (`albumId`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_track_playback_progress_updatedAt` ON `track_playback_progress` (`updatedAt`)")
+        }
+    }
 }

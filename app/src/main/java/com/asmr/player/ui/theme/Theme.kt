@@ -146,6 +146,7 @@ private fun materialColorSchemeFor(
             background = neutral.background,
             onBackground = neutral.onBackground,
             surface = neutral.surface,
+            surfaceTint = Color.Transparent,
             onSurface = neutral.onSurface,
             surfaceVariant = neutral.surfaceVariant,
             onSurfaceVariant = neutral.onSurfaceVariant
@@ -161,6 +162,7 @@ private fun materialColorSchemeFor(
             background = neutral.background,
             onBackground = neutral.onBackground,
             surface = neutral.surface,
+            surfaceTint = Color.Transparent,
             onSurface = neutral.onSurface,
             surfaceVariant = neutral.surfaceVariant,
             onSurfaceVariant = neutral.onSurfaceVariant

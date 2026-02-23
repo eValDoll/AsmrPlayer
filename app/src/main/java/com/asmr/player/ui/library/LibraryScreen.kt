@@ -103,6 +103,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.graphics.Color
 import com.asmr.player.ui.theme.AsmrTheme
+import com.asmr.player.ui.sidepanel.LandscapeRightPanelHost
+import com.asmr.player.ui.sidepanel.RecentAlbumsPanel
 
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.PaddingValues
@@ -245,24 +247,53 @@ fun LibraryScreen(
         // 屏幕尺寸判断
         val isCompact = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact
 
-        Box(
+        LandscapeRightPanelHost(
+            windowSizeClass = windowSizeClass,
             modifier = Modifier
                 .padding(padding)
                 .fillMaxSize(),
-            contentAlignment = Alignment.TopCenter // 仅用于平板适配：居中显示内容
-        ) {
-            Column(
-                modifier = if (isCompact) {
-                    Modifier.fillMaxSize()
-                } else {
-                    // 仅用于平板适配：限制内容区域最大宽度并填充可用空间
-                    Modifier
-                        .fillMaxHeight()
-                        .widthIn(max = 720.dp)
-                        .fillMaxWidth()
-                }
+            topPanel = {
+                RecentAlbumsPanel(
+                    onOpenAlbum = { a ->
+                        onAlbumClick(
+                            Album(
+                                id = a.id,
+                                title = a.title,
+                                path = a.path,
+                                localPath = a.localPath,
+                                downloadPath = a.downloadPath,
+                                circle = a.circle,
+                                cv = a.cv,
+                                coverUrl = a.coverUrl,
+                                coverPath = a.coverPath,
+                                coverThumbPath = a.coverThumbPath,
+                                workId = a.workId,
+                                rjCode = a.rjCode,
+                                description = a.description
+                            )
+                        )
+                    },
+                    modifier = Modifier.fillMaxHeight()
+                )
+            },
+        ) { contentModifier, hasRightPanel ->
+            Box(
+                modifier = contentModifier,
+                contentAlignment = if (hasRightPanel) Alignment.TopStart else Alignment.TopCenter
             ) {
-                when (val state = uiState) {
+                Column(
+                    modifier = if (isCompact) {
+                        Modifier.fillMaxSize()
+                    } else if (hasRightPanel) {
+                        Modifier.fillMaxSize()
+                    } else {
+                        Modifier
+                            .fillMaxHeight()
+                            .widthIn(max = 720.dp)
+                            .fillMaxWidth()
+                    }
+                ) {
+                    when (val state = uiState) {
                     is LibraryUiState.Loading -> {
                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             CircularProgressIndicator()
@@ -691,6 +722,7 @@ fun LibraryScreen(
                         }
                     }
                 }
+            }
             }
         }
     }

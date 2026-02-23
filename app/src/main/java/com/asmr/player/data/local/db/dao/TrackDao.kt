@@ -20,6 +20,20 @@ interface TrackDao {
     @Query("SELECT * FROM tracks WHERE albumId = :albumId")
     suspend fun getTracksForAlbumOnce(albumId: Long): List<TrackEntity>
 
+    @Query("SELECT COUNT(*) FROM tracks WHERE albumId = :albumId")
+    suspend fun countTracksForAlbum(albumId: Long): Long
+
+    @Query(
+        """
+        SELECT albumId AS albumId,
+               COUNT(*) AS totalCount
+        FROM tracks
+        WHERE albumId IN (:albumIds)
+        GROUP BY albumId
+        """
+    )
+    fun observeTrackCountsForAlbums(albumIds: List<Long>): Flow<List<AlbumTrackCountRow>>
+
     @Query("SELECT id, path FROM tracks WHERE albumId = :albumId AND duration <= 0 ORDER BY id ASC LIMIT :limit")
     suspend fun getTracksNeedingDuration(albumId: Long, limit: Int): List<TrackIdPathRow>
 
@@ -119,3 +133,8 @@ interface TrackDao {
     )
     fun queryLibraryTrackAlbumHeadersPaged(query: SupportSQLiteQuery): PagingSource<Int, LibraryTrackAlbumHeaderRow>
 }
+
+data class AlbumTrackCountRow(
+    val albumId: Long,
+    val totalCount: Long
+)

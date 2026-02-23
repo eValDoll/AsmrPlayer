@@ -481,8 +481,17 @@ class PlayerConnection @Inject constructor(
     }
 
     fun setQueue(items: List<androidx.media3.common.MediaItem>, startIndex: Int, playWhenReady: Boolean) {
+        setQueue(items = items, startIndex = startIndex, startPositionMs = 0L, playWhenReady = playWhenReady)
+    }
+
+    fun setQueue(
+        items: List<androidx.media3.common.MediaItem>,
+        startIndex: Int,
+        startPositionMs: Long,
+        playWhenReady: Boolean
+    ) {
         val c = controller ?: return
-        c.setMediaItems(items, startIndex.coerceAtLeast(0), 0L)
+        c.setMediaItems(items, startIndex.coerceAtLeast(0), startPositionMs.coerceAtLeast(0L))
         c.prepare()
         if (playWhenReady) c.play()
         _queue.value = items
