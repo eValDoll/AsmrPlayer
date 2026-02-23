@@ -47,9 +47,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
-import coil.request.ImageRequest
 import com.asmr.player.domain.model.Album
 import com.asmr.player.data.remote.NetworkHeaders
+import com.asmr.player.cache.CacheImageModel
 import com.asmr.player.ui.common.AsmrAsyncImage
  import com.asmr.player.ui.common.CoverContentRow
 import com.asmr.player.ui.common.rememberDominantColor
@@ -64,17 +64,19 @@ fun AlbumItem(
     onLongClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
-    val context = LocalContext.current
     val colorScheme = AsmrTheme.colorScheme
     val data = album.coverThumbPath.ifBlank { album.coverPath }.ifEmpty { album.coverUrl }
     val imageModel = remember(data) {
         if (data.startsWith("http", ignoreCase = true) && data.contains("dlsite", ignoreCase = true)) {
-            ImageRequest.Builder(context)
-                .data(data)
-                .addHeader("Referer", NetworkHeaders.REFERER_DLSITE)
-                .addHeader("User-Agent", NetworkHeaders.USER_AGENT)
-                .addHeader("Accept-Language", NetworkHeaders.ACCEPT_LANGUAGE)
-                .build()
+            CacheImageModel(
+                data = data,
+                headers = mapOf(
+                    "Referer" to NetworkHeaders.REFERER_DLSITE,
+                    "User-Agent" to NetworkHeaders.USER_AGENT,
+                    "Accept-Language" to NetworkHeaders.ACCEPT_LANGUAGE
+                ),
+                keyTag = "dlsite"
+            )
         } else {
             data
         }
@@ -237,20 +239,19 @@ fun AlbumGridItem(
     onLongClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
-    val context = LocalContext.current
     val colorScheme = AsmrTheme.colorScheme
     val data = album.coverThumbPath.ifBlank { album.coverPath }.ifEmpty { album.coverUrl }
     val imageModel = remember(data) {
         if (data.startsWith("http", ignoreCase = true) && data.contains("dlsite", ignoreCase = true)) {
-            ImageRequest.Builder(context)
-                .data(data)
-                .addHeader("Referer", "https://www.dlsite.com/")
-                .addHeader(
-                    "User-Agent",
-                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-                )
-                .addHeader("Accept-Language", NetworkHeaders.ACCEPT_LANGUAGE)
-                .build()
+            CacheImageModel(
+                data = data,
+                headers = mapOf(
+                    "Referer" to NetworkHeaders.REFERER_DLSITE,
+                    "User-Agent" to NetworkHeaders.USER_AGENT,
+                    "Accept-Language" to NetworkHeaders.ACCEPT_LANGUAGE
+                ),
+                keyTag = "dlsite"
+            )
         } else {
             data
         }

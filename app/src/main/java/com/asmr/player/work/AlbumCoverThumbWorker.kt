@@ -5,14 +5,15 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Rect
-import androidx.core.graphics.drawable.toBitmap
+import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.unit.IntSize
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
-import coil.imageLoader
-import coil.request.ImageRequest
-import coil.request.SuccessResult
+import com.asmr.player.cache.CacheImageModel
+import com.asmr.player.cache.ImageCacheEntryPoint
 import com.asmr.player.data.local.db.AppDatabaseProvider
 import com.asmr.player.data.remote.NetworkHeaders
+import dagger.hilt.android.EntryPointAccessors
 import java.io.File
 import java.io.FileOutputStream
 
@@ -41,23 +42,21 @@ class AlbumCoverThumbWorker(
             return Result.success()
         }
 
-        val request = ImageRequest.Builder(applicationContext)
-            .data(source)
-            .size(THUMB_SIZE_PX)
-            .allowHardware(false)
-            .apply {
-                if (source.startsWith("http", ignoreCase = true) && source.contains("dlsite", ignoreCase = true)) {
-                    addHeader("Referer", NetworkHeaders.REFERER_DLSITE)
-                    addHeader("User-Agent", NetworkHeaders.USER_AGENT)
-                    addHeader("Accept-Language", NetworkHeaders.ACCEPT_LANGUAGE)
-                }
-            }
-            .build()
-
-        val result = applicationContext.imageLoader.execute(request)
-        val drawable = (result as? SuccessResult)?.drawable ?: return Result.success()
-
-        val bitmap = drawable.toBitmap()
+        val manager = EntryPointAccessors.fromApplication(applicationContext, ImageCacheEntryPoint::class.java).imageCacheManager()
+        val model: Any = if (source.startsWith("http", ignoreCase = true) && source.contains("dlsite", ignoreCase = true)) {
+            CacheImageModel(
+                data = source,
+                headers = mapOf(
+                    "Referer" to NetworkHeaders.REFERER_DLSITE,
+                    "User-Agent" to NetworkHeaders.USER_AGENT,
+                    "Accept-Language" to NetworkHeaders.ACCEPT_LANGUAGE
+                ),
+                keyTag = "dlsite"
+            )
+        } else {
+            source
+        }
+        val bitmap = manager.loadImage(model = model, size = IntSize(THUMB_SIZE_PX, THUMB_SIZE_PX)).asAndroidBitmap()
         val thumb = centerCropSquare(bitmap, THUMB_SIZE_PX)
 
         FileOutputStream(target).use { out ->

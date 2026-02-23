@@ -105,6 +105,9 @@ import androidx.compose.ui.graphics.Color
 import com.asmr.player.ui.theme.AsmrTheme
 import com.asmr.player.ui.sidepanel.LandscapeRightPanelHost
 import com.asmr.player.ui.sidepanel.RecentAlbumsPanel
+import com.asmr.player.cache.ImageCacheEntryPoint
+import com.asmr.player.cache.LazyListPreloader
+import dagger.hilt.android.EntryPointAccessors
 
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.PaddingValues
@@ -695,6 +698,27 @@ fun LibraryScreen(
                                         }
                                     }
                                 } else {
+                                    val app = LocalContext.current.applicationContext
+                                    val cacheManager = remember(app) {
+                                        EntryPointAccessors.fromApplication(app, ImageCacheEntryPoint::class.java)
+                                            .imageCacheManager()
+                                    }
+                                    LazyListPreloader(
+                                        state = listState,
+                                        itemCount = pagedAlbums.itemCount,
+                                        preloadNext = 10,
+                                        cacheManagerProvider = { cacheManager },
+                                        modelAt = { idx ->
+                                            val a = pagedAlbums.itemSnapshotList.getOrNull(idx)
+                                            if (a == null) {
+                                                null
+                                            } else {
+                                                a.coverThumbPath.takeIf { it.isNotBlank() }
+                                                    ?: a.coverPath.takeIf { it.isNotBlank() }
+                                                    ?: a.coverUrl.takeIf { it.isNotBlank() }
+                                            }
+                                        }
+                                    )
                                     LazyColumn(
                                         state = listState,
                                         modifier = Modifier.fillMaxSize(),

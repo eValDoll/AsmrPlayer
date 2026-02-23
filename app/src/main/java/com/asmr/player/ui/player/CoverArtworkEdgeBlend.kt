@@ -20,11 +20,9 @@ import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.asComposeRenderEffect
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.asmr.player.ui.common.AsmrAsyncImage
-import coil.request.ImageRequest
 
 @Composable
 fun CoverArtworkEdgeBlend(
@@ -33,7 +31,6 @@ fun CoverArtworkEdgeBlend(
     modifier: Modifier = Modifier,
     cornerRadius: Dp = 28.dp
 ) {
-    val context = LocalContext.current
     val shape = remember(cornerRadius) { RoundedCornerShape(cornerRadius) }
     val blurDp = 32.dp
     val blurModifier = remember(blurDp) {
@@ -54,14 +51,6 @@ fun CoverArtworkEdgeBlend(
             else -> artworkModel
         }
     }
-    val blurredRequest = remember(normalizedArtworkModel) {
-        normalizedArtworkModel?.let {
-            ImageRequest.Builder(context)
-                .data(it)
-                .size(384)
-                .build()
-        }
-    }
 
     Box(
         modifier = modifier
@@ -70,7 +59,7 @@ fun CoverArtworkEdgeBlend(
             .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
     ) {
         AsmrAsyncImage(
-            model = blurredRequest,
+            model = normalizedArtworkModel,
             contentDescription = null,
             modifier = Modifier
                 .fillMaxSize()

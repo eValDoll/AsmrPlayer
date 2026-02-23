@@ -15,16 +15,18 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.IntSize
 import androidx.core.graphics.ColorUtils
-import androidx.core.graphics.drawable.toBitmap
 import androidx.palette.graphics.Palette
-import coil.imageLoader
-import coil.request.ImageRequest
+import com.asmr.player.cache.CachePolicy
+import com.asmr.player.cache.ImageCacheEntryPoint
 import com.asmr.player.ui.common.adjustHslForUi
 import com.asmr.player.ui.common.computeCenterWeightedHintColorInt
 import com.asmr.player.ui.common.pickBestColorInt
+import dagger.hilt.android.EntryPointAccessors
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
@@ -43,6 +45,10 @@ fun rememberDynamicHuePalette(
     cachedTransitionDurationMs: Int = 260
 ): State<HuePalette> {
     val context = LocalContext.current
+    val app = context.applicationContext
+    val manager = remember(app) {
+        EntryPointAccessors.fromApplication(app, ImageCacheEntryPoint::class.java).imageCacheManager()
+    }
     val rawBaseKey = artworkModel?.toString().orEmpty()
     val lastNonBlankBaseKeyState = rememberSaveable { androidx.compose.runtime.mutableStateOf("") }
     if (rawBaseKey.isNotBlank() && rawBaseKey != lastNonBlankBaseKeyState.value) {
@@ -79,17 +85,15 @@ fun rememberDynamicHuePalette(
             
             constrainedPrimary = DynamicHueCache.getOrCompute(key) {
                 withContext(Dispatchers.Default) {
-                    val request = ImageRequest.Builder(context)
-                        .data(artworkModel)
-                        .allowHardware(false)
-                        .size(imageSizePx)
-                        .build()
-                    val result = context.imageLoader.execute(request)
-                    val drawable = result.drawable ?: return@withContext null
-                    
-                    val bitmap = (drawable as? android.graphics.drawable.BitmapDrawable)?.bitmap 
-                        ?: runCatching { drawable.toBitmap() }.getOrNull() 
-                        ?: return@withContext null
+                    val m = artworkModel ?: return@withContext null
+                    val img = runCatching {
+                        manager.loadImage(
+                            model = m,
+                            size = IntSize(imageSizePx, imageSizePx),
+                            cachePolicy = CachePolicy.DEFAULT
+                        )
+                    }.getOrNull() ?: return@withContext null
+                    val bitmap = img.asAndroidBitmap()
                         
                     if (bitmap.width < 10 || bitmap.height < 10) return@withContext null
 

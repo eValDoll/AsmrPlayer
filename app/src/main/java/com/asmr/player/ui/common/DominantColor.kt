@@ -15,14 +15,16 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.IntSize
 import androidx.core.graphics.ColorUtils
-import androidx.core.graphics.drawable.toBitmap
 import androidx.palette.graphics.Palette
-import coil.imageLoader
-import coil.request.ImageRequest
+import com.asmr.player.cache.CachePolicy
+import com.asmr.player.cache.ImageCacheEntryPoint
+import dagger.hilt.android.EntryPointAccessors
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
@@ -41,6 +43,10 @@ fun rememberDominantColor(
     imageSizePx: Int = 256
 ): State<Color> {
     val context = LocalContext.current
+    val app = context.applicationContext
+    val manager = remember(app) {
+        EntryPointAccessors.fromApplication(app, ImageCacheEntryPoint::class.java).imageCacheManager()
+    }
     val key = model?.toString().orEmpty()
     val animatable = remember { Animatable(defaultColor, ColorVectorConverter) }
     val animatedColor = remember { derivedStateOf { animatable.value } }
@@ -56,14 +62,15 @@ fun rememberDominantColor(
         }
         val constrainedColor = DominantColorCache.getOrCompute(key) {
             withContext(Dispatchers.Default) {
-                val request = ImageRequest.Builder(context)
-                    .data(model)
-                    .allowHardware(false)
-                    .size(imageSizePx)
-                    .build()
-                val drawable = runCatching { context.imageLoader.execute(request).drawable }.getOrNull()
-                    ?: return@withContext null
-                val bitmap = runCatching { drawable.toBitmap() }.getOrNull() ?: return@withContext null
+                val m = model ?: return@withContext null
+                val img = runCatching {
+                    manager.loadImage(
+                        model = m,
+                        size = IntSize(imageSizePx, imageSizePx),
+                        cachePolicy = CachePolicy.DEFAULT
+                    )
+                }.getOrNull() ?: return@withContext null
+                val bitmap = img.asAndroidBitmap()
                 val colorInt = runCatching {
                     val palette = Palette.from(bitmap).generate()
                     val preferDarkBackground = defaultColor.luminance() < 0.5f
@@ -93,6 +100,10 @@ fun rememberDominantColorCenterWeighted(
     centerRegionRatio: Float = 0.62f
 ): State<Color> {
     val context = LocalContext.current
+    val app = context.applicationContext
+    val manager = remember(app) {
+        EntryPointAccessors.fromApplication(app, ImageCacheEntryPoint::class.java).imageCacheManager()
+    }
     val baseKey = model?.toString().orEmpty()
     val regionKey = (centerRegionRatio * 100).toInt().coerceIn(10, 100)
     val key = "cw:$regionKey:$baseKey"
@@ -110,14 +121,15 @@ fun rememberDominantColorCenterWeighted(
         }
         val constrainedColor = DominantColorCache.getOrCompute(key) {
             withContext(Dispatchers.Default) {
-                val request = ImageRequest.Builder(context)
-                    .data(model)
-                    .allowHardware(false)
-                    .size(imageSizePx)
-                    .build()
-                val drawable = runCatching { context.imageLoader.execute(request).drawable }.getOrNull()
-                    ?: return@withContext null
-                val bitmap = runCatching { drawable.toBitmap() }.getOrNull() ?: return@withContext null
+                val m = model ?: return@withContext null
+                val img = runCatching {
+                    manager.loadImage(
+                        model = m,
+                        size = IntSize(imageSizePx, imageSizePx),
+                        cachePolicy = CachePolicy.DEFAULT
+                    )
+                }.getOrNull() ?: return@withContext null
+                val bitmap = img.asAndroidBitmap()
                 val colorInt = runCatching {
                     val palette = Palette.from(bitmap).generate()
                     val hint = computeCenterWeightedHintColorInt(bitmap, centerRegionRatio)
@@ -211,6 +223,10 @@ fun rememberComputedDominantColorCenterWeighted(
     centerRegionRatio: Float = 0.62f
 ): State<DominantColorResult> {
     val context = LocalContext.current
+    val app = context.applicationContext
+    val manager = remember(app) {
+        EntryPointAccessors.fromApplication(app, ImageCacheEntryPoint::class.java).imageCacheManager()
+    }
     val baseKey = model?.toString().orEmpty()
     val regionKey = (centerRegionRatio * 100).toInt().coerceIn(10, 100)
     val key = "cw:$regionKey:$baseKey"
@@ -226,14 +242,15 @@ fun rememberComputedDominantColorCenterWeighted(
 
         val constrainedColor = DominantColorCache.getOrCompute(key) {
             withContext(Dispatchers.Default) {
-                val request = ImageRequest.Builder(context)
-                    .data(model)
-                    .allowHardware(false)
-                    .size(imageSizePx)
-                    .build()
-                val drawable = runCatching { context.imageLoader.execute(request).drawable }.getOrNull()
-                    ?: return@withContext null
-                val bitmap = runCatching { drawable.toBitmap() }.getOrNull() ?: return@withContext null
+                val m = model ?: return@withContext null
+                val img = runCatching {
+                    manager.loadImage(
+                        model = m,
+                        size = IntSize(imageSizePx, imageSizePx),
+                        cachePolicy = CachePolicy.DEFAULT
+                    )
+                }.getOrNull() ?: return@withContext null
+                val bitmap = img.asAndroidBitmap()
                 val colorInt = runCatching {
                     val palette = Palette.from(bitmap).generate()
                     val hint = computeCenterWeightedHintColorInt(bitmap, centerRegionRatio)
@@ -324,6 +341,10 @@ fun PrewarmDominantColorCenterWeighted(
     centerRegionRatio: Float = 0.62f
 ) {
     val context = LocalContext.current
+    val app = context.applicationContext
+    val manager = remember(app) {
+        EntryPointAccessors.fromApplication(app, ImageCacheEntryPoint::class.java).imageCacheManager()
+    }
     val baseKey = model?.toString().orEmpty()
     val regionKey = (centerRegionRatio * 100).toInt().coerceIn(10, 100)
     val key = "cw:$regionKey:$baseKey"
@@ -334,14 +355,15 @@ fun PrewarmDominantColorCenterWeighted(
 
         DominantColorCache.getOrCompute(key) {
             withContext(Dispatchers.Default) {
-                val request = ImageRequest.Builder(context)
-                    .data(model)
-                    .allowHardware(false)
-                    .size(imageSizePx)
-                    .build()
-                val drawable = runCatching { context.imageLoader.execute(request).drawable }.getOrNull()
-                    ?: return@withContext null
-                val bitmap = runCatching { drawable.toBitmap() }.getOrNull() ?: return@withContext null
+                val m = model ?: return@withContext null
+                val img = runCatching {
+                    manager.loadImage(
+                        model = m,
+                        size = IntSize(imageSizePx, imageSizePx),
+                        cachePolicy = CachePolicy.DEFAULT
+                    )
+                }.getOrNull() ?: return@withContext null
+                val bitmap = img.asAndroidBitmap()
                 val colorInt = runCatching {
                     val palette = Palette.from(bitmap).generate()
                     val hint = computeCenterWeightedHintColorInt(bitmap, centerRegionRatio)
