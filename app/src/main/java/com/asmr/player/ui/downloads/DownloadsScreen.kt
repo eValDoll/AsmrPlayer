@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -70,30 +69,24 @@ fun DownloadsScreen(
 
     Box(
         modifier = Modifier
-            .fillMaxSize()
-            .statusBarsPadding(),
+            .fillMaxSize(),
         contentAlignment = Alignment.TopCenter // 仅用于平板适配：居中显示内容
     ) {
         Column(
             modifier = if (isCompact) {
                 Modifier
                     .fillMaxSize()
-                    .padding(16.dp)
+                    .padding(horizontal = 16.dp, vertical = 10.dp)
             } else {
                 // 仅用于平板适配：限制内容区域最大宽度并填充可用空间
                 Modifier
                     .fillMaxHeight()
                     .widthIn(max = 720.dp)
                     .fillMaxWidth()
-                    .padding(16.dp)
+                    .padding(horizontal = 16.dp, vertical = 10.dp)
             },
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text("下载管理", style = MaterialTheme.typography.titleLarge)
-                Spacer(modifier = Modifier.weight(1f))
-                Button(onClick = { viewModel.cancelAll() }) { Text("全部暂停") }
-            }
             OutlinedTextField(
                 value = rjQuery,
                 onValueChange = { rjQuery = it },

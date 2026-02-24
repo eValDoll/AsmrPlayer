@@ -6,13 +6,14 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
@@ -32,6 +33,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -74,35 +76,29 @@ fun PlaylistDetailScreen(
     // 屏幕尺寸判断
     val isCompact = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .statusBarsPadding(),
-        contentAlignment = Alignment.TopCenter // 仅用于平板适配：居中显示内容
-    ) {
-        Column(
-            modifier = if (isCompact) {
+    val colorScheme = com.asmr.player.ui.theme.AsmrTheme.colorScheme
+    Scaffold(
+        contentWindowInsets = WindowInsets.navigationBars,
+        containerColor = Color.Transparent,
+        contentColor = colorScheme.onBackground
+    ) { padding ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding),
+            contentAlignment = Alignment.TopCenter
+        ) {
+            val contentModifier = if (isCompact) {
                 Modifier.fillMaxSize()
             } else {
-                // 仅用于平板适配：限制内容区域最大宽度并填充可用空间
                 Modifier
                     .fillMaxHeight()
                     .widthIn(max = 720.dp)
                     .fillMaxWidth()
             }
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(title, style = MaterialTheme.typography.titleLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
-
             LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(bottom = LocalBottomOverlayPadding.current)
+                modifier = contentModifier,
+                contentPadding = PaddingValues(top = 6.dp, bottom = LocalBottomOverlayPadding.current)
             ) {
                 itemsIndexed(items, key = { idx, item -> "${item.mediaId}#$idx" }) { index, item ->
                     val startItem = PlaylistItemEntity(
@@ -124,10 +120,10 @@ fun PlaylistDetailScreen(
                     )
                     if (index < items.size - 1) {
                         HorizontalDivider(
-                             modifier = Modifier.padding(horizontal = 16.dp),
-                             thickness = 0.5.dp,
-                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)
-                         )
+                            modifier = Modifier.padding(horizontal = 16.dp),
+                            thickness = 0.5.dp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)
+                        )
                     }
                 }
             }

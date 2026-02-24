@@ -442,7 +442,7 @@ class PlayerViewModel @Inject constructor(
     fun playAlbumResume(album: Album, resumeMediaId: String?, startPositionMs: Long) {
         viewModelScope.launch {
             val trackEntities = runCatching { trackDao.getTracksForAlbumOnce(album.id) }.getOrNull().orEmpty()
-            val tracks = trackEntities.map {
+            val allTracks = trackEntities.map {
                 Track(
                     id = it.id,
                     albumId = it.albumId,
@@ -452,12 +452,62 @@ class PlayerViewModel @Inject constructor(
                     group = it.group
                 )
             }
-            if (tracks.isEmpty()) {
+            if (allTracks.isEmpty()) {
                 messageManager.showError("未找到可播放的音轨")
                 return@launch
             }
-            val startTrack = resumeMediaId?.let { mid -> tracks.firstOrNull { it.path == mid } } ?: tracks.first()
-            playTracks(album = album, tracks = tracks, startTrack = startTrack, startPositionMs = startPositionMs)
+            val resumeId = resumeMediaId?.trim().orEmpty().ifBlank { null }
+            val folderKey = resumeId?.let { deriveParentKeyOrNull(it) }
+
+            val scopedTracks = if (folderKey != null) {
+                allTracks.filter { t -> deriveParentKeyOrNull(t.path) == folderKey }.takeIf { it.isNotEmpty() } ?: allTracks
+            } else {
+                allTracks
+            }
+
+            val startTrack =
+                resumeId?.let { mid -> scopedTracks.firstOrNull { it.path == mid } }
+                    ?: resumeId?.let { mid -> allTracks.firstOrNull { it.path == mid } }?.takeIf { it in scopedTracks }
+                    ?: scopedTracks.first()
+
+            playTracks(album = album, tracks = scopedTracks, startTrack = startTrack, startPositionMs = startPositionMs)
+        }
+    }
+
+    private fun deriveParentKeyOrNull(raw: String): String? {
+        val input = raw.trim()
+        if (input.isBlank()) return null
+
+        val normalized = input.replace('\\', '/')
+        val isUriLike = normalized.contains("://") ||
+            normalized.startsWith("content://", ignoreCase = true) ||
+            normalized.startsWith("file://", ignoreCase = true) ||
+            normalized.startsWith("http://", ignoreCase = true) ||
+            normalized.startsWith("https://", ignoreCase = true)
+
+        return if (isUriLike) {
+            runCatching {
+                val uri = Uri.parse(normalized)
+                val scheme = uri.scheme?.trim().orEmpty()
+                val path = uri.path?.trim().orEmpty()
+                val parent = path.substringBeforeLast('/', "").trim().trimEnd('/')
+                if (scheme.isBlank() || parent.isBlank()) return null
+                val authority = uri.encodedAuthority?.trim().orEmpty()
+                buildString {
+                    append(scheme.lowercase())
+                    append("://")
+                    if (authority.isNotBlank()) append(authority)
+                    append(parent)
+                }.trimEnd('/').lowercase()
+            }.getOrNull()
+        } else {
+            runCatching {
+                val parent = File(input).parent?.trim().orEmpty()
+                parent.takeIf { it.isNotBlank() }
+                    ?.replace('\\', '/')
+                    ?.trimEnd('/')
+                    ?.lowercase()
+            }.getOrNull()
         }
     }
 

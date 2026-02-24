@@ -9,9 +9,10 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
@@ -66,65 +67,59 @@ fun PlaylistsScreen(
     // 屏幕尺寸判断
     val isCompact = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .statusBarsPadding(),
-        contentAlignment = Alignment.TopCenter // 仅用于平板适配：居中显示内容
-    ) {
-        Column(
-            modifier = if (isCompact) {
+    Scaffold(
+        contentWindowInsets = WindowInsets.navigationBars,
+        containerColor = Color.Transparent,
+        contentColor = colorScheme.onBackground
+    ) { padding ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding),
+            contentAlignment = Alignment.TopCenter
+        ) {
+            val contentModifier = if (isCompact) {
                 Modifier.fillMaxSize()
             } else {
-                // 仅用于平板适配：限制内容区域最大宽度并填充可用空间
                 Modifier
                     .fillMaxHeight()
                     .widthIn(max = 720.dp)
                     .fillMaxWidth()
             }
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 24.dp, vertical = 16.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    "我的列表",
-                    style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
-                    color = colorScheme.textPrimary
-                )
-                Spacer(modifier = Modifier.weight(1f))
-                IconButton(
-                    onClick = { showCreate = true },
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(colorScheme.primaryContainer)
+            Box(modifier = contentModifier) {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                        .withAddedBottomPadding(LocalBottomOverlayPadding.current + 72.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Icon(Icons.Default.Add, contentDescription = null, tint = colorScheme.primary)
-                }
-            }
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
-                    .withAddedBottomPadding(LocalBottomOverlayPadding.current),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                items(userPlaylists, key = { it.id }) { playlist ->
-                    val entity = remember(playlist.id, playlist.name, playlist.category, playlist.createdAt) {
-                        PlaylistEntity(
-                            id = playlist.id,
-                            name = playlist.name,
-                            category = playlist.category,
-                            createdAt = playlist.createdAt
+                    items(userPlaylists, key = { it.id }) { playlist ->
+                        val entity = remember(playlist.id, playlist.name, playlist.category, playlist.createdAt) {
+                            PlaylistEntity(
+                                id = playlist.id,
+                                name = playlist.name,
+                                category = playlist.category,
+                                createdAt = playlist.createdAt
+                            )
+                        }
+                        PlaylistRow(
+                            playlist = playlist,
+                            onClick = { onPlaylistClick(entity) },
+                            onDelete = { viewModel.deletePlaylist(entity) },
+                            onRename = { newName -> viewModel.renamePlaylist(entity.id, newName) }
                         )
                     }
-                    PlaylistRow(
-                        playlist = playlist,
-                        onClick = { onPlaylistClick(entity) },
-                        onDelete = { viewModel.deletePlaylist(entity) },
-                        onRename = { newName -> viewModel.renamePlaylist(entity.id, newName) }
-                    )
+                }
+
+                FloatingActionButton(
+                    onClick = { showCreate = true },
+                    containerColor = colorScheme.primaryContainer,
+                    contentColor = colorScheme.primary,
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(end = 16.dp, bottom = LocalBottomOverlayPadding.current + 16.dp)
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = null)
                 }
             }
         }

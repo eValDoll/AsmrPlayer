@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -243,6 +245,7 @@ fun LibraryScreen(
     }
 
     Scaffold(
+        contentWindowInsets = WindowInsets.navigationBars,
         containerColor = Color.Transparent,
         contentColor = colorScheme.onBackground,
         // TopAppBar is now handled by MainActivity for better consistency
@@ -279,7 +282,7 @@ fun LibraryScreen(
                     modifier = Modifier.fillMaxHeight()
                 )
             },
-        ) { contentModifier, hasRightPanel ->
+        ) { contentModifier, hasRightPanel, rightPanelToggle ->
             Box(
                 modifier = contentModifier,
                 contentAlignment = if (hasRightPanel) Alignment.TopStart else Alignment.TopCenter
@@ -457,6 +460,10 @@ fun LibraryScreen(
                                             contentDescription = null,
                                             tint = colorScheme.onSurface
                                         )
+                                    }
+                                    if (rightPanelToggle != null) {
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        rightPanelToggle(Modifier.size(40.dp))
                                     }
                                 }
 

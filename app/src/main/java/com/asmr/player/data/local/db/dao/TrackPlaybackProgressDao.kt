@@ -20,6 +20,22 @@ interface TrackPlaybackProgressDao {
 
     @Query(
         """
+        SELECT
+            p.albumId AS albumId,
+            p.mediaId AS mediaId,
+            p.positionMs AS positionMs,
+            p.updatedAt AS updatedAt,
+            t.title AS trackTitle
+        FROM track_playback_progress p
+        LEFT JOIN tracks t ON t.path = p.mediaId
+        WHERE p.albumId IN (:albumIds)
+        ORDER BY p.albumId ASC, p.updatedAt DESC
+        """
+    )
+    fun observeLastPlayedRowsForAlbums(albumIds: List<Long>): Flow<List<AlbumLastPlayedRow>>
+
+    @Query(
+        """
         SELECT albumId AS albumId,
                SUM(CASE WHEN completed = 1 THEN 1 ELSE 0 END) AS completedCount
         FROM track_playback_progress
@@ -44,4 +60,12 @@ interface TrackPlaybackProgressDao {
 data class AlbumCompletedCountRow(
     val albumId: Long,
     val completedCount: Long
+)
+
+data class AlbumLastPlayedRow(
+    val albumId: Long?,
+    val mediaId: String,
+    val positionMs: Long,
+    val updatedAt: Long,
+    val trackTitle: String?
 )
