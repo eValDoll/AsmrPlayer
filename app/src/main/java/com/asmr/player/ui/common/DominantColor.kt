@@ -30,6 +30,7 @@ import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlin.math.max
 
 data class DominantColorResult(
     val color: Color?,
@@ -155,6 +156,68 @@ fun rememberDominantColorCenterWeighted(
     }
 
     return animatedColor
+}
+
+@Composable
+fun rememberComputedBestTextColorOnCoverRegion(
+    model: Any?,
+    imageSizePx: Int = 256,
+    leftRatio: Float,
+    topRatio: Float,
+    rightRatio: Float,
+    bottomRatio: Float,
+    minContrastRatio: Double = 4.5
+): State<DominantColorResult> {
+    val context = LocalContext.current
+    val app = context.applicationContext
+    val manager = remember(app) {
+        EntryPointAccessors.fromApplication(app, ImageCacheEntryPoint::class.java).imageCacheManager()
+    }
+    val baseKey = model?.toString().orEmpty()
+    val lr = (leftRatio * 100f).toInt().coerceIn(0, 100)
+    val tr = (topRatio * 100f).toInt().coerceIn(0, 100)
+    val rr = (rightRatio * 100f).toInt().coerceIn(0, 100)
+    val br = (bottomRatio * 100f).toInt().coerceIn(0, 100)
+    val key = "txt:rg:$lr,$tr,$rr,$br:$baseKey"
+    val cached = remember(key) { DominantColorCache.get(key) }
+    val state = remember(key) { mutableStateOf(DominantColorResult(color = cached, fromCache = cached != null)) }
+
+    LaunchedEffect(key, baseKey) {
+        if (baseKey.isBlank()) {
+            state.value = DominantColorResult(color = null, fromCache = false)
+            return@LaunchedEffect
+        }
+        if (state.value.color != null) return@LaunchedEffect
+
+        val computed = DominantColorCache.getOrCompute(key) {
+            withContext(Dispatchers.Default) {
+                val m = model ?: return@withContext null
+                val img = runCatching {
+                    manager.loadImage(
+                        model = m,
+                        size = IntSize(imageSizePx, imageSizePx),
+                        cachePolicy = CachePolicy.DEFAULT
+                    )
+                }.getOrNull() ?: return@withContext null
+                val bitmap = img.asAndroidBitmap()
+                val readableBitmap = if (bitmap.config == Bitmap.Config.HARDWARE) {
+                    runCatching { bitmap.copy(Bitmap.Config.ARGB_8888, false) }.getOrNull() ?: return@withContext null
+                } else {
+                    bitmap
+                }
+                val lum = computeRegionMedianLuminance(readableBitmap, leftRatio, topRatio, rightRatio, bottomRatio)
+                val pickArgb = pickBlackOrWhiteTextColorArgbFromBackgroundLuminance(
+                    backgroundLuminance = lum,
+                    minContrastRatio = minContrastRatio
+                ) ?: return@withContext null
+                Color(pickArgb)
+            }
+        }
+
+        state.value = DominantColorResult(color = computed, fromCache = false)
+    }
+
+    return state
 }
 
 @Composable
@@ -516,6 +579,64 @@ private fun isLikelyBlankFrame(bitmap: Bitmap): Boolean {
     val mean = sum / count
     val variance = (sumSq / count) - (mean * mean)
     return mean < 18.0 || variance < 12.0
+}
+
+private fun computeRegionMedianLuminance(
+    bitmap: Bitmap,
+    leftRatio: Float,
+    topRatio: Float,
+    rightRatio: Float,
+    bottomRatio: Float
+): Double? {
+    val width = bitmap.width
+    val height = bitmap.height
+    if (width <= 1 || height <= 1) return null
+
+    val l = leftRatio.coerceIn(0f, 1f)
+    val t = topRatio.coerceIn(0f, 1f)
+    val r = rightRatio.coerceIn(0f, 1f)
+    val b = bottomRatio.coerceIn(0f, 1f)
+    if (r <= l || b <= t) return null
+
+    val left = (width * l).toInt().coerceIn(0, width - 1)
+    val top = (height * t).toInt().coerceIn(0, height - 1)
+    val right = (width * r).toInt().coerceIn(left + 1, width)
+    val bottom = (height * b).toInt().coerceIn(top + 1, height)
+    val regionW = (right - left).coerceAtLeast(1)
+    val regionH = (bottom - top).coerceAtLeast(1)
+
+    val pixels = IntArray(regionW * regionH)
+    runCatching { bitmap.getPixels(pixels, 0, regionW, left, top, regionW, regionH) }.getOrNull() ?: return null
+
+    val step = if (regionW * regionH <= 22_000) 1 else 2
+    val bins = IntArray(256)
+    var count = 0
+    var y = 0
+    while (y < regionH) {
+        val row = y * regionW
+        var x = 0
+        while (x < regionW) {
+            val argb = pixels[row + x]
+            val a = (argb ushr 24) and 0xFF
+            if (a >= 32) {
+                val lum = ColorUtils.calculateLuminance(argb).coerceIn(0.0, 1.0)
+                val idx = ((lum * 255.0) + 0.5).toInt().coerceIn(0, 255)
+                bins[idx]++
+                count++
+            }
+            x += step
+        }
+        y += step
+    }
+    if (count <= 0) return null
+
+    val half = (count + 1) / 2
+    var acc = 0
+    for (i in 0..255) {
+        acc += bins[i]
+        if (acc >= half) return i / 255.0
+    }
+    return 0.0
 }
 
 private object DominantColorCache {

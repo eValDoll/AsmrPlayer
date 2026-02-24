@@ -20,6 +20,7 @@ class SettingsDataStore @Inject constructor(
     private val staticHueArgbKey = intPreferencesKey("static_hue_argb")
     private val coverBackgroundEnabledKey = booleanPreferencesKey("cover_background_enabled")
     private val coverBackgroundClarityKey = floatPreferencesKey("cover_background_clarity")
+    private val recentAlbumsPanelExpandedKey = booleanPreferencesKey("recent_albums_panel_expanded")
 
     val theme: Flow<String> = context.settingsDataStore.data.map { it[themeKey] ?: "system" }
     val sfwMode: Flow<Boolean> = context.settingsDataStore.data.map { it[sfwModeKey] ?: false }
@@ -30,6 +31,7 @@ class SettingsDataStore @Inject constructor(
     }
     val coverBackgroundEnabled: Flow<Boolean> = context.settingsDataStore.data.map { it[coverBackgroundEnabledKey] ?: true }
     val coverBackgroundClarity: Flow<Float> = context.settingsDataStore.data.map { it[coverBackgroundClarityKey] ?: 0.35f }
+    val recentAlbumsPanelExpanded: Flow<Boolean> = context.settingsDataStore.data.map { it[recentAlbumsPanelExpandedKey] ?: true }
 
     suspend fun setTheme(theme: String) {
         context.settingsDataStore.edit { it[themeKey] = theme }
@@ -59,6 +61,10 @@ class SettingsDataStore @Inject constructor(
 
     suspend fun setCoverBackgroundClarity(clarity: Float) {
         context.settingsDataStore.edit { it[coverBackgroundClarityKey] = clarity }
+    }
+
+    suspend fun setRecentAlbumsPanelExpanded(expanded: Boolean) {
+        context.settingsDataStore.edit { it[recentAlbumsPanelExpandedKey] = expanded }
     }
 
     suspend fun addLibraryRoot(path: String) {

@@ -14,10 +14,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -25,6 +25,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -40,16 +41,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.core.graphics.ColorUtils
 import com.asmr.player.data.local.db.entities.AlbumEntity
 import com.asmr.player.domain.model.Album
 import com.asmr.player.ui.common.AsmrAsyncImage
-import com.asmr.player.ui.common.rememberDominantColorCenterWeighted
 import com.asmr.player.ui.player.PlayerViewModel
 import com.asmr.player.ui.theme.AsmrTheme
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.AnimationVector1D
 import androidx.compose.animation.core.tween
@@ -58,31 +56,42 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.activity.ComponentActivity
 import android.graphics.RenderEffect
 import android.graphics.Shader
 import android.os.Build
 import androidx.compose.ui.graphics.asComposeRenderEffect
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
+import com.asmr.player.ui.common.findActivity
 
 @Composable
 fun RecentAlbumsPanel(
     onOpenAlbum: (AlbumEntity) -> Unit,
     modifier: Modifier = Modifier,
-    viewModel: RecentAlbumsPanelViewModel = hiltViewModel()
+    viewModel: RecentAlbumsPanelViewModel? = null
 ) {
     val colorScheme = AsmrTheme.colorScheme
-    val playerViewModel: PlayerViewModel = hiltViewModel()
-    val baseItems by viewModel.items.collectAsState()
+    val context = LocalContext.current
+    val activityOwner = remember(context) { context.findActivity() as? ComponentActivity }
+    val owner = activityOwner ?: LocalViewModelStoreOwner.current
+    val resolvedViewModel: RecentAlbumsPanelViewModel = viewModel ?: if (owner != null) {
+        hiltViewModel(owner)
+    } else {
+        hiltViewModel()
+    }
+    val playerViewModel: PlayerViewModel = if (owner != null) {
+        hiltViewModel(owner)
+    } else {
+        hiltViewModel()
+    }
+    val baseItems by resolvedViewModel.items.collectAsState()
     val optimisticOrderIds = remember { mutableStateListOf<Long>() }
     LaunchedEffect(baseItems) {
         val ids = baseItems.map { it.album.id }.toSet()
         optimisticOrderIds.retainAll(ids)
-        while (optimisticOrderIds.size > 5) optimisticOrderIds.removeLast()
-    }
-    val displayItems = remember(baseItems, optimisticOrderIds.toList()) {
-        val byId = baseItems.associateBy { it.album.id }
-        val mergedIds = optimisticOrderIds.filter { it in byId.keys } + baseItems.map { it.album.id }
-        mergedIds.distinct().take(5).mapNotNull { byId[it] }
+        while (optimisticOrderIds.size > 50) optimisticOrderIds.removeLast()
     }
 
     Surface(
@@ -112,12 +121,13 @@ fun RecentAlbumsPanel(
                 )
             }
             RecentAlbumsList(
-                items = displayItems,
+                items = baseItems,
+                preferredOrderIds = optimisticOrderIds.toList(),
                 onOpenAlbum = onOpenAlbum,
                 onResumePlay = { item ->
                     optimisticOrderIds.removeAll { it == item.album.id }
                     optimisticOrderIds.add(0, item.album.id)
-                    while (optimisticOrderIds.size > 5) optimisticOrderIds.removeLast()
+                    while (optimisticOrderIds.size > 50) optimisticOrderIds.removeLast()
                     val a = albumDomain(item.album)
                     val resume = item.resume
                     playerViewModel.playAlbumResume(
@@ -135,49 +145,35 @@ fun RecentAlbumsPanel(
 }
 
 @Composable
-private fun RecentAlbumsList(
+internal fun RecentAlbumsList(
     items: List<RecentAlbumUiItem>,
+    preferredOrderIds: List<Long>,
     onOpenAlbum: (AlbumEntity) -> Unit,
     onResumePlay: (RecentAlbumUiItem) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val spacing = 8.dp
-    val order = remember { mutableStateListOf<Long>() }
-    val itemById: SnapshotStateMap<Long, RecentAlbumUiItem> = remember { mutableStateMapOf() }
+    val spacing = 4.dp
+    val initialTarget = remember(items, preferredOrderIds) {
+        val byId = items.associateBy { it.album.id }
+        val mergedIds = preferredOrderIds.filter { it in byId.keys } + items.map { it.album.id }
+        mergedIds.distinct().mapNotNull { byId[it] }.take(6)
+    }
+    val order = remember {
+        mutableStateListOf<Long>().apply {
+            addAll(initialTarget.map { it.album.id })
+        }
+    }
+    val itemById: SnapshotStateMap<Long, RecentAlbumUiItem> = remember {
+        mutableStateMapOf<Long, RecentAlbumUiItem>().apply {
+            initialTarget.forEach { put(it.album.id, it) }
+        }
+    }
     val scope = rememberCoroutineScope()
     val removalJobs = remember { mutableMapOf<Long, Job>() }
     val yAnims = remember { mutableMapOf<Long, Animatable<Float, AnimationVector1D>>() }
     val alphaAnims = remember { mutableMapOf<Long, Animatable<Float, AnimationVector1D>>() }
     val scaleAnims = remember { mutableMapOf<Long, Animatable<Float, AnimationVector1D>>() }
-
-    LaunchedEffect(items) {
-        val target = items.take(5)
-        val targetIds = target.map { it.album.id }.toSet()
-
-        target.forEach { itemById[it.album.id] = it }
-
-        val exitingIds = order.filter { it !in targetIds }
-        val newOrder = target.map { it.album.id } + exitingIds
-        order.clear()
-        order.addAll(newOrder.distinct())
-
-        val currentIds = order.toSet()
-        val removed = currentIds - targetIds
-
-        removed.forEach { id ->
-            if (removalJobs.containsKey(id)) return@forEach
-            removalJobs[id] = scope.launch {
-                delay(220)
-                order.removeAll { it == id }
-                itemById.remove(id)
-                yAnims.remove(id)
-                alphaAnims.remove(id)
-                scaleAnims.remove(id)
-                removalJobs.remove(id)
-            }
-        }
-        targetIds.forEach { id -> removalJobs.remove(id)?.cancel() }
-    }
+    var animationsReady by remember { mutableStateOf(false) }
 
     BoxWithConstraints(modifier = modifier) {
         if (items.isEmpty()) {
@@ -189,7 +185,16 @@ private fun RecentAlbumsList(
             return@BoxWithConstraints
         }
         val density = LocalDensity.current
-        val target = items.take(5)
+        val minItem = 56.dp
+        val maxVisible = remember(items, maxHeight) {
+            val maxByMinHeight = ((maxHeight + spacing) / (minItem + spacing)).toInt().coerceAtLeast(1)
+            maxByMinHeight.coerceAtMost(items.size)
+        }
+        val target = remember(items, preferredOrderIds, maxVisible) {
+            val byId = items.associateBy { it.album.id }
+            val mergedIds = preferredOrderIds.filter { it in byId.keys } + items.map { it.album.id }
+            mergedIds.distinct().mapNotNull { byId[it] }.take(maxVisible)
+        }
         val count = target.size
         val targetIds = target.map { it.album.id }.toSet()
         val featuredId = target.firstOrNull()?.album?.id
@@ -197,11 +202,40 @@ private fun RecentAlbumsList(
         val normalWeight = 1f
         val totalWeight = if (count == 1) 1f else featuredWeight + (count - 1) * normalWeight
         val availableHeight = maxHeight - spacing * (count - 1)
-        val minItem = 56.dp
         val maxItem = 120.dp
         val featuredMax = 160.dp
 
-        val targetHeights = remember(items, maxHeight) {
+        val targetOrderIds = remember(target) { target.map { it.album.id } }
+        LaunchedEffect(targetOrderIds, maxVisible) {
+            target.forEach { itemById[it.album.id] = it }
+
+            val exitingIds = order.filter { it !in targetIds }
+            val newOrder = target.map { it.album.id } + exitingIds
+            val distinctOrder = newOrder.distinct()
+            if (order.toList() != distinctOrder) {
+                order.clear()
+                order.addAll(distinctOrder)
+            }
+
+            val currentIds = order.toSet()
+            val removed = currentIds - targetIds
+
+            removed.forEach { id ->
+                if (removalJobs.containsKey(id)) return@forEach
+                removalJobs[id] = scope.launch {
+                    delay(220)
+                    order.removeAll { it == id }
+                    itemById.remove(id)
+                    yAnims.remove(id)
+                    alphaAnims.remove(id)
+                    scaleAnims.remove(id)
+                    removalJobs.remove(id)
+                }
+            }
+            targetIds.forEach { id -> removalJobs.remove(id)?.cancel() }
+        }
+
+        val targetHeights = remember(targetOrderIds, maxHeight) {
             buildMap<Long, androidx.compose.ui.unit.Dp> {
                 if (count <= 0) return@buildMap
                 val ids = target.map { it.album.id }
@@ -214,7 +248,7 @@ private fun RecentAlbumsList(
             }
         }
 
-        val targetYById = remember(items, maxHeight, order.toList()) {
+        val targetYById = remember(targetIds, targetHeights, maxHeight, order.toList()) {
             val map = mutableMapOf<Long, androidx.compose.ui.unit.Dp>()
             var y = 0.dp
             val orderedTargets = order.filter { it in targetIds }
@@ -241,6 +275,7 @@ private fun RecentAlbumsList(
 
         LaunchedEffect(targetYPxById, targetIds, featuredId, order.toList()) {
             val enterFromPx = with(density) { (-24).dp.toPx() }
+            val animate = animationsReady
 
             for (id in order) {
                 val yTarget = targetYPxById[id] ?: 0f
@@ -250,21 +285,28 @@ private fun RecentAlbumsList(
                 val sAnim = scaleAnims.getOrPut(id) { Animatable(if (id in targetIds) 1f else 0.98f) }
 
                 val isTarget = id in targetIds
-                if (isNew && isTarget) {
-                    yAnim.snapTo(yTarget + enterFromPx)
-                    aAnim.snapTo(0f)
-                    sAnim.snapTo(0.98f)
-                }
-                launch {
-                    yAnim.animateTo(yTarget, animationSpec = tween(durationMillis = 240))
-                }
-                launch {
-                    aAnim.animateTo(if (isTarget) 1f else 0f, animationSpec = tween(durationMillis = 180))
-                }
-                launch {
-                    sAnim.animateTo(if (isTarget) 1f else 0.98f, animationSpec = tween(durationMillis = 180))
+                if (!animate) {
+                    yAnim.snapTo(yTarget)
+                    aAnim.snapTo(if (isTarget) 1f else 0f)
+                    sAnim.snapTo(if (isTarget) 1f else 0.98f)
+                } else {
+                    if (isNew && isTarget) {
+                        yAnim.snapTo(yTarget + enterFromPx)
+                        aAnim.snapTo(0f)
+                        sAnim.snapTo(0.98f)
+                    }
+                    launch {
+                        yAnim.animateTo(yTarget, animationSpec = tween(durationMillis = 240))
+                    }
+                    launch {
+                        aAnim.animateTo(if (isTarget) 1f else 0f, animationSpec = tween(durationMillis = 180))
+                    }
+                    launch {
+                        sAnim.animateTo(if (isTarget) 1f else 0.98f, animationSpec = tween(durationMillis = 180))
+                    }
                 }
             }
+            if (!animationsReady) animationsReady = true
         }
 
         Box(modifier = Modifier.fillMaxSize()) {
@@ -275,9 +317,21 @@ private fun RecentAlbumsList(
                         val isTarget = id in targetIds
                         val featured = isTarget && id == featuredId
                         val baseHeight = targetHeights[id] ?: minItem
-                        val yPx = yAnims[id]?.value ?: 0f
-                        val alpha = alphaAnims[id]?.value ?: (if (isTarget) 1f else 0f)
-                        val scale = scaleAnims[id]?.value ?: (if (isTarget) 1f else 0.98f)
+                        val yPx = if (animationsReady) {
+                            yAnims[id]?.value ?: (targetYPxById[id] ?: 0f)
+                        } else {
+                            targetYPxById[id] ?: 0f
+                        }
+                        val alpha = if (animationsReady) {
+                            alphaAnims[id]?.value ?: (if (isTarget) 1f else 0f)
+                        } else {
+                            if (isTarget) 1f else 0f
+                        }
+                        val scale = if (animationsReady) {
+                            scaleAnims[id]?.value ?: (if (isTarget) 1f else 0.98f)
+                        } else {
+                            if (isTarget) 1f else 0.98f
+                        }
 
                         Box(
                             modifier = Modifier
@@ -316,7 +370,7 @@ private fun RecentAlbumRow(
     val colorScheme = AsmrTheme.colorScheme
     val glassShape = androidx.compose.foundation.shape.RoundedCornerShape(if (featured) 18.dp else 16.dp)
     
-    val blurRadius = 4.dp
+    val blurRadius = 2.dp
     val blurModifier = remember(blurRadius) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             Modifier.graphicsLayer {
@@ -354,6 +408,12 @@ private fun RecentAlbumRow(
         Box(
             modifier = Modifier
                 .fillMaxSize()
+                .background(Color.Black.copy(alpha = if (featured) 0.36f else 0.42f))
+        )
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
                 .border(
                     width = 1.dp,
                     color = colorScheme.onSurface.copy(alpha = 0.06f),
@@ -361,12 +421,7 @@ private fun RecentAlbumRow(
                 )
         )
 
-        val dominant by rememberDominantColorCenterWeighted(
-            model = albumThumb(item.album),
-            defaultColor = colorScheme.surface,
-            centerRegionRatio = if (featured) 0.58f else 0.62f
-        )
-        val textColor = remember(dominant) { bestTextOn(dominant) }
+        val textColor = Color.White
 
         Row(
             modifier = Modifier
@@ -374,20 +429,20 @@ private fun RecentAlbumRow(
                 .padding(horizontal = contentPadH, vertical = contentPadV),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Surface(
-                modifier = Modifier.size(if (featured) 40.dp else 34.dp),
-                shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
-                color = Color.Black.copy(alpha = 0.18f),
-                tonalElevation = 0.dp,
-                shadowElevation = 0.dp
+            val playButtonShape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp)
+            Box(
+                modifier = Modifier
+                    .size(if (featured) 40.dp else 34.dp)
+                    .background(Color.White.copy(alpha = 0.14f), shape = playButtonShape)
+                    .clickable(onClick = onPlay)
+                    .clip(playButtonShape),
+                contentAlignment = Alignment.Center
             ) {
-                IconButton(onClick = onPlay, modifier = Modifier.fillMaxSize()) {
-                    Icon(
-                        imageVector = Icons.Filled.PlayArrow,
-                        contentDescription = null,
-                        tint = textColor
-                    )
-                }
+                Icon(
+                    imageVector = Icons.Filled.PlayArrow,
+                    contentDescription = null,
+                    tint = textColor
+                )
             }
             Spacer(modifier = Modifier.size(if (featured) 12.dp else 10.dp))
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
@@ -399,32 +454,52 @@ private fun RecentAlbumRow(
                     maxLines = if (featured) 2 else 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                val total = item.totalTracks
-                val completed = item.completedTracks
-                val subtitle = if (total > 0L) {
-                    "已完成 $completed/$total"
-                } else {
-                    "进度未知"
+                val resume = item.resume
+                if (resume?.trackTitle != null) {
+                    val subColor = textColor.copy(alpha = 0.82f)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        Text(
+                            text = "上次听到",
+                            color = subColor,
+                            style = MaterialTheme.typography.labelSmall,
+                            maxLines = 1
+                        )
+                        Spacer(modifier = Modifier.width(2.dp))
+                        Text(
+                            text = resume.trackTitle,
+                            color = subColor,
+                            style = MaterialTheme.typography.labelSmall,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false)
+                        )
+                        Text(
+                            text = "，${formatRecentProgressPosition(resume.positionMs)}处",
+                            color = subColor,
+                            style = MaterialTheme.typography.labelSmall,
+                            maxLines = 1
+                        )
+                    }
                 }
-                Text(
-                    text = subtitle,
-                    color = textColor.copy(alpha = 0.82f),
-                    style = MaterialTheme.typography.labelSmall,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
             }
         }
     }
 }
 
-private fun bestTextOn(background: Color): Color {
-    val bg = background.copy(alpha = 1f).toArgb()
-    val white = android.graphics.Color.WHITE
-    val black = android.graphics.Color.BLACK
-    val cWhite = ColorUtils.calculateContrast(white, bg)
-    val cBlack = ColorUtils.calculateContrast(black, bg)
-    return if (cWhite >= cBlack) Color.White else Color.Black
+internal fun formatRecentProgressPosition(ms: Long): String {
+    val totalSeconds = (ms.coerceAtLeast(0L) / 1000L)
+    val hours = totalSeconds / 3600L
+    val minutes = (totalSeconds % 3600L) / 60L
+    val seconds = totalSeconds % 60L
+    return if (hours > 0L) {
+        String.format("%02d:%02d:%02d", hours, minutes, seconds)
+    } else {
+        String.format("%02d:%02d", minutes, seconds)
+    }
 }
 
 private fun albumDomain(album: AlbumEntity): Album {

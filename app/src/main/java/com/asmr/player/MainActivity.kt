@@ -41,6 +41,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.media3.common.util.UnstableApi
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -61,6 +62,7 @@ import com.asmr.player.ui.player.LyricsPage
 import com.asmr.player.ui.sidepanel.LocalRightPanelExpandedState
 import com.asmr.player.ui.common.rememberDominantColorCenterWeighted
 import com.asmr.player.ui.downloads.DownloadsScreen
+import com.asmr.player.ui.downloads.DownloadsViewModel
 import com.asmr.player.ui.dlsite.DlsiteLoginScreen
 import com.asmr.player.ui.playlists.PlaylistDetailScreen
 import com.asmr.player.ui.playlists.PlaylistPickerScreen
@@ -128,6 +130,9 @@ import com.asmr.player.ui.theme.rememberDynamicHuePalette
 import com.asmr.player.ui.theme.rememberDynamicHuePaletteFromVideoFrame
 import javax.inject.Inject
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeoutOrNull
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
@@ -140,6 +145,9 @@ class MainActivity : ComponentActivity() {
     @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3WindowSizeClassApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val recentAlbumsPanelExpandedInitial = runBlocking {
+            withTimeoutOrNull(80L) { settingsDataStore.recentAlbumsPanelExpanded.first() }
+        } ?: false
         setContent {
             val windowSizeClass = calculateWindowSizeClass(this)
             val context = LocalContext.current
@@ -289,6 +297,8 @@ class MainActivity : ComponentActivity() {
                         windowSizeClass = windowSizeClass,
                         playerViewModel = playerViewModel,
                         libraryViewModel = libraryViewModel,
+                        settingsDataStore = settingsDataStore,
+                        recentAlbumsPanelExpandedInitial = recentAlbumsPanelExpandedInitial,
                         onShowQueue = { showQueue = true },
                         visibleMessages = visibleMessages,
                         mode = mode,
@@ -328,10 +338,13 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
+@androidx.annotation.OptIn(UnstableApi::class)
 fun MainContainer(
     windowSizeClass: WindowSizeClass,
     playerViewModel: PlayerViewModel,
     libraryViewModel: LibraryViewModel,
+    settingsDataStore: SettingsDataStore,
+    recentAlbumsPanelExpandedInitial: Boolean,
     onShowQueue: () -> Unit,
     visibleMessages: List<VisibleAppMessage>,
     mode: ThemeMode,
@@ -555,7 +568,15 @@ fun MainContainer(
     ) {
         val hazeState = remember { HazeState() }
         val miniPlayerVisible = playback.currentMediaItem != null && currentRoute != "now_playing" && currentRoute != "lyrics"
-        val rightPanelExpandedState = remember { mutableStateOf(true) }
+        val rightPanelExpandedFromStore by settingsDataStore.recentAlbumsPanelExpanded.collectAsState(initial = recentAlbumsPanelExpandedInitial)
+        val rightPanelExpandedState = remember(settingsDataStore, scope, recentAlbumsPanelExpandedInitial) {
+            PersistedBooleanState(initial = recentAlbumsPanelExpandedInitial) { expanded ->
+                scope.launch { settingsDataStore.setRecentAlbumsPanelExpanded(expanded) }
+            }
+        }
+        LaunchedEffect(rightPanelExpandedFromStore) {
+            rightPanelExpandedState.updateFromStore(rightPanelExpandedFromStore)
+        }
         CompositionLocalProvider(
             LocalBottomOverlayPadding provides (if (miniPlayerVisible) MiniPlayerOverlayHeight else 0.dp),
             LocalRightPanelExpandedState provides rightPanelExpandedState
@@ -581,11 +602,30 @@ fun MainContainer(
                                 Column {
                                     CenterAlignedTopAppBar(
                                         title = {
+                                            val entry = navBackStackEntry
+                                            val groupName = if (currentRoute == "group/{groupId}/{groupName}") {
+                                                decodeRouteArg(entry?.arguments?.getString("groupName").orEmpty())
+                                            } else ""
+                                            val playlistName = if (currentRoute == "playlist/{playlistId}/{playlistName}") {
+                                                decodeRouteArg(entry?.arguments?.getString("playlistName").orEmpty())
+                                            } else ""
+                                            val systemPlaylistType = if (currentRoute == "playlist_system/{type}") {
+                                                entry?.arguments?.getString("type").orEmpty()
+                                            } else ""
                                             Text(
                                                 when {
                                                     currentRoute == "library" -> "本地库"
                                                     currentRoute == "search" -> "在线搜索"
                                                     currentRoute == "playlists" -> "我的列表"
+                                                    currentRoute == "playlist/{playlistId}/{playlistName}" ->
+                                                        playlistName.ifBlank { "我的列表" }
+                                                    currentRoute == "playlist_system/{type}" -> when (systemPlaylistType) {
+                                                        "favorites" -> "我的收藏"
+                                                        else -> "我的收藏"
+                                                    }
+                                                    currentRoute == "groups" -> "我的分组"
+                                                    currentRoute == "group/{groupId}/{groupName}" ->
+                                                        groupName.ifBlank { "我的分组" }
                                                     currentRoute == "settings" -> "设置"
                                                     currentRoute == "downloads" -> "下载管理"
                                                     currentRoute == "dlsite_login" -> "DLsite 登录"
@@ -666,6 +706,12 @@ fun MainContainer(
                                                         contentDescription = null
                                                     )
                                                 }
+                                            } else if (entry != null && currentRoute == "downloads") {
+                                                val downloadsViewModel: DownloadsViewModel = hiltViewModel(entry)
+                                                TextButton(
+                                                    onClick = { downloadsViewModel.cancelAll() },
+                                                    colors = ButtonDefaults.textButtonColors(contentColor = topBarContentColor)
+                                                ) { Text("全部暂停") }
                                             } else if (entry != null && (
                                                 currentRoute?.startsWith("album_detail/{albumId}") == true ||
                                                     currentRoute?.startsWith("album_detail/") == true
@@ -1210,6 +1256,30 @@ fun MainContainer(
 
 }
 
+}
+
+@Stable
+private class PersistedBooleanState(
+    initial: Boolean,
+    private val save: (Boolean) -> Unit
+) : MutableState<Boolean> {
+    private var backing by mutableStateOf(initial)
+
+    override var value: Boolean
+        get() = backing
+        set(value) {
+            if (backing == value) return
+            backing = value
+            save(value)
+        }
+
+    override fun component1(): Boolean = value
+
+    override fun component2(): (Boolean) -> Unit = { value = it }
+
+    fun updateFromStore(value: Boolean) {
+        backing = value
+    }
 }
 
 @Composable

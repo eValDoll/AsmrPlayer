@@ -8,12 +8,13 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
@@ -25,9 +26,11 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.windowsizeclass.WindowSizeClass
@@ -41,6 +44,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -64,14 +68,18 @@ fun AlbumGroupsScreen(
     var showCreate by remember { mutableStateOf(false) }
 
     val isCompact = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .statusBarsPadding(),
-        contentAlignment = Alignment.TopCenter
-    ) {
-        Column(
-            modifier = if (isCompact) {
+    Scaffold(
+        contentWindowInsets = WindowInsets.navigationBars,
+        containerColor = Color.Transparent,
+        contentColor = colorScheme.onBackground
+    ) { padding ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding),
+            contentAlignment = Alignment.TopCenter
+        ) {
+            val contentModifier = if (isCompact) {
                 Modifier.fillMaxSize()
             } else {
                 Modifier
@@ -79,49 +87,39 @@ fun AlbumGroupsScreen(
                     .widthIn(max = 720.dp)
                     .fillMaxWidth()
             }
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 24.dp, vertical = 16.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    "我的分组",
-                    style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
-                    color = colorScheme.textPrimary
-                )
-                Spacer(modifier = Modifier.weight(1f))
-                IconButton(
-                    onClick = { showCreate = true },
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(colorScheme.primaryContainer)
+            Box(modifier = contentModifier) {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                        .withAddedBottomPadding(LocalBottomOverlayPadding.current + 72.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Icon(Icons.Default.Add, contentDescription = null, tint = colorScheme.primary)
-                }
-            }
-
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
-                    .withAddedBottomPadding(LocalBottomOverlayPadding.current),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                items(groups, key = { it.id }) { group ->
-                    val entity = remember(group.id, group.name, group.createdAt) {
-                        AlbumGroupEntity(
-                            id = group.id,
-                            name = group.name,
-                            createdAt = group.createdAt
+                    items(groups, key = { it.id }) { group ->
+                        val entity = remember(group.id, group.name, group.createdAt) {
+                            AlbumGroupEntity(
+                                id = group.id,
+                                name = group.name,
+                                createdAt = group.createdAt
+                            )
+                        }
+                        AlbumGroupRow(
+                            group = group,
+                            onClick = { onGroupClick(entity) },
+                            onDelete = { viewModel.deleteGroup(entity) },
+                            onRename = { newName -> viewModel.renameGroup(entity.id, newName) }
                         )
                     }
-                    AlbumGroupRow(
-                        group = group,
-                        onClick = { onGroupClick(entity) },
-                        onDelete = { viewModel.deleteGroup(entity) },
-                        onRename = { newName -> viewModel.renameGroup(entity.id, newName) }
-                    )
+                }
+
+                FloatingActionButton(
+                    onClick = { showCreate = true },
+                    containerColor = colorScheme.primaryContainer,
+                    contentColor = colorScheme.primary,
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(end = 16.dp, bottom = LocalBottomOverlayPadding.current + 16.dp)
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = null)
                 }
             }
         }

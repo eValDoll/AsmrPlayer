@@ -13,10 +13,9 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.FormatAlignLeft
 import androidx.compose.material.icons.automirrored.filled.FormatAlignRight
@@ -49,6 +48,7 @@ import com.asmr.player.ui.library.BulkPhase
 import com.asmr.player.ui.library.LibraryViewModel
 import com.asmr.player.ui.theme.AsmrTheme
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
+import com.asmr.player.ui.common.withAddedBottomPadding
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -95,39 +95,34 @@ fun SettingsScreen(
     // 屏幕尺寸判断
     val isCompact = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .statusBarsPadding(),
-        contentAlignment = Alignment.TopCenter // 仅用于平板适配：居中显示内容
-    ) {
-        Column(
-            modifier = if (isCompact) {
-                Modifier
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
-                    .padding(16.dp)
-                    .padding(bottom = LocalBottomOverlayPadding.current)
+    Scaffold(
+        contentWindowInsets = WindowInsets.navigationBars,
+        containerColor = Color.Transparent,
+        contentColor = colorScheme.onBackground
+    ) { padding ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding),
+            contentAlignment = Alignment.TopCenter
+        ) {
+            val contentModifier = if (isCompact) {
+                Modifier.fillMaxSize()
             } else {
-                // 仅用于平板适配：限制内容区域最大宽度并填充可用空间
                 Modifier
                     .fillMaxHeight()
                     .widthIn(max = 720.dp)
                     .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
-                    .padding(16.dp)
-                    .padding(bottom = LocalBottomOverlayPadding.current)
-            },
-            verticalArrangement = Arrangement.spacedBy(20.dp)
-        ) {
-            Text(
-                "设置",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                color = colorScheme.onBackground
-            )
+            }
 
-            SettingsGroup(title = "本地库") {
+            LazyColumn(
+                modifier = contentModifier,
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp)
+                    .withAddedBottomPadding(LocalBottomOverlayPadding.current),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                item(key = "group:local") {
+                    SettingsGroup(title = "本地库") {
                 val isDark = AsmrTheme.colorScheme.isDark
                 val buttonColors = ButtonDefaults.filledTonalButtonColors(
                     containerColor = colorScheme.primarySoft,
@@ -255,8 +250,10 @@ fun SettingsScreen(
                     }
                 }
             }
+        }
 
-            SettingsGroup(title = "外观") {
+                item(key = "group:appearance") {
+                    SettingsGroup(title = "外观") {
                 Text("主题模式", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                     ThemeModeChip(
@@ -354,8 +351,11 @@ fun SettingsScreen(
                 }
             }
 
-            // 悬浮歌词
-            SettingsGroup(title = "悬浮歌词") {
+                }
+
+                // 悬浮歌词
+                item(key = "group:floating_lyrics") {
+                    SettingsGroup(title = "悬浮歌词") {
                 SettingsToggleRow(
                     text = "开启悬浮歌词",
                     checked = floatingLyricsEnabled,
@@ -474,7 +474,12 @@ fun SettingsScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(40.dp))
+                }
+
+                item(key = "bottom_spacer") {
+                    Spacer(modifier = Modifier.height(40.dp))
+                }
+            }
         }
     }
 

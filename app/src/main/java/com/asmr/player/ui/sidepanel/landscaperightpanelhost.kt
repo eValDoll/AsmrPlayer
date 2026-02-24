@@ -50,7 +50,11 @@ fun LandscapeRightPanelHost(
     bottomPanel: (@Composable () -> Unit)? = null,
     bottomHeightFraction: Float = 0.3f,
     minBottomHeight: Dp = 220.dp,
-    content: @Composable (contentModifier: Modifier, hasRightPanel: Boolean) -> Unit
+    content: @Composable (
+        contentModifier: Modifier,
+        hasRightPanel: Boolean,
+        rightPanelToggle: (@Composable (modifier: Modifier) -> Unit)?
+    ) -> Unit
 ) {
     val configuration = LocalConfiguration.current
     val isCompact = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact
@@ -75,96 +79,78 @@ fun LandscapeRightPanelHost(
         val eligible = wantPanel && panelWidth >= minPanelWidth
 
         if (!eligible) {
-            content(Modifier.fillMaxSize(), false)
+            content(Modifier.fillMaxSize(), false, null)
             return@BoxWithConstraints
         }
 
-        Row(modifier = Modifier.fillMaxSize()) {
-            Box(modifier = Modifier.weight(1f).fillMaxHeight()) { content(Modifier.fillMaxSize(), true) }
+        val topPad = panelPadding * 0.5f
+        val panelVisibilityState = remember { MutableTransitionState(expanded) }
+        panelVisibilityState.targetState = expanded
+        val keepPanelSpace = panelVisibilityState.currentState || panelVisibilityState.targetState
+        val toggle: @Composable (modifier: Modifier) -> Unit = { modifier ->
+            IconButton(onClick = { setExpanded(!expanded) }, modifier = modifier) {
+                Icon(
+                    imageVector = if (expanded) {
+                        Icons.AutoMirrored.Filled.KeyboardArrowRight
+                    } else {
+                        Icons.AutoMirrored.Filled.KeyboardArrowLeft
+                    },
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.padding(4.dp)
+                )
+            }
+        }
 
-            val topPad = panelPadding * 0.5f
-            val panelVisibilityState = remember { MutableTransitionState(expanded) }
-            panelVisibilityState.targetState = expanded
-            val keepPanelSpace = panelVisibilityState.currentState || panelVisibilityState.targetState
+        Box(modifier = Modifier.fillMaxSize()) {
+            Row(modifier = Modifier.fillMaxSize()) {
+                Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
+                    content(Modifier.fillMaxSize(), true, toggle)
+                }
 
-            if (!keepPanelSpace) {
+                if (keepPanelSpace) {
                     Box(
                         modifier = Modifier
+                            .width(panelWidth)
                             .fillMaxHeight()
-                            .padding(end = panelPadding, top = topPad, bottom = panelPadding),
-                        contentAlignment = Alignment.Center
+                            .padding(end = panelPadding, top = topPad, bottom = panelPadding)
                     ) {
-                        Surface(
-                            modifier = Modifier
-                                .size(36.dp)
-                                .clickable { setExpanded(true) },
-                            shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
-                            tonalElevation = 1.dp
+                        androidx.compose.animation.AnimatedVisibility(
+                            visibleState = panelVisibilityState,
+                            enter = slideInHorizontally(animationSpec = tween(220)) { it } + fadeIn(animationSpec = tween(220)),
+                            exit = slideOutHorizontally(animationSpec = tween(180)) { it } + fadeOut(animationSpec = tween(180))
                         ) {
-                            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                Icon(
-                                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-                    }
-            } else {
-                Box(
-                    modifier = Modifier
-                        .width(panelWidth)
-                        .fillMaxHeight()
-                        .padding(end = panelPadding, top = topPad, bottom = panelPadding)
-                ) {
-                    androidx.compose.animation.AnimatedVisibility(
-                        visibleState = panelVisibilityState,
-                        enter = slideInHorizontally(animationSpec = tween(220)) { it } + fadeIn(animationSpec = tween(220)),
-                        exit = slideOutHorizontally(animationSpec = tween(180)) { it } + fadeOut(animationSpec = tween(180))
-                    ) {
-                        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-                            val headerHeight = 32.dp
-                            val bottomHeight = if (bottomPanel == null || bottomHeightFraction <= 0f) {
-                                0.dp
-                            } else {
-                                (maxHeight * bottomHeightFraction)
-                                    .coerceAtLeast(minBottomHeight)
-                                    .coerceAtMost((maxHeight - headerHeight).coerceAtLeast(0.dp))
-                            }
-                            Column(modifier = Modifier.fillMaxSize()) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(headerHeight),
-                                    horizontalArrangement = Arrangement.End,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    IconButton(
-                                        onClick = { setExpanded(false) },
-                                        modifier = Modifier.size(32.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                                            contentDescription = null,
-                                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
+                            BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                                val headerHeight = 0.dp
+                                val bottomHeight = if (bottomPanel == null || bottomHeightFraction <= 0f) {
+                                    0.dp
+                                } else {
+                                    (maxHeight * bottomHeightFraction)
+                                        .coerceAtLeast(minBottomHeight)
+                                        .coerceAtMost((maxHeight - headerHeight).coerceAtLeast(0.dp))
                                 }
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .weight(1f),
-                                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                                ) {
-                                    topPanel()
-                                }
-                                if (bottomPanel != null && bottomHeight > 0.dp) {
+                                Column(modifier = Modifier.fillMaxSize()) {
                                     Box(
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .height(bottomHeight)
+                                            .height(headerHeight)
+                                    )
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .weight(1f),
+                                        verticalArrangement = Arrangement.spacedBy(12.dp)
                                     ) {
-                                        bottomPanel()
+                                        topPanel()
+                                    }
+                                    if (bottomPanel != null && bottomHeight > 0.dp) {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .height(bottomHeight)
+                                        ) {
+                                            bottomPanel()
+                                        }
                                     }
                                 }
                             }

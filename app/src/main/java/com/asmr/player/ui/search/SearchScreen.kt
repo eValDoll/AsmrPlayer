@@ -23,6 +23,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -43,6 +44,7 @@ import com.asmr.player.ui.sidepanel.RecentAlbumsPanel
 import com.asmr.player.ui.sidepanel.LandscapeRightPanelHost
 import kotlinx.coroutines.launch
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
+import androidx.compose.material3.pulltorefresh.PullToRefreshContainer
 
 private enum class SearchResultViewMode { Grid, List }
 
@@ -77,14 +79,20 @@ fun SearchScreen(
     val isCompact = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact
 
     val pullToRefreshState = rememberPullToRefreshState()
+    val latestKeyword by rememberUpdatedState(keyword)
+    val latestPurchasedOnly by rememberUpdatedState(purchasedOnly)
     LaunchedEffect(pullToRefreshState.isRefreshing) {
         if (pullToRefreshState.isRefreshing) {
             val state = uiState
             if (state is SearchUiState.Success) {
-                viewModel.refreshPage()
+                if (state.isPaging) {
+                    pullToRefreshState.endRefresh()
+                } else {
+                    viewModel.refreshPage()
+                }
             } else {
-                viewModel.setPurchasedOnly(purchasedOnly)
-                viewModel.search(keyword)
+                viewModel.setPurchasedOnly(latestPurchasedOnly)
+                viewModel.search(latestKeyword)
             }
         }
     }
@@ -94,245 +102,267 @@ fun SearchScreen(
         val canEnd = when (state) {
             is SearchUiState.Success -> !state.isPaging
             is SearchUiState.Error -> true
-            else -> false
+            is SearchUiState.Loading -> false
+            else -> true
         }
         if (canEnd) pullToRefreshState.endRefresh()
     }
 
-    LandscapeRightPanelHost(
-        windowSizeClass = windowSizeClass,
-        modifier = Modifier
-            .fillMaxSize()
-            .statusBarsPadding(),
-        topPanel = {
-            RecentAlbumsPanel(
-                onOpenAlbum = { a ->
-                    onAlbumClick(
-                        Album(
-                            id = a.id,
-                            title = a.title,
-                            path = a.path,
-                            localPath = a.localPath,
-                            downloadPath = a.downloadPath,
-                            circle = a.circle,
-                            cv = a.cv,
-                            coverUrl = a.coverUrl,
-                            coverPath = a.coverPath,
-                            coverThumbPath = a.coverThumbPath,
-                            workId = a.workId,
-                            rjCode = a.rjCode,
-                            description = a.description
-                        )
-                    )
-                },
-                modifier = Modifier.fillMaxHeight()
-            )
-        },
-        bottomPanel = null
-    ) { contentModifier, hasRightPanel ->
-        Box(
-            modifier = contentModifier,
-            contentAlignment = if (hasRightPanel) Alignment.TopStart else Alignment.TopCenter
-        ) {
-            Column(
-                modifier = if (isCompact) {
-                    Modifier.fillMaxSize()
-                } else if (hasRightPanel) {
-                    Modifier.fillMaxSize()
-                } else {
-                    Modifier
-                        .fillMaxHeight()
-                        .widthIn(max = 720.dp)
-                        .fillMaxWidth()
-                }
-            ) {
-            TextField(
-                value = keyword,
-                onValueChange = { keyword = it },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 48.dp)
-                    .padding(horizontal = 16.dp, vertical = 2.dp)
-                    .clip(RoundedCornerShape(16.dp)),
-                leadingIcon = {
-                    val currentOrder = success?.order ?: SearchSortOption.Trend
-                    val label = if (purchasedOnly) "仅已购" else currentOrder.label
-                    TextButton(
-                        onClick = { scopeMenuExpanded = true },
-                        enabled = success != null && !(success.isPaging),
-                        modifier = Modifier.height(32.dp),
-                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
-                        colors = ButtonDefaults.textButtonColors(contentColor = colorScheme.primary)
-                    ) {
-                        Text(label, style = MaterialTheme.typography.labelSmall, maxLines = 1)
-                    }
-                    DropdownMenu(
-                        expanded = scopeMenuExpanded,
-                        onDismissRequest = { scopeMenuExpanded = false },
-                        modifier = Modifier.background(colorScheme.surface)
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text("仅已购", color = colorScheme.textPrimary) },
-                            onClick = {
-                                scopeMenuExpanded = false
-                                purchasedOnly = true
-                                viewModel.setPurchasedOnly(true)
-                            }
-                        )
-                        SearchSortOption.values().forEach { option ->
-                            DropdownMenuItem(
-                                text = { Text(option.label, color = colorScheme.textPrimary) },
-                                onClick = {
-                                    scopeMenuExpanded = false
-                                    purchasedOnly = false
-                                    viewModel.setPurchasedOnly(false)
-                                    viewModel.setOrder(option)
-                                }
+    Scaffold(
+        contentWindowInsets = WindowInsets.navigationBars,
+        containerColor = Color.Transparent,
+        contentColor = colorScheme.onBackground
+    ) { padding ->
+        LandscapeRightPanelHost(
+            windowSizeClass = windowSizeClass,
+            modifier = Modifier
+                .padding(padding)
+                .fillMaxSize(),
+            topPanel = {
+                RecentAlbumsPanel(
+                    onOpenAlbum = { a ->
+                        onAlbumClick(
+                            Album(
+                                id = a.id,
+                                title = a.title,
+                                path = a.path,
+                                localPath = a.localPath,
+                                downloadPath = a.downloadPath,
+                                circle = a.circle,
+                                cv = a.cv,
+                                coverUrl = a.coverUrl,
+                                coverPath = a.coverPath,
+                                coverThumbPath = a.coverThumbPath,
+                                workId = a.workId,
+                                rjCode = a.rjCode,
+                                description = a.description
                             )
-                        }
-                    }
-                },
-                placeholder = {
-                    Text(
-                        text = "搜索专辑、社团、CV...",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = colorScheme.textTertiary,
-                        maxLines = 1
-                    )
-                },
-                trailingIcon = {
-                    IconButton(
-                        onClick = {
-                            viewModel.search(keyword)
-                            scope.launch {
-                                listState.scrollToItem(0)
-                                gridState.scrollToItem(0)
-                            }
-                        },
-                        modifier = Modifier.size(40.dp)
-                    ) {
-                        Icon(Icons.Default.Search, contentDescription = null, tint = colorScheme.primary)
-                    }
-                },
-                textStyle = MaterialTheme.typography.bodySmall,
-                colors = TextFieldDefaults.colors(
-                    focusedContainerColor = colorScheme.surface.copy(alpha = 0.5f),
-                    unfocusedContainerColor = colorScheme.surface.copy(alpha = 0.3f),
-                    disabledContainerColor = colorScheme.surface.copy(alpha = 0.1f),
-                    focusedIndicatorColor = Color.Transparent,
-                    unfocusedIndicatorColor = Color.Transparent,
-                    focusedTextColor = colorScheme.textPrimary,
-                    unfocusedTextColor = colorScheme.textSecondary
-                ),
-                singleLine = true
-            )
-            
-            if (success?.isEnriching == true) {
-                LinearProgressIndicator(
-                    modifier = Modifier.fillMaxWidth().height(2.dp),
-                    color = colorScheme.primary,
-                    trackColor = Color.Transparent
-                )
-            }
-    
-            if (success != null) {
-                SearchPaginationHeader(
-                    page = success.page,
-                    canGoPrev = success.canGoPrev,
-                    canGoNext = success.canGoNext,
-                    isPaging = success.isPaging,
-                    onPrev = {
-                        scope.launch {
-                            listState.scrollToItem(0)
-                            gridState.scrollToItem(0)
-                        }
-                        viewModel.prevPage()
+                        )
                     },
-                    onNext = {
-                        scope.launch {
-                            listState.scrollToItem(0)
-                            gridState.scrollToItem(0)
-                        }
-                        viewModel.nextPage()
-                    }
+                    modifier = Modifier.fillMaxHeight()
                 )
-            }
-    
+            },
+            bottomPanel = null
+        ) { contentModifier, hasRightPanel, rightPanelToggle ->
             Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .nestedScroll(pullToRefreshState.nestedScrollConnection)
+                modifier = contentModifier,
+                contentAlignment = if (hasRightPanel) Alignment.TopStart else Alignment.TopCenter
             ) {
-                when (val state = uiState) {
-                    is SearchUiState.Loading -> Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .verticalScroll(rememberScrollState()),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
-                    ) {
-                        CircularProgressIndicator(color = colorScheme.primary)
+                Column(
+                    modifier = if (isCompact) {
+                        Modifier.fillMaxSize()
+                    } else if (hasRightPanel) {
+                        Modifier.fillMaxSize()
+                    } else {
+                        Modifier
+                            .fillMaxHeight()
+                            .widthIn(max = 720.dp)
+                            .fillMaxWidth()
                     }
-                    is SearchUiState.Success -> {
-                        if (viewMode == 0) {
-                            LazyColumn(
-                                state = listState,
-                                modifier = Modifier.fillMaxSize(),
-                                contentPadding = PaddingValues(vertical = 8.dp)
-                                    .withAddedBottomPadding(LocalBottomOverlayPadding.current)
+                ) {
+                    TextField(
+                        value = keyword,
+                        onValueChange = { keyword = it },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp)
+                            .padding(horizontal = 16.dp, vertical = 2.dp)
+                            .clip(RoundedCornerShape(16.dp)),
+                        leadingIcon = {
+                            val currentOrder = success?.order ?: SearchSortOption.Trend
+                            val label = if (purchasedOnly) "仅已购" else currentOrder.label
+                            TextButton(
+                                onClick = { scopeMenuExpanded = true },
+                                enabled = success != null && !(success.isPaging),
+                                modifier = Modifier.height(32.dp),
+                                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
+                                colors = ButtonDefaults.textButtonColors(contentColor = colorScheme.primary)
                             ) {
-                                lazyItems(
-                                    items = state.results,
-                                    key = { album -> album.rjCode.ifBlank { album.workId }.ifBlank { album.title } }
-                                ) { album ->
-                                    AlbumItem(album = album, onClick = { onAlbumClick(album) })
-                                }
+                                Text(label, style = MaterialTheme.typography.labelSmall, maxLines = 1)
                             }
-                        } else {
-                            LazyVerticalStaggeredGrid(
-                                columns = StaggeredGridCells.Adaptive(150.dp),
-                                state = gridState,
-                                modifier = Modifier.fillMaxSize(),
-                                contentPadding = PaddingValues(16.dp)
-                                    .withAddedBottomPadding(LocalBottomOverlayPadding.current),
-                                horizontalArrangement = Arrangement.spacedBy(16.dp),
-                                verticalItemSpacing = 16.dp
+                            DropdownMenu(
+                                expanded = scopeMenuExpanded,
+                                onDismissRequest = { scopeMenuExpanded = false },
+                                modifier = Modifier.background(colorScheme.surface)
                             ) {
-                                items(
-                                    state.results.size,
-                                    key = { idx ->
-                                        val a = state.results[idx]
-                                        a.rjCode.ifBlank { a.workId }.ifBlank { idx.toString() }
+                                DropdownMenuItem(
+                                    text = { Text("仅已购", color = colorScheme.textPrimary) },
+                                    onClick = {
+                                        scopeMenuExpanded = false
+                                        purchasedOnly = true
+                                        viewModel.setPurchasedOnly(true)
                                     }
-                                ) { idx ->
-                                    val album = state.results[idx]
-                                    AlbumGridItem(
-                                        album = album,
-                                        onClick = { onAlbumClick(album) }
+                                )
+                                SearchSortOption.values().forEach { option ->
+                                    DropdownMenuItem(
+                                        text = { Text(option.label, color = colorScheme.textPrimary) },
+                                        onClick = {
+                                            scopeMenuExpanded = false
+                                            purchasedOnly = false
+                                            viewModel.setPurchasedOnly(false)
+                                            viewModel.setOrder(option)
+                                        }
                                     )
                                 }
                             }
-                        }
-                    }
-                    is SearchUiState.Error -> Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .verticalScroll(rememberScrollState()),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
-                    ) {
-                        Text(text = state.message, color = colorScheme.danger)
-                    }
-                    else -> Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .verticalScroll(rememberScrollState())
-                    ) {}
-                }
+                        },
+                        placeholder = {
+                            Text(
+                                text = "搜索专辑、社团、CV...",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = colorScheme.textTertiary,
+                                maxLines = 1
+                            )
+                        },
+                        trailingIcon = {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                IconButton(
+                                    onClick = {
+                                        viewModel.search(keyword)
+                                        scope.launch {
+                                            listState.scrollToItem(0)
+                                            gridState.scrollToItem(0)
+                                        }
+                                    },
+                                    modifier = Modifier.size(40.dp)
+                                ) {
+                                    Icon(Icons.Default.Search, contentDescription = null, tint = colorScheme.primary)
+                                }
+                                if (rightPanelToggle != null) {
+                                    rightPanelToggle(Modifier.size(40.dp))
+                                }
+                            }
+                        },
+                        textStyle = MaterialTheme.typography.bodySmall,
+                        colors = TextFieldDefaults.colors(
+                            focusedContainerColor = colorScheme.surface.copy(alpha = 0.5f),
+                            unfocusedContainerColor = colorScheme.surface.copy(alpha = 0.3f),
+                            disabledContainerColor = colorScheme.surface.copy(alpha = 0.1f),
+                            focusedIndicatorColor = Color.Transparent,
+                            unfocusedIndicatorColor = Color.Transparent,
+                            focusedTextColor = colorScheme.textPrimary,
+                            unfocusedTextColor = colorScheme.textSecondary
+                        ),
+                        singleLine = true
+                    )
 
+                    if (success?.isEnriching == true) {
+                        LinearProgressIndicator(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(2.dp),
+                            color = colorScheme.primary,
+                            trackColor = Color.Transparent
+                        )
+                    }
+
+                    if (success != null) {
+                        SearchPaginationHeader(
+                            page = success.page,
+                            canGoPrev = success.canGoPrev,
+                            canGoNext = success.canGoNext,
+                            isPaging = success.isPaging,
+                            onPrev = {
+                                scope.launch {
+                                    listState.scrollToItem(0)
+                                    gridState.scrollToItem(0)
+                                }
+                                viewModel.prevPage()
+                            },
+                            onNext = {
+                                scope.launch {
+                                    listState.scrollToItem(0)
+                                    gridState.scrollToItem(0)
+                                }
+                                viewModel.nextPage()
+                            }
+                        )
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .nestedScroll(pullToRefreshState.nestedScrollConnection)
+                            .clipToBounds()
+                    ) {
+                        when (val state = uiState) {
+                            is SearchUiState.Loading -> Column(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .verticalScroll(rememberScrollState()),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center
+                            ) {
+                                CircularProgressIndicator(color = colorScheme.primary)
+                            }
+
+                            is SearchUiState.Success -> {
+                                if (viewMode == 0) {
+                                    LazyColumn(
+                                        state = listState,
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentPadding = PaddingValues(vertical = 8.dp)
+                                            .withAddedBottomPadding(LocalBottomOverlayPadding.current)
+                                    ) {
+                                        lazyItems(
+                                            items = state.results,
+                                            key = { album -> album.rjCode.ifBlank { album.workId }.ifBlank { album.title } }
+                                        ) { album ->
+                                            AlbumItem(album = album, onClick = { onAlbumClick(album) })
+                                        }
+                                    }
+                                } else {
+                                    LazyVerticalStaggeredGrid(
+                                        columns = StaggeredGridCells.Adaptive(150.dp),
+                                        state = gridState,
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentPadding = PaddingValues(16.dp)
+                                            .withAddedBottomPadding(LocalBottomOverlayPadding.current),
+                                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                                        verticalItemSpacing = 16.dp
+                                    ) {
+                                        items(
+                                            state.results.size,
+                                            key = { idx ->
+                                                val a = state.results[idx]
+                                                a.rjCode.ifBlank { a.workId }.ifBlank { idx.toString() }
+                                            }
+                                        ) { idx ->
+                                            val album = state.results[idx]
+                                            AlbumGridItem(
+                                                album = album,
+                                                onClick = { onAlbumClick(album) }
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+
+                            is SearchUiState.Error -> Column(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .verticalScroll(rememberScrollState()),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center
+                            ) {
+                                Text(text = state.message, color = colorScheme.danger)
+                            }
+
+                            else -> Column(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .verticalScroll(rememberScrollState())
+                            ) {}
+                        }
+
+                        PullToRefreshContainer(
+                            state = pullToRefreshState,
+                            modifier = Modifier.align(Alignment.TopCenter)
+                        )
+                    }
+                }
             }
         }
-    }
     }
 }
 
@@ -377,14 +407,6 @@ private fun SearchPaginationHeader(
                     style = MaterialTheme.typography.bodySmall,
                     color = colorScheme.textPrimary
                 )
-                if (isPaging) {
-                    Spacer(modifier = Modifier.width(6.dp))
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(12.dp), 
-                        strokeWidth = 2.dp,
-                        color = colorScheme.primary
-                    )
-                }
             }
             Spacer(modifier = Modifier.weight(1f))
             IconButton(
