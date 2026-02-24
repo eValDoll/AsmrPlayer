@@ -64,7 +64,9 @@ fun AlbumGroupsScreen(
 
     val isCompact = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact
     Box(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier
+            .fillMaxSize()
+            .statusBarsPadding(),
         contentAlignment = Alignment.TopCenter
     ) {
         Column(

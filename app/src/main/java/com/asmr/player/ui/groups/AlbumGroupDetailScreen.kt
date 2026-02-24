@@ -83,7 +83,9 @@ fun AlbumGroupDetailScreen(
     }
 
     Box(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier
+            .fillMaxSize()
+            .statusBarsPadding(),
         contentAlignment = Alignment.TopCenter
     ) {
         Column(

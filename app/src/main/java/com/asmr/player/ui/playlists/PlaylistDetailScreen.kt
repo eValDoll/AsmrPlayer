@@ -74,7 +74,9 @@ fun PlaylistDetailScreen(
     val isCompact = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact
 
     Box(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier
+            .fillMaxSize()
+            .statusBarsPadding(),
         contentAlignment = Alignment.TopCenter // 仅用于平板适配：居中显示内容
     ) {
         Column(

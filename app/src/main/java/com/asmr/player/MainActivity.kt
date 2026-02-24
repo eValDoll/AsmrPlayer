@@ -399,8 +399,10 @@ fun MainContainer(
         val act = activity ?: return@DisposableEffect onDispose { }
         val window = act.window
         val controller = WindowInsetsControllerCompat(window, window.decorView)
+        // 始终由应用控制系统栏区域绘制，避免 fitsSystemWindows 切换导致的布局跳动
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+
         if (immersivePlayer) {
-            WindowCompat.setDecorFitsSystemWindows(window, false)
             controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
             controller.hide(WindowInsetsCompat.Type.systemBars())
             window.statusBarColor = android.graphics.Color.TRANSPARENT
@@ -408,7 +410,6 @@ fun MainContainer(
             controller.isAppearanceLightStatusBars = false
             controller.isAppearanceLightNavigationBars = false
         } else {
-            WindowCompat.setDecorFitsSystemWindows(window, true)
             controller.show(WindowInsetsCompat.Type.systemBars())
             defaultSystemUi?.let { ui ->
                 window.statusBarColor = ui.statusBarColor
@@ -421,7 +422,8 @@ fun MainContainer(
             val act2 = activity ?: return@onDispose
             val window2 = act2.window
             val controller2 = WindowInsetsControllerCompat(window2, window2.decorView)
-            WindowCompat.setDecorFitsSystemWindows(window2, true)
+            // 退出时保持 false，交给 Compose 处理 padding
+            WindowCompat.setDecorFitsSystemWindows(window2, false)
             controller2.show(WindowInsetsCompat.Type.systemBars())
             defaultSystemUi?.let { ui ->
                 window2.statusBarColor = ui.statusBarColor
