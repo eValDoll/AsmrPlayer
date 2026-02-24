@@ -32,6 +32,7 @@ import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
@@ -46,10 +47,6 @@ import com.asmr.player.ui.common.AsmrAsyncImage
 import com.asmr.player.ui.common.rememberDominantColorCenterWeighted
 import com.asmr.player.ui.player.PlayerViewModel
 import com.asmr.player.ui.theme.AsmrTheme
-import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.HazeStyle
-import dev.chrisbanes.haze.haze
-import dev.chrisbanes.haze.hazeChild
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
@@ -61,6 +58,11 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
+import android.graphics.RenderEffect
+import android.graphics.Shader
+import android.os.Build
+import androidx.compose.ui.graphics.asComposeRenderEffect
+import androidx.compose.ui.layout.ContentScale
 
 @Composable
 fun RecentAlbumsPanel(
@@ -312,8 +314,22 @@ private fun RecentAlbumRow(
     onPlay: () -> Unit
 ) {
     val colorScheme = AsmrTheme.colorScheme
-    val hazeState = remember { HazeState() }
     val glassShape = androidx.compose.foundation.shape.RoundedCornerShape(if (featured) 18.dp else 16.dp)
+    
+    val blurRadius = 4.dp
+    val blurModifier = remember(blurRadius) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            Modifier.graphicsLayer {
+                val blurPx = blurRadius.toPx()
+                renderEffect = RenderEffect
+                    .createBlurEffect(blurPx, blurPx, Shader.TileMode.CLAMP)
+                    .asComposeRenderEffect()
+            }
+        } else {
+            Modifier.blur(blurRadius)
+        }
+    }
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -321,44 +337,29 @@ private fun RecentAlbumRow(
             .clickable(onClick = onClick)
             .height(height)
     ) {
-        val glassStyle = remember(colorScheme) {
-            HazeStyle(
-                blurRadius = 8.dp,
-                tint = Color.Transparent
-            )
-        }
         val contentPadH = if (featured) 18.dp else 14.dp
         val contentPadV = if (featured) 14.dp else 10.dp
+
+        AsmrAsyncImage(
+            model = albumThumb(item.album),
+            contentDescription = item.album.title,
+            modifier = Modifier
+                .fillMaxSize()
+                .then(blurModifier),
+            alpha = 1f,
+            placeholderCornerRadius = 16,
+            contentScale = ContentScale.Crop
+        )
 
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .haze(hazeState)
-        ) {
-            AsmrAsyncImage(
-                model = albumThumb(item.album),
-                contentDescription = item.album.title,
-                modifier = Modifier.fillMaxSize(),
-                alpha = 1f,
-                placeholderCornerRadius = 16
-            )
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Transparent)
-            )
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .hazeChild(state = hazeState, style = glassStyle)
-                    .clip(glassShape)
-                    .border(
-                        width = 1.dp,
-                        color = colorScheme.onSurface.copy(alpha = 0.06f),
-                        shape = glassShape
-                    )
-            )
-        }
+                .border(
+                    width = 1.dp,
+                    color = colorScheme.onSurface.copy(alpha = 0.06f),
+                    shape = glassShape
+                )
+        )
 
         val dominant by rememberDominantColorCenterWeighted(
             model = albumThumb(item.album),

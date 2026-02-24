@@ -101,7 +101,9 @@ fun SearchScreen(
 
     LandscapeRightPanelHost(
         windowSizeClass = windowSizeClass,
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier
+            .fillMaxSize()
+            .statusBarsPadding(),
         topPanel = {
             RecentAlbumsPanel(
                 onOpenAlbum = { a ->
