@@ -93,9 +93,6 @@ import com.asmr.player.ui.theme.AsmrPlayerTheme
 import com.asmr.player.ui.theme.AsmrTheme
 import com.asmr.player.ui.common.PrewarmDominantColorCenterWeighted
 import com.asmr.player.ui.common.PrewarmVideoFrameDominantColorCenterWeighted
-import coil.compose.AsyncImage
-import coil.imageLoader
-import coil.request.ImageRequest
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.graphicsLayer
@@ -173,14 +170,21 @@ class MainActivity : ComponentActivity() {
             val coverBackgroundEnabled by settingsDataStore.coverBackgroundEnabled.collectAsState(initial = true)
             val coverBackgroundClarity by settingsDataStore.coverBackgroundClarity.collectAsState(initial = 0.35f)
             val neutral = remember(mode) { neutralPaletteForMode(mode) }
+            val cacheManager = remember(context.applicationContext) {
+                dagger.hilt.android.EntryPointAccessors.fromApplication(
+                    context.applicationContext,
+                    com.asmr.player.cache.ImageCacheEntryPoint::class.java
+                ).imageCacheManager()
+            }
 
             LaunchedEffect(artworkUri) {
                 val uri = artworkUri ?: return@LaunchedEffect
-                val request = ImageRequest.Builder(context)
-                    .data(uri)
-                    .size(512)
-                    .build()
-                context.imageLoader.enqueue(request)
+                runCatching {
+                    cacheManager.loadImage(
+                        model = uri,
+                        size = androidx.compose.ui.unit.IntSize(512, 512)
+                    )
+                }
             }
 
             if (isVideo && artworkUri == null) {

@@ -2,7 +2,6 @@ package com.asmr.player.service
 
 import android.content.Context
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Bundle
 import android.util.LruCache
@@ -14,8 +13,14 @@ import androidx.media3.session.CommandButton
 import androidx.media3.session.MediaNotification
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaStyleNotificationHelper
+import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.unit.IntSize
+import com.asmr.player.cache.CachePolicy
+import com.asmr.player.cache.ImageCacheEntryPoint
 import com.asmr.player.R
 import com.google.common.collect.ImmutableList
+import dagger.hilt.android.EntryPointAccessors
+import kotlinx.coroutines.runBlocking
 import java.io.File
 
 @UnstableApi
@@ -27,6 +32,7 @@ class LyricMediaNotificationProvider(
     private val artworkCache = object : LruCache<String, Bitmap>(8 * 1024) {
         override fun sizeOf(key: String, value: Bitmap): Int = value.byteCount / 1024
     }
+    private val cacheManager = EntryPointAccessors.fromApplication(appContext, ImageCacheEntryPoint::class.java).imageCacheManager()
 
     override fun createNotification(
         mediaSession: MediaSession,
@@ -99,20 +105,17 @@ class LyricMediaNotificationProvider(
         val cached = artworkCache.get(key)
         if (cached != null && !cached.isRecycled) return cached
         val targetSizePx = targetArtworkSizePx()
-        return runCatching {
-            val bitmap = when (uri.scheme?.lowercase()) {
-                "content" -> {
-                    decodeContentUriScaled(uri, targetSizePx, targetSizePx)
-                }
-                "file" -> {
-                    val path = uri.path.orEmpty()
-                    if (path.isBlank()) null else decodeFileScaled(path, targetSizePx, targetSizePx)
-                }
-                else -> null
+        val bitmap = runCatching {
+            runBlocking {
+                cacheManager.loadImageFromCache(
+                    model = uri,
+                    size = IntSize(targetSizePx, targetSizePx),
+                    cachePolicy = CachePolicy(readMemory = true, writeMemory = false, readDisk = true, writeDisk = false)
+                )?.asAndroidBitmap()
             }
-            if (bitmap != null) artworkCache.put(key, bitmap)
-            bitmap
         }.getOrNull()
+        if (bitmap != null && !bitmap.isRecycled) artworkCache.put(key, bitmap)
+        return bitmap
     }
 
     private fun targetArtworkSizePx(): Int {
@@ -129,43 +132,6 @@ class LyricMediaNotificationProvider(
             }
         }
         return uri.toString()
-    }
-
-    private fun decodeFileScaled(path: String, reqWidth: Int, reqHeight: Int): Bitmap? {
-        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        BitmapFactory.decodeFile(path, bounds)
-        val opts = BitmapFactory.Options().apply {
-            inSampleSize = calculateInSampleSize(bounds, reqWidth, reqHeight)
-        }
-        return BitmapFactory.decodeFile(path, opts)
-    }
-
-    private fun decodeContentUriScaled(uri: Uri, reqWidth: Int, reqHeight: Int): Bitmap? {
-        val resolver = appContext.contentResolver
-        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        resolver.openInputStream(uri)?.use { input ->
-            BitmapFactory.decodeStream(input, null, bounds)
-        } ?: return null
-        val opts = BitmapFactory.Options().apply {
-            inSampleSize = calculateInSampleSize(bounds, reqWidth, reqHeight)
-        }
-        return resolver.openInputStream(uri)?.use { input ->
-            BitmapFactory.decodeStream(input, null, opts)
-        }
-    }
-
-    private fun calculateInSampleSize(bounds: BitmapFactory.Options, reqWidth: Int, reqHeight: Int): Int {
-        val width = bounds.outWidth.coerceAtLeast(1)
-        val height = bounds.outHeight.coerceAtLeast(1)
-        var inSampleSize = 1
-        if (height > reqHeight || width > reqWidth) {
-            var halfHeight = height / 2
-            var halfWidth = width / 2
-            while ((halfHeight / inSampleSize) >= reqHeight && (halfWidth / inSampleSize) >= reqWidth) {
-                inSampleSize *= 2
-            }
-        }
-        return inSampleSize.coerceAtLeast(1)
     }
 
     override fun handleCustomCommand(session: MediaSession, action: String, extras: Bundle): Boolean {

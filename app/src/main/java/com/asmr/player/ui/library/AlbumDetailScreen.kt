@@ -53,8 +53,6 @@ import androidx.core.net.toUri
 import androidx.media3.common.MediaItem
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
-import coil.compose.SubcomposeAsyncImage
-import coil.request.ImageRequest
 import com.asmr.player.data.local.db.AppDatabaseProvider
 import com.asmr.player.data.local.db.entities.LocalTreeCacheEntity
 import com.asmr.player.data.remote.auth.DlsiteAuthStore
@@ -65,6 +63,7 @@ import com.asmr.player.domain.model.Album
 import com.asmr.player.domain.model.Track
 import com.asmr.player.playback.MediaItemFactory
 import com.asmr.player.data.remote.NetworkHeaders
+import com.asmr.player.cache.CacheImageModel
 import com.asmr.player.data.remote.dlsite.DlsiteLanguageEdition
 import com.asmr.player.ui.dlsite.DlsitePlayViewModel
 import com.google.gson.Gson
@@ -563,15 +562,15 @@ private fun AlbumHeader(
     val data = album.coverPath.ifEmpty { album.coverUrl }
     val imageModel = remember(data) {
         if (data.startsWith("http", ignoreCase = true) && data.contains("dlsite", ignoreCase = true)) {
-            ImageRequest.Builder(context)
-                .data(data)
-                .addHeader("Referer", "https://www.dlsite.com/")
-                .addHeader(
-                    "User-Agent",
-                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-                )
-                .addHeader("Accept-Language", NetworkHeaders.ACCEPT_LANGUAGE)
-                .build()
+            CacheImageModel(
+                data = data,
+                headers = mapOf(
+                    "Referer" to NetworkHeaders.REFERER_DLSITE,
+                    "User-Agent" to NetworkHeaders.USER_AGENT,
+                    "Accept-Language" to NetworkHeaders.ACCEPT_LANGUAGE
+                ),
+                keyTag = "dlsite"
+            )
         } else {
             data
         }
@@ -1007,7 +1006,6 @@ private fun DlsiteRecommendedWorkCard(
     onClick: () -> Unit
 ) {
     val colorScheme = AsmrTheme.colorScheme
-    val context = LocalContext.current
     val coverModel = remember(work.coverUrl, displayRj) {
         work.coverUrl.takeIf { it.isNotBlank() } ?: dlsiteCoverUrlForRj(displayRj)
     }
@@ -1016,13 +1014,13 @@ private fun DlsiteRecommendedWorkCard(
         if (s.startsWith("http", ignoreCase = true) && s.contains("dlsite", ignoreCase = true)) {
             val cookieManager = CookieManager.getInstance()
             val cookie = cookieManager.getCookie(s).orEmpty().ifBlank { cookieManager.getCookie(NetworkHeaders.REFERER_DLSITE).orEmpty() }
-            ImageRequest.Builder(context)
-                .data(s)
-                .addHeader("Referer", NetworkHeaders.REFERER_DLSITE)
-                .addHeader("User-Agent", NetworkHeaders.USER_AGENT)
-                .addHeader("Accept-Language", NetworkHeaders.ACCEPT_LANGUAGE)
-                .apply { if (cookie.isNotBlank()) addHeader("Cookie", cookie) }
-                .build()
+            val headers = buildMap {
+                put("Referer", NetworkHeaders.REFERER_DLSITE)
+                put("User-Agent", NetworkHeaders.USER_AGENT)
+                put("Accept-Language", NetworkHeaders.ACCEPT_LANGUAGE)
+                if (cookie.isNotBlank()) put("Cookie", cookie)
+            }
+            CacheImageModel(data = s, headers = headers, keyTag = "dlsite")
         } else {
             coverModel
         }
@@ -1037,21 +1035,14 @@ private fun DlsiteRecommendedWorkCard(
     ) {
         Column {
             Box(modifier = Modifier.fillMaxWidth().aspectRatio(1f)) {
-                SubcomposeAsyncImage(
+                AsmrAsyncImage(
                     model = imageModel,
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize(),
-                    loading = {
+                    placeholder = { m ->
                         Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .background(colorScheme.surfaceVariant.copy(alpha = 0.6f))
-                        )
-                    },
-                    error = {
-                        Box(
-                            modifier = Modifier
+                            modifier = m
                                 .fillMaxSize()
                                 .background(colorScheme.surfaceVariant.copy(alpha = 0.6f)),
                             contentAlignment = Alignment.Center
@@ -1063,7 +1054,7 @@ private fun DlsiteRecommendedWorkCard(
                                 modifier = Modifier.size(28.dp)
                             )
                         }
-                    }
+                    },
                 )
                 val ribbon = work.ribbon?.trim().orEmpty()
                 if (ribbon.isNotBlank()) {
@@ -3327,15 +3318,15 @@ private fun AlbumDlsiteInfoTab(
                     items(galleryUrls) { url ->
                         val model = remember(url) {
                             if (url.contains("dlsite", ignoreCase = true) || url.contains("img.dlsite", ignoreCase = true)) {
-                                ImageRequest.Builder(context)
-                                    .data(url)
-                                    .addHeader("Referer", "https://www.dlsite.com/")
-                                    .addHeader(
-                                        "User-Agent",
-                                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-                                    )
-                                    .addHeader("Accept-Language", NetworkHeaders.ACCEPT_LANGUAGE)
-                                    .build()
+                                CacheImageModel(
+                                    data = url,
+                                    headers = mapOf(
+                                        "Referer" to NetworkHeaders.REFERER_DLSITE,
+                                        "User-Agent" to NetworkHeaders.USER_AGENT,
+                                        "Accept-Language" to NetworkHeaders.ACCEPT_LANGUAGE
+                                    ),
+                                    keyTag = "dlsite"
+                                )
                             } else url
                         }
                         Card(
@@ -3539,15 +3530,15 @@ private fun AlbumDlsiteInfoTab(
                     val url = previewUrl.orEmpty()
                     val model = remember(url) {
                         if (url.contains("dlsite", ignoreCase = true) || url.contains("img.dlsite", ignoreCase = true)) {
-                            ImageRequest.Builder(context)
-                                .data(url)
-                                .addHeader("Referer", "https://www.dlsite.com/")
-                                .addHeader(
-                                    "User-Agent",
-                                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-                                )
-                                .addHeader("Accept-Language", NetworkHeaders.ACCEPT_LANGUAGE)
-                                .build()
+                            CacheImageModel(
+                                data = url,
+                                headers = mapOf(
+                                    "Referer" to NetworkHeaders.REFERER_DLSITE,
+                                    "User-Agent" to NetworkHeaders.USER_AGENT,
+                                    "Accept-Language" to NetworkHeaders.ACCEPT_LANGUAGE
+                                ),
+                                keyTag = "dlsite"
+                            )
                         } else url
                     }
                     AsmrAsyncImage(
@@ -3944,19 +3935,7 @@ private fun FilePreviewDialog(
     val mediaSize by produceState<MediaSizePx?>(initialValue = null, currentPath, currentType) {
         value = withContext(Dispatchers.IO) {
             when (currentType) {
-                TreeFileType.Image -> runCatching {
-                    val opts = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
-                    if (currentPath.startsWith("content://")) {
-                        context.contentResolver.openInputStream(Uri.parse(currentPath))?.use { input ->
-                            android.graphics.BitmapFactory.decodeStream(input, null, opts)
-                        }
-                    } else {
-                        android.graphics.BitmapFactory.decodeFile(currentPath, opts)
-                    }
-                    val w = opts.outWidth
-                    val h = opts.outHeight
-                    if (w > 0 && h > 0) MediaSizePx(w, h) else null
-                }.getOrNull()
+                TreeFileType.Image -> null
                 TreeFileType.Video -> runCatching {
                     val retriever = android.media.MediaMetadataRetriever()
                     try {
