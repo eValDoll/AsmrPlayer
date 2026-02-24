@@ -316,7 +316,7 @@ private fun RecentAlbumRow(
     val colorScheme = AsmrTheme.colorScheme
     val glassShape = androidx.compose.foundation.shape.RoundedCornerShape(if (featured) 18.dp else 16.dp)
     
-    val blurRadius = 2.dp
+    val blurRadius = 4.dp
     val blurModifier = remember(blurRadius) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             Modifier.graphicsLayer {
