@@ -117,7 +117,7 @@ import com.asmr.player.ui.player.QueueSheetContent
 
 import com.asmr.player.data.local.datastore.SettingsDataStore
 import com.asmr.player.util.MessageManager
-import com.asmr.player.ui.common.AppMessageOverlay
+import com.asmr.player.ui.common.NonTouchableAppMessageOverlay
 import com.asmr.player.ui.common.VisibleAppMessage
 import com.asmr.player.ui.theme.HuePalette
 import com.asmr.player.ui.theme.PlayerTheme
@@ -279,7 +279,8 @@ class MainActivity : ComponentActivity() {
                             0,
                             old.copy(
                                 id = id,
-                                count = (old.count + 1).coerceAtMost(99)
+                                count = (old.count + 1).coerceAtMost(99),
+                                durationMs = displayMs
                             )
                         )
                         dismissJobs[id] = launch {
@@ -298,7 +299,8 @@ class MainActivity : ComponentActivity() {
                             key = dedupeKey,
                             message = normalized,
                             type = appMessage.type,
-                            count = 1
+                            count = 1,
+                            durationMs = displayMs
                         )
                     )
                     dismissJobs[id] = launch {
@@ -326,7 +328,7 @@ class MainActivity : ComponentActivity() {
                             val old = visibleMessages[summaryIndex]
                             dismissJobs.remove(old.id)?.cancel()
                             val sid = ++messageSeq
-                            visibleMessages[summaryIndex] = old.copy(id = sid, message = summaryText, count = 1)
+                            visibleMessages[summaryIndex] = old.copy(id = sid, message = summaryText, count = 1, durationMs = summaryDuration)
                             dismissJobs[sid] = launch {
                                 delay(summaryDuration)
                                 visibleMessages.removeAll { it.id == sid }
@@ -341,7 +343,8 @@ class MainActivity : ComponentActivity() {
                                     key = overflowKey,
                                     message = summaryText,
                                     type = com.asmr.player.util.MessageType.Info,
-                                    count = 1
+                                    count = 1,
+                                    durationMs = summaryDuration
                                 )
                             )
                             dismissJobs[sid] = launch {
@@ -1260,18 +1263,7 @@ fun MainContainer(
                 )
             }
 
-            if (visibleMessages.isNotEmpty()) {
-                androidx.compose.ui.window.Popup(
-                    alignment = Alignment.BottomStart,
-                    properties = androidx.compose.ui.window.PopupProperties(focusable = false)
-                ) {
-                    Box(
-                        modifier = Modifier.padding(start = 16.dp, bottom = 80.dp)
-                    ) {
-                        AppMessageOverlay(messages = visibleMessages)
-                    }
-                }
-            }
+            NonTouchableAppMessageOverlay(messages = visibleMessages)
         }
 
         }

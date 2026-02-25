@@ -16,6 +16,20 @@ import kotlinx.coroutines.flow.first
 import javax.inject.Inject
 import javax.inject.Singleton
 
+data class AsmrOneSearchTrace(
+    val keyword: String,
+    val primarySucceeded: Boolean,
+    val primaryHasWorks: Boolean,
+    val fallbackAttempted: Boolean,
+    val fallbackUsed: Boolean,
+    val fallbackSite: Int?
+)
+
+data class AsmrOneSearchResult(
+    val response: SearchResponse,
+    val trace: AsmrOneSearchTrace
+)
+
 @Singleton
 class AsmrOneCrawler @Inject constructor(
     private val api: AsmrOneApi,
@@ -24,21 +38,49 @@ class AsmrOneCrawler @Inject constructor(
     private val asmr300Api: Asmr300Api,
     private val settingsRepository: SettingsRepository
 ) {
-    suspend fun search(keyword: String, page: Int = 1): SearchResponse {
+    suspend fun searchWithTrace(keyword: String, page: Int = 1): AsmrOneSearchResult {
         val normalized = keyword.trim()
-        val primary = runCatching {
+        val primaryTry = runCatching {
             api.search(keyword = normalized, page = page, silentIoError = NetworkHeaders.SILENT_IO_ERROR_ON)
-        }.getOrNull()
-        if (primary != null && primary.works.isNotEmpty()) return primary
+        }
+        val primary = primaryTry.getOrNull()
+        val primarySucceeded = primaryTry.isSuccess && primary != null
+        val primaryHasWorks = primary?.works?.isNotEmpty() == true
+        if (primaryHasWorks) {
+            return AsmrOneSearchResult(
+                response = primary!!,
+                trace = AsmrOneSearchTrace(
+                    keyword = normalized,
+                    primarySucceeded = primarySucceeded,
+                    primaryHasWorks = true,
+                    fallbackAttempted = false,
+                    fallbackUsed = false,
+                    fallbackSite = null
+                )
+            )
+        }
 
         val isRj = normalized.startsWith("RJ", ignoreCase = true)
-        if (!isRj) return primary ?: SearchResponse(works = emptyList(), pagination = Pagination(0, 20, page))
+        if (!isRj) {
+            val resp = primary ?: SearchResponse(works = emptyList(), pagination = Pagination(0, 20, page))
+            return AsmrOneSearchResult(
+                response = resp,
+                trace = AsmrOneSearchTrace(
+                    keyword = normalized,
+                    primarySucceeded = primarySucceeded,
+                    primaryHasWorks = false,
+                    fallbackAttempted = false,
+                    fallbackUsed = false,
+                    fallbackSite = null
+                )
+            )
+        }
 
         val preferredSite = runCatching { settingsRepository.asmrOneSite.first() }.getOrDefault(200)
         val backupApis = backupApisInOrder(preferredSite, asmr100Api, asmr200Api, asmr300Api)
-        for (backupApi in backupApis) {
+        for (backup in backupApis) {
             val from = runCatching {
-                backupApi.search(
+                backup.api.search(
                     keyword = " $normalized",
                     page = page,
                     silentIoError = NetworkHeaders.SILENT_IO_ERROR_ON
@@ -46,14 +88,39 @@ class AsmrOneCrawler @Inject constructor(
             }.getOrNull()
             val mapped = mapBackupWorks(from?.works.orEmpty(), normalized)
             if (mapped.isNotEmpty()) {
-                return SearchResponse(
-                    works = mapped,
-                    pagination = Pagination(totalCount = mapped.size, pageSize = mapped.size, page = page)
+                return AsmrOneSearchResult(
+                    response = SearchResponse(
+                        works = mapped,
+                        pagination = Pagination(totalCount = mapped.size, pageSize = mapped.size, page = page)
+                    ),
+                    trace = AsmrOneSearchTrace(
+                        keyword = normalized,
+                        primarySucceeded = primarySucceeded,
+                        primaryHasWorks = false,
+                        fallbackAttempted = true,
+                        fallbackUsed = true,
+                        fallbackSite = backup.site
+                    )
                 )
             }
         }
 
-        return primary ?: SearchResponse(works = emptyList(), pagination = Pagination(0, 20, page))
+        val resp = primary ?: SearchResponse(works = emptyList(), pagination = Pagination(0, 20, page))
+        return AsmrOneSearchResult(
+            response = resp,
+            trace = AsmrOneSearchTrace(
+                keyword = normalized,
+                primarySucceeded = primarySucceeded,
+                primaryHasWorks = false,
+                fallbackAttempted = true,
+                fallbackUsed = false,
+                fallbackSite = null
+            )
+        )
+    }
+
+    suspend fun search(keyword: String, page: Int = 1): SearchResponse {
+        return searchWithTrace(keyword, page).response
     }
 
     suspend fun getDetails(workId: String): WorkDetailsResponse {
@@ -64,7 +131,7 @@ class AsmrOneCrawler @Inject constructor(
             var last: Throwable = it
             for (backupApi in backupApis) {
                 val result = runCatching {
-                    backupApi.getWorkDetails(normalized, silentIoError = NetworkHeaders.SILENT_IO_ERROR_ON)
+                    backupApi.api.getWorkDetails(normalized, silentIoError = NetworkHeaders.SILENT_IO_ERROR_ON)
                 }.getOrElse { e ->
                     last = e
                     null
@@ -83,7 +150,7 @@ class AsmrOneCrawler @Inject constructor(
             var last: Throwable = it
             for (backupApi in backupApis) {
                 val result = runCatching {
-                    backupApi.getTracks(normalized, silentIoError = NetworkHeaders.SILENT_IO_ERROR_ON)
+                    backupApi.api.getTracks(normalized, silentIoError = NetworkHeaders.SILENT_IO_ERROR_ON)
                 }.getOrElse { e ->
                     last = e
                     null
@@ -94,6 +161,11 @@ class AsmrOneCrawler @Inject constructor(
         }
     }
 }
+
+private data class AsmrBackupApiEntry(
+    val site: Int,
+    val api: AsmrBackupApi
+)
 
 private interface AsmrBackupApi {
     suspend fun search(
@@ -137,14 +209,26 @@ private fun backupApisInOrder(
     asmr100Api: Asmr100Api,
     asmr200Api: Asmr200Api,
     asmr300Api: Asmr300Api
-): List<AsmrBackupApi> {
+): List<AsmrBackupApiEntry> {
     val api100 = asmr100Api.asBackup()
     val api200 = asmr200Api.asBackup()
     val api300 = asmr300Api.asBackup()
     return when (preferredSite) {
-        100 -> listOf(api100, api200, api300)
-        300 -> listOf(api300, api200, api100)
-        else -> listOf(api200, api100, api300)
+        100 -> listOf(
+            AsmrBackupApiEntry(100, api100),
+            AsmrBackupApiEntry(200, api200),
+            AsmrBackupApiEntry(300, api300)
+        )
+        300 -> listOf(
+            AsmrBackupApiEntry(300, api300),
+            AsmrBackupApiEntry(200, api200),
+            AsmrBackupApiEntry(100, api100)
+        )
+        else -> listOf(
+            AsmrBackupApiEntry(200, api200),
+            AsmrBackupApiEntry(100, api100),
+            AsmrBackupApiEntry(300, api300)
+        )
     }
 }
 

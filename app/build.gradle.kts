@@ -38,9 +38,15 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
     composeOptions {
         kotlinCompilerExtensionVersion = "1.5.8"
+    }
+    testOptions {
+        unitTests.all {
+            it.systemProperty("asmr.latency", (project.findProperty("asmr.latency") as? String).orEmpty())
+        }
     }
     packaging {
         resources {
