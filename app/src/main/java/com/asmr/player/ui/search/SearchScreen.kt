@@ -66,12 +66,6 @@ fun SearchScreen(
     val colorScheme = AsmrTheme.colorScheme
     val scope = rememberCoroutineScope()
 
-    DisposableEffect(Unit) {
-        onDispose {
-            viewModel.stopBackgroundLoading()
-        }
-    }
-
     LaunchedEffect(Unit) {
         if (uiState is SearchUiState.Idle) {
             viewModel.setPurchasedOnly(purchasedOnly)

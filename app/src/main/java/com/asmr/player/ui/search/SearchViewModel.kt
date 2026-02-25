@@ -6,7 +6,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.asmr.player.BuildConfig
 import com.asmr.player.data.remote.crawler.AsmrOneCrawler
-import com.asmr.player.data.remote.dlsite.DlsiteProductInfoClient
 import com.asmr.player.data.remote.dlsite.DlsitePlayLibraryClient
 import com.asmr.player.data.remote.scraper.DLSiteScraper
 import com.asmr.player.domain.model.Album
@@ -19,10 +18,12 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.yield
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
-import kotlinx.coroutines.withTimeoutOrNull
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.math.ceil
@@ -32,7 +33,6 @@ import javax.inject.Inject
 class SearchViewModel @Inject constructor(
     private val dlsiteScraper: DLSiteScraper,
     private val dlsitePlayLibraryClient: DlsitePlayLibraryClient,
-    private val dlsiteProductInfoClient: DlsiteProductInfoClient,
     private val asmrOneCrawler: AsmrOneCrawler
 ) : ViewModel() {
     private val pageSize = 30
@@ -43,46 +43,12 @@ class SearchViewModel @Inject constructor(
     private val dlsiteDetailCache = ConcurrentHashMap<String, Album>()
     private val enrichDispatcher = Dispatchers.IO
     private val asmrOneAvailabilityCache = ConcurrentHashMap<String, Boolean>()
-    private val languageCandidatesCache = ConcurrentHashMap<String, Pair<Long, List<String>>>()
 
     private val _uiState = MutableStateFlow<SearchUiState>(SearchUiState.Idle)
     val uiState = _uiState.asStateFlow()
 
     private val _viewMode = MutableStateFlow(1) // 0: List, 1: Grid
     val viewMode = _viewMode.asStateFlow()
-
-    private suspend fun getLanguageCandidates(baseRj: String): List<String> {
-        val clean = baseRj.trim().uppercase()
-        if (clean.isBlank()) return emptyList()
-        val now = SystemClock.elapsedRealtime()
-        val cached = languageCandidatesCache[clean]
-        if (cached != null && (now - cached.first) <= 10 * 60_000L) return cached.second
-
-        val editions = withTimeoutOrNull(1_500L) {
-            dlsiteProductInfoClient.fetchLanguageEditions(clean)
-        }.orEmpty()
-
-        fun worknoFor(lang: String): String? {
-            return editions.firstOrNull { it.lang.equals(lang, ignoreCase = true) }
-                ?.workno
-                ?.trim()
-                ?.uppercase()
-                ?.takeIf { it.isNotBlank() }
-        }
-
-        val candidates = buildList<String> {
-            worknoFor("CHI_HANS")?.let { add(it) }
-            worknoFor("CHI_HANT")?.let { add(it) }
-            add(clean)
-        }.distinct()
-
-        languageCandidatesCache[clean] = now to candidates
-        if (languageCandidatesCache.size > 500) {
-            val firstKey = languageCandidatesCache.entries.firstOrNull()?.key
-            if (firstKey != null) languageCandidatesCache.remove(firstKey)
-        }
-        return candidates
-    }
 
     fun setViewMode(mode: Int) {
         _viewMode.value = mode
@@ -280,6 +246,22 @@ class SearchViewModel @Inject constructor(
         return null
     }
 
+    private suspend fun hasWorkFastWithRetry(rj: String, timeoutMs: Long): Boolean? {
+        val normalized = rj.trim().uppercase()
+        if (normalized.isBlank()) return null
+        var falseCount = 0
+        repeat(3) { idx ->
+            if (idx > 0) delay(250L * idx)
+            val result = runCatching { asmrOneCrawler.hasWorkFast(normalized, timeoutMs = timeoutMs) }.getOrNull()
+            when (result) {
+                true -> return true
+                false -> falseCount += 1
+                null -> {}
+            }
+        }
+        return if (falseCount == 3) false else null
+    }
+
     private fun startMarkAsmrOneAvailability(keyword: String, page: Int, baseItems: List<Album>) {
         asmrOneJob?.cancel()
         asmrOneJob = viewModelScope.launch(Dispatchers.IO) {
@@ -308,17 +290,6 @@ class SearchViewModel @Inject constructor(
                 }
             }
             try {
-                val candidatesByBase = coroutineScope {
-                    val sem = Semaphore(4)
-                    indexByRj.keys.map { baseRj ->
-                        async(enrichDispatcher) {
-                            sem.withPermit {
-                                baseRj to getLanguageCandidates(baseRj)
-                            }
-                        }
-                    }.associate { it.await() }
-                }
-
                 val normalizedKeyword = keyword.trim()
                 val isRjKeyword = RJ_CODE_REGEX.matches(normalizedKeyword.uppercase())
                 if (!isRjKeyword && normalizedKeyword.isNotBlank()) {
@@ -329,15 +300,21 @@ class SearchViewModel @Inject constructor(
                         val idsPrimary = resp?.works
                             .orEmpty()
                             .asSequence()
-                            .mapNotNull { RJ_CODE_REGEX.find(it.source_id.trim().uppercase())?.value }
+                            .flatMap { w ->
+                                sequenceOf(
+                                    w.source_id,
+                                    w.original_workno.orEmpty(),
+                                    *w.language_editions.orEmpty().map { it.workno.orEmpty() }.toTypedArray()
+                                )
+                            }
+                            .mapNotNull { s -> RJ_CODE_REGEX.find(s.trim().uppercase())?.value }
                             .toSet()
                         val idsBackup = asmrOneCrawler.searchBackupPreferredRjIds(normalizedKeyword, page = pageNo)
                         val ids = if (idsBackup.isEmpty()) idsPrimary else (idsPrimary + idsBackup)
                         if (ids.isNotEmpty()) {
-                            candidatesByBase.forEach { (baseRj, candidates) ->
+                            indexByRj.keys.forEach { baseRj ->
                                 if (asmrOneAvailabilityCache[baseRj] == true) return@forEach
-                                val hit = candidates.any { it in ids }
-                                if (hit) {
+                                if (baseRj in ids) {
                                     asmrOneAvailabilityCache[baseRj] = true
                                     updateAsmrOneAvailability(keyword = keyword, page = page, rj = baseRj, has = true, indexByRj = indexByRj)
                                 }
@@ -349,59 +326,78 @@ class SearchViewModel @Inject constructor(
                     }
                 }
 
-                val doneCounter = AtomicInteger(0)
-                val sem = Semaphore(8)
-                val tailThreshold = (baseItems.size - 5).coerceAtLeast(0)
                 val ordered = indexByRj.keys.sortedByDescending { rj -> indexByRj[rj]?.maxOrNull() ?: -1 }
-                val checks = coroutineScope {
+                val pending = ConcurrentLinkedQueue<String>()
+
+                val semFast = Semaphore(4)
+                val fastChecks = coroutineScope {
                     ordered.map { baseRj ->
                         async(enrichDispatcher) {
-                            sem.withPermit {
-                                val idx = indexByRj[baseRj]?.maxOrNull() ?: -1
-                                val t0 = if (BuildConfig.DEBUG && idx >= tailThreshold) SystemClock.elapsedRealtime() else 0L
-                                val candidates = candidatesByBase[baseRj].orEmpty().ifEmpty { listOf(baseRj) }
-                                var hasAny = asmrOneAvailabilityCache[baseRj] == true
-                                var anyUnknown = false
-                                if (!hasAny) {
-                                    for (cand in candidates) {
-                                        if (cand.isBlank()) continue
-                                        val cached = asmrOneAvailabilityCache[cand]
-                                        if (cached == true) {
-                                            hasAny = true
-                                            break
-                                        }
-                                        if (cached == false) continue
-                                        val has = asmrOneCrawler.hasWorkFast(cand)
-                                        if (has != null) asmrOneAvailabilityCache[cand] = has
-                                        if (has == true) {
-                                            hasAny = true
-                                            break
-                                        }
-                                        if (has == null) anyUnknown = true
-                                    }
+                            semFast.withPermit {
+                                if (asmrOneAvailabilityCache[baseRj] == true) {
+                                    updateAsmrOneAvailability(
+                                        keyword = keyword,
+                                        page = page,
+                                        rj = baseRj,
+                                        has = true,
+                                        indexByRj = indexByRj
+                                    )
+                                    return@withPermit
                                 }
-                                if (hasAny) {
+
+                                val has = runCatching { asmrOneCrawler.hasWorkFast(baseRj, timeoutMs = 900L) }.getOrNull()
+                                if (has == true) {
                                     asmrOneAvailabilityCache[baseRj] = true
-                                    updateAsmrOneAvailability(keyword = keyword, page = page, rj = baseRj, has = true, indexByRj = indexByRj)
-                                } else if (!anyUnknown && candidates.isNotEmpty()) {
-                                    asmrOneAvailabilityCache[baseRj] = false
+                                    updateAsmrOneAvailability(
+                                        keyword = keyword,
+                                        page = page,
+                                        rj = baseRj,
+                                        has = true,
+                                        indexByRj = indexByRj
+                                    )
+                                } else {
+                                    pending.add(baseRj)
                                 }
-                                if (BuildConfig.DEBUG && t0 > 0L) {
-                                    val dt = (SystemClock.elapsedRealtime() - t0).coerceAtLeast(0L)
-                                    Log.d("SearchViewModel", "asmrOne tail check done rj=$baseRj idx=$idx has=$hasAny dt=${dt}ms")
-                                }
-                            }
-                            val done = doneCounter.incrementAndGet().coerceIn(0, total)
-                            _uiState.update { state ->
-                                val cur = state as? SearchUiState.Success ?: return@update state
-                                if (cur.keyword != keyword || cur.page != page || cur.purchasedOnly) return@update state
-                                if (!cur.isAsmrOneChecking) cur else cur.copy(asmrOneChecked = done, asmrOneTotal = total)
                             }
                         }
                     }
                 }
-                checks.forEach { deferred ->
-                    runCatching { deferred.await() }
+                fastChecks.forEach { deferred -> runCatching { deferred.await() } }
+
+                val retryTargets = pending.toList()
+                if (retryTargets.isNotEmpty()) {
+                    val semRetry = Semaphore(2)
+                    val doneCounter = AtomicInteger(0)
+                    val retries = coroutineScope {
+                        retryTargets.map { baseRj ->
+                            async(enrichDispatcher) {
+                                semRetry.withPermit {
+                                    val has = hasWorkFastWithRetry(baseRj, timeoutMs = 900L)
+                                    when (has) {
+                                        true -> {
+                                            asmrOneAvailabilityCache[baseRj] = true
+                                            updateAsmrOneAvailability(
+                                                keyword = keyword,
+                                                page = page,
+                                                rj = baseRj,
+                                                has = true,
+                                                indexByRj = indexByRj
+                                            )
+                                        }
+                                        false -> asmrOneAvailabilityCache[baseRj] = false
+                                        null -> {}
+                                    }
+                                }
+                                val done = doneCounter.incrementAndGet().coerceIn(0, total)
+                                _uiState.update { state ->
+                                    val cur = state as? SearchUiState.Success ?: return@update state
+                                    if (cur.keyword != keyword || cur.page != page || cur.purchasedOnly) return@update state
+                                    if (!cur.isAsmrOneChecking) cur else cur.copy(asmrOneChecked = done, asmrOneTotal = total)
+                                }
+                            }
+                        }
+                    }
+                    retries.forEach { deferred -> runCatching { deferred.await() } }
                 }
 
                 if (BuildConfig.DEBUG) {
@@ -418,13 +414,14 @@ class SearchViewModel @Inject constructor(
         }
     }
 
-    private fun updateAsmrOneAvailability(
+    private suspend fun updateAsmrOneAvailability(
         keyword: String,
         page: Int,
         rj: String,
         has: Boolean,
         indexByRj: Map<String, List<Int>>
     ) {
+        var changed = false
         _uiState.update { state ->
             val cur = state as? SearchUiState.Success ?: return@update state
             if (cur.keyword != keyword || cur.page != page || cur.purchasedOnly) return@update state
@@ -433,7 +430,6 @@ class SearchViewModel @Inject constructor(
             if (indices.isEmpty()) return@update state
 
             val list = cur.results.toMutableList()
-            var changed = false
             indices.forEach { idx ->
                 if (idx !in list.indices) return@forEach
                 val old = list[idx]
@@ -444,6 +440,7 @@ class SearchViewModel @Inject constructor(
             }
             if (!changed) cur else cur.copy(results = list)
         }
+        if (changed) yield()
     }
 
     private suspend fun runDebugDelayTestForRj01491538() {
@@ -463,7 +460,11 @@ class SearchViewModel @Inject constructor(
             val start = SystemClock.elapsedRealtime()
             if (!cacheHit) {
                 val result = runCatching { asmrOneCrawler.searchWithTrace(rj) }.getOrNull()
-                val ok = result?.response?.works?.any { it.source_id.equals(rj, ignoreCase = true) } == true
+                val ok = result?.response?.works?.any { w ->
+                    w.source_id.equals(rj, ignoreCase = true) ||
+                        w.original_workno.orEmpty().equals(rj, ignoreCase = true) ||
+                        w.language_editions.orEmpty().any { it.workno.orEmpty().equals(rj, ignoreCase = true) }
+                } == true
                 asmrOneAvailabilityCache[rj] = ok
                 networkCalls++
                 if (result?.trace?.fallbackUsed == true) fallbackUsed++

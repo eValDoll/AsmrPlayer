@@ -362,6 +362,9 @@ fun AlbumDetailScreen(
                             isLoading = model.isLoadingDlsite,
                             asmrOneTree = asmrOneTree,
                             isLoadingAsmrOne = model.isLoadingAsmrOne,
+                            isLoadingTrial = model.isLoadingDlsiteTrial,
+                            onRefreshAsmrOne = { viewModel.refreshAsmrOneSection() },
+                            onRefreshTrial = { viewModel.refreshDlsiteTrialSection() },
                             onPlayTracks = onPlayTracks,
                             onAddToQueue = { track ->
                                 onAddToQueue(album, track)
@@ -3236,6 +3239,9 @@ private fun AlbumDlsiteInfoTab(
     isLoading: Boolean,
     asmrOneTree: List<AsmrOneTrackNodeResponse>,
     isLoadingAsmrOne: Boolean,
+    isLoadingTrial: Boolean,
+    onRefreshAsmrOne: () -> Unit,
+    onRefreshTrial: () -> Unit,
     onPlayTracks: (Album, List<Track>, Track) -> Unit,
     onAddToQueue: (Track) -> Boolean,
     onDownloadOne: (String) -> Unit,
@@ -3347,14 +3353,28 @@ private fun AlbumDlsiteInfoTab(
                 }
             }
         }
-        if (asmrOneTree.isNotEmpty()) {
-            item {
+        item {
+            val title = if (asmrOneTree.isNotEmpty()) "ONE（已收录）" else if (isLoadingAsmrOne) "ONE" else "ONE（未收录）"
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Text(
-                    text = "ONE（已收录）",
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                    text = title,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
+                Spacer(modifier = Modifier.weight(1f))
+                IconButton(
+                    onClick = onRefreshAsmrOne,
+                    enabled = !isLoadingAsmrOne
+                ) {
+                    Icon(Icons.Default.Refresh, contentDescription = "刷新")
+                }
+            }
+            if (asmrOneTree.isNotEmpty()) {
                 Surface(
                     shape = RoundedCornerShape(12.dp),
                     tonalElevation = 1.dp,
@@ -3422,9 +3442,7 @@ private fun AlbumDlsiteInfoTab(
                         }
                     }
                 }
-            }
-        } else if (isLoadingAsmrOne) {
-            item {
+            } else if (isLoadingAsmrOne) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -3433,15 +3451,37 @@ private fun AlbumDlsiteInfoTab(
                 ) {
                     CircularProgressIndicator()
                 }
+            } else {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(120.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("未收录")
+                }
             }
         }
         item {
-            Text(
-                text = "试听/试看",
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "试听/试看",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.weight(1f))
+                IconButton(
+                    onClick = onRefreshTrial,
+                    enabled = !isLoading && !isLoadingTrial
+                ) {
+                    Icon(Icons.Default.Refresh, contentDescription = "刷新")
+                }
+            }
         }
         if (trialTracks.isEmpty()) {
             item {
@@ -3451,10 +3491,26 @@ private fun AlbumDlsiteInfoTab(
                         .height(160.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("暂无试听")
+                    if (isLoadingTrial) {
+                        CircularProgressIndicator()
+                    } else {
+                        Text("暂无试听")
+                    }
                 }
             }
         } else {
+            if (isLoadingTrial) {
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(120.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator()
+                    }
+                }
+            }
             items(videoTracks) { track ->
                 Column(
                     modifier = Modifier

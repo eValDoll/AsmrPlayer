@@ -55,5 +55,29 @@ class DlsiteProductInfoClientTest {
         assertTrue(editions.any { it.lang == "CHI_HANS" && it.workno == "RJ01375469" })
         assertTrue(editions.any { it.lang == "CHI_HANT" && it.workno == "RJ01377020" })
     }
+
+    @Test
+    fun parseLanguageEditions_returnsEmptyWhenKeyMismatch() {
+        val json = """
+            {
+              "RJ99999999": {
+                "dl_count_items": [
+                  {
+                    "workno": "RJ99999999",
+                    "edition_type": "language",
+                    "display_order": 1,
+                    "label": "日本語",
+                    "lang": "JPN"
+                  }
+                ]
+              }
+            }
+        """.trimIndent()
+
+        val client = DlsiteProductInfoClient(OkHttpClient())
+        val editions = client.parseLanguageEditions("RJ01348345", json)
+
+        assertEquals(emptyList<DlsiteLanguageEdition>(), editions)
+    }
 }
 

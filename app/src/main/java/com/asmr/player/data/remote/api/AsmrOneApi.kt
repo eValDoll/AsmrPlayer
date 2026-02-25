@@ -42,6 +42,8 @@ data class SearchResponse(
 data class WorkDetailsResponse(
     val id: Int,
     val source_id: String,
+    val original_workno: String? = null,
+    val language_editions: List<AsmrOneLanguageEdition>? = null,
     val title: String,
     val circle: Circle?,
     val vas: List<Artist>?,
@@ -50,6 +52,12 @@ data class WorkDetailsResponse(
     val mainCoverUrl: String,
     val dl_count: Int,
     val price: Int
+)
+
+data class AsmrOneLanguageEdition(
+    val lang: String? = null,
+    val label: String? = null,
+    val workno: String? = null
 )
 
 data class Circle(val name: String)
