@@ -117,7 +117,7 @@ import com.asmr.player.ui.player.QueueSheetContent
 
 import com.asmr.player.data.local.datastore.SettingsDataStore
 import com.asmr.player.util.MessageManager
-import com.asmr.player.ui.common.AppMessageOverlay
+import com.asmr.player.ui.common.NonTouchableAppMessageOverlay
 import com.asmr.player.ui.common.VisibleAppMessage
 import com.asmr.player.ui.theme.HuePalette
 import com.asmr.player.ui.theme.PlayerTheme
@@ -253,22 +253,44 @@ class MainActivity : ComponentActivity() {
             val recentMessageAtMs = remember { linkedMapOf<String, Long>() }
             val dismissJobs = remember { linkedMapOf<Long, kotlinx.coroutines.Job>() }
             var messageSeq by remember { mutableLongStateOf(0L) }
+            var overflowCount by remember { mutableIntStateOf(0) }
 
             LaunchedEffect(Unit) {
+                val mergeWindowMs = 2_500L
+                val maxVisible = 4
+                val overflowKey = "__overflow__"
+
                 messageManager.messages.collect { appMessage ->
                     val normalized = appMessage.message.trim()
                     if (normalized.isBlank()) return@collect
                     val dedupeKey = "${appMessage.type.name}|$normalized"
                     val now = System.currentTimeMillis()
+                    val lastAt = recentMessageAtMs[dedupeKey]
                     recentMessageAtMs[dedupeKey] = now
                     val displayMs = appMessage.durationMs.coerceIn(1500L, 4500L)
+                    val shouldMerge = lastAt != null && (now - lastAt) <= mergeWindowMs
 
-                    val existingIndex = visibleMessages.indexOfFirst { it.type == appMessage.type && it.message == normalized }
-                    if (existingIndex >= 0) {
-                        val oldId = visibleMessages[existingIndex].id
-                        dismissJobs.remove(oldId)?.cancel()
-                        val id = ++messageSeq
-                        visibleMessages[existingIndex] = VisibleAppMessage(id = id, message = normalized, type = appMessage.type)
+                    val existingIndex = visibleMessages.indexOfFirst { it.key == dedupeKey }
+                    if (existingIndex >= 0 && shouldMerge) {
+                        val old = visibleMessages[existingIndex]
+                        val removedIds = visibleMessages
+                            .asSequence()
+                            .filter { it.key == dedupeKey }
+                            .map { it.id }
+                            .toList()
+                        visibleMessages.removeAll { it.key == dedupeKey }
+                        removedIds.forEach { rid -> dismissJobs.remove(rid)?.cancel() }
+
+                        val id = old.id
+                        val renderId = ++messageSeq
+                        visibleMessages.add(
+                            0,
+                            old.copy(
+                                renderId = renderId,
+                                count = (old.count + 1).coerceAtMost(99),
+                                durationMs = displayMs
+                            )
+                        )
                         dismissJobs[id] = launch {
                             delay(displayMs)
                             visibleMessages.removeAll { it.id == id }
@@ -278,15 +300,70 @@ class MainActivity : ComponentActivity() {
                     }
 
                     val id = ++messageSeq
-                    visibleMessages.add(VisibleAppMessage(id = id, message = normalized, type = appMessage.type))
-                    while (visibleMessages.size > 2) {
-                        val removed = visibleMessages.removeAt(0)
-                        dismissJobs.remove(removed.id)?.cancel()
-                    }
+                    visibleMessages.add(
+                        0,
+                        VisibleAppMessage(
+                            id = id,
+                            renderId = id,
+                            key = dedupeKey,
+                            message = normalized,
+                            type = appMessage.type,
+                            count = 1,
+                            durationMs = displayMs
+                        )
+                    )
                     dismissJobs[id] = launch {
                         delay(displayMs)
                         visibleMessages.removeAll { it.id == id }
                         dismissJobs.remove(id)
+                    }
+
+                    val summaryIndex = visibleMessages.indexOfFirst { it.key == overflowKey }
+                    val nonSummaryCount = visibleMessages.count { it.key != overflowKey }
+                    val nonSummaryLimit = if (summaryIndex >= 0 || overflowCount > 0) maxVisible - 1 else maxVisible
+                    if (nonSummaryCount > nonSummaryLimit) {
+                        val lastNonSummaryIndex = visibleMessages.indexOfLast { it.key != overflowKey }
+                        if (lastNonSummaryIndex >= 0) {
+                            val removed = visibleMessages.removeAt(lastNonSummaryIndex)
+                            dismissJobs.remove(removed.id)?.cancel()
+                            overflowCount += 1
+                        }
+                    }
+
+                    if (overflowCount > 0) {
+                        val summaryText = "还有 $overflowCount 条新消息"
+                        val summaryDuration = 4_500L
+                        if (summaryIndex >= 0) {
+                            val old = visibleMessages[summaryIndex]
+                            dismissJobs.remove(old.id)?.cancel()
+                            val sid = ++messageSeq
+                            visibleMessages[summaryIndex] = old.copy(id = sid, renderId = sid, message = summaryText, count = 1, durationMs = summaryDuration)
+                            dismissJobs[sid] = launch {
+                                delay(summaryDuration)
+                                visibleMessages.removeAll { it.id == sid }
+                                dismissJobs.remove(sid)
+                                overflowCount = 0
+                            }
+                        } else {
+                            val sid = ++messageSeq
+                            visibleMessages.add(
+                                VisibleAppMessage(
+                                    id = sid,
+                                    renderId = sid,
+                                    key = overflowKey,
+                                    message = summaryText,
+                                    type = com.asmr.player.util.MessageType.Info,
+                                    count = 1,
+                                    durationMs = summaryDuration
+                                )
+                            )
+                            dismissJobs[sid] = launch {
+                                delay(summaryDuration)
+                                visibleMessages.removeAll { it.id == sid }
+                                dismissJobs.remove(sid)
+                                overflowCount = 0
+                            }
+                        }
                     }
                 }
             }
@@ -1196,16 +1273,7 @@ fun MainContainer(
                 )
             }
 
-            if (visibleMessages.isNotEmpty() && !immersivePlayer) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(bottom = 80.dp),
-                    contentAlignment = Alignment.BottomCenter
-                ) {
-                    AppMessageOverlay(messages = visibleMessages)
-                }
-            }
+            NonTouchableAppMessageOverlay(messages = visibleMessages)
         }
 
         }

@@ -12,9 +12,28 @@ import com.asmr.player.data.remote.api.Pagination
 import com.asmr.player.data.remote.api.SearchResponse
 import com.asmr.player.data.remote.api.WorkDetailsResponse
 import com.asmr.player.data.settings.SettingsRepository
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.first
 import javax.inject.Inject
 import javax.inject.Singleton
+
+data class AsmrOneSearchTrace(
+    val keyword: String,
+    val primarySucceeded: Boolean,
+    val primaryHasWorks: Boolean,
+    val fallbackAttempted: Boolean,
+    val fallbackUsed: Boolean,
+    val fallbackSite: Int?
+)
+
+data class AsmrOneSearchResult(
+    val response: SearchResponse,
+    val trace: AsmrOneSearchTrace
+)
 
 @Singleton
 class AsmrOneCrawler @Inject constructor(
@@ -24,21 +43,77 @@ class AsmrOneCrawler @Inject constructor(
     private val asmr300Api: Asmr300Api,
     private val settingsRepository: SettingsRepository
 ) {
-    suspend fun search(keyword: String, page: Int = 1): SearchResponse {
+    suspend fun searchPrimaryOnly(keyword: String, page: Int = 1): SearchResponse? {
         val normalized = keyword.trim()
-        val primary = runCatching {
+        if (normalized.isBlank()) return null
+        return tryTwice { api.search(keyword = normalized, page = page, silentIoError = NetworkHeaders.SILENT_IO_ERROR_ON) }
+    }
+
+    suspend fun searchBackupPreferredRjIds(keyword: String, page: Int = 1): Set<String> {
+        val normalized = keyword.trim()
+        if (normalized.isBlank()) return emptySet()
+        val preferredSite = runCatching { settingsRepository.asmrOneSite.first() }.getOrDefault(200)
+        val backupApis = backupApisInOrder(preferredSite, asmr100Api, asmr200Api, asmr300Api)
+        val backup = backupApis.firstOrNull() ?: return emptySet()
+        val from = tryTwice {
+            backup.api.search(keyword = normalized, page = page, silentIoError = NetworkHeaders.SILENT_IO_ERROR_ON)
+        } ?: return emptySet()
+        return from.works
+            .asSequence()
+            .flatMap { w ->
+                sequenceOf(
+                    w.source_id.orEmpty(),
+                    w.original_workno.orEmpty(),
+                    *w.language_editions.orEmpty().map { it.workno.orEmpty() }.toTypedArray()
+                )
+            }
+            .mapNotNull { s -> RJ_CODE_REGEX.find(s.trim().uppercase())?.value }
+            .toSet()
+    }
+
+    suspend fun searchWithTrace(keyword: String, page: Int = 1): AsmrOneSearchResult {
+        val normalized = keyword.trim()
+        val primaryTry = runCatching {
             api.search(keyword = normalized, page = page, silentIoError = NetworkHeaders.SILENT_IO_ERROR_ON)
-        }.getOrNull()
-        if (primary != null && primary.works.isNotEmpty()) return primary
+        }
+        val primary = primaryTry.getOrNull()
+        val primarySucceeded = primaryTry.isSuccess && primary != null
+        val primaryHasWorks = primary?.works?.isNotEmpty() == true
+        if (primaryHasWorks) {
+            return AsmrOneSearchResult(
+                response = primary!!,
+                trace = AsmrOneSearchTrace(
+                    keyword = normalized,
+                    primarySucceeded = primarySucceeded,
+                    primaryHasWorks = true,
+                    fallbackAttempted = false,
+                    fallbackUsed = false,
+                    fallbackSite = null
+                )
+            )
+        }
 
         val isRj = normalized.startsWith("RJ", ignoreCase = true)
-        if (!isRj) return primary ?: SearchResponse(works = emptyList(), pagination = Pagination(0, 20, page))
+        if (!isRj) {
+            val resp = primary ?: SearchResponse(works = emptyList(), pagination = Pagination(0, 20, page))
+            return AsmrOneSearchResult(
+                response = resp,
+                trace = AsmrOneSearchTrace(
+                    keyword = normalized,
+                    primarySucceeded = primarySucceeded,
+                    primaryHasWorks = false,
+                    fallbackAttempted = false,
+                    fallbackUsed = false,
+                    fallbackSite = null
+                )
+            )
+        }
 
         val preferredSite = runCatching { settingsRepository.asmrOneSite.first() }.getOrDefault(200)
         val backupApis = backupApisInOrder(preferredSite, asmr100Api, asmr200Api, asmr300Api)
-        for (backupApi in backupApis) {
+        for (backup in backupApis) {
             val from = runCatching {
-                backupApi.search(
+                backup.api.search(
                     keyword = " $normalized",
                     page = page,
                     silentIoError = NetworkHeaders.SILENT_IO_ERROR_ON
@@ -46,54 +121,275 @@ class AsmrOneCrawler @Inject constructor(
             }.getOrNull()
             val mapped = mapBackupWorks(from?.works.orEmpty(), normalized)
             if (mapped.isNotEmpty()) {
-                return SearchResponse(
-                    works = mapped,
-                    pagination = Pagination(totalCount = mapped.size, pageSize = mapped.size, page = page)
+                return AsmrOneSearchResult(
+                    response = SearchResponse(
+                        works = mapped,
+                        pagination = Pagination(totalCount = mapped.size, pageSize = mapped.size, page = page)
+                    ),
+                    trace = AsmrOneSearchTrace(
+                        keyword = normalized,
+                        primarySucceeded = primarySucceeded,
+                        primaryHasWorks = false,
+                        fallbackAttempted = true,
+                        fallbackUsed = true,
+                        fallbackSite = backup.site
+                    )
                 )
             }
         }
 
-        return primary ?: SearchResponse(works = emptyList(), pagination = Pagination(0, 20, page))
+        val resp = primary ?: SearchResponse(works = emptyList(), pagination = Pagination(0, 20, page))
+        return AsmrOneSearchResult(
+            response = resp,
+            trace = AsmrOneSearchTrace(
+                keyword = normalized,
+                primarySucceeded = primarySucceeded,
+                primaryHasWorks = false,
+                fallbackAttempted = true,
+                fallbackUsed = false,
+                fallbackSite = null
+            )
+        )
+    }
+
+    suspend fun search(keyword: String, page: Int = 1): SearchResponse {
+        return searchWithTrace(keyword, page).response
+    }
+
+    suspend fun hasWorkOnPrimary(sourceId: String): Boolean? {
+        val normalized = sourceId.trim().uppercase()
+        val rj = RJ_CODE_REGEX.find(normalized)?.value ?: return null
+
+        fun contains(resp: SearchResponse): Boolean {
+            return resp.works.any { w ->
+                val wid = w.source_id.trim().uppercase()
+                RJ_CODE_REGEX.find(wid)?.value == rj
+            }
+        }
+
+        val resp1 = tryTwice { api.search(keyword = rj, page = 1, silentIoError = NetworkHeaders.SILENT_IO_ERROR_ON) }
+        if (resp1 != null && contains(resp1)) return true
+
+        val resp2 = tryTwice { api.search(keyword = " $rj", page = 1, silentIoError = NetworkHeaders.SILENT_IO_ERROR_ON) }
+        if (resp2 != null && contains(resp2)) return true
+
+        if (resp1 == null || resp2 == null) return null
+        return false
+    }
+
+    suspend fun hasWorkWithFallback(sourceId: String): Boolean? {
+        val normalized = sourceId.trim().uppercase()
+        val rj = RJ_CODE_REGEX.find(normalized)?.value ?: return null
+
+        fun contains(resp: SearchResponse): Boolean {
+            return resp.works.any { w ->
+                val wid = w.source_id.trim().uppercase()
+                RJ_CODE_REGEX.find(wid)?.value == rj
+            }
+        }
+
+        var anySucceeded = false
+
+        val primary1 = tryTwice { api.search(keyword = rj, page = 1, silentIoError = NetworkHeaders.SILENT_IO_ERROR_ON) }
+        if (primary1 != null) {
+            anySucceeded = true
+            if (contains(primary1)) return true
+        }
+        val primary2 = tryTwice { api.search(keyword = " $rj", page = 1, silentIoError = NetworkHeaders.SILENT_IO_ERROR_ON) }
+        if (primary2 != null) {
+            anySucceeded = true
+            if (contains(primary2)) return true
+        }
+
+        val preferredSite = runCatching { settingsRepository.asmrOneSite.first() }.getOrDefault(200)
+        val backupApis = backupApisInOrder(preferredSite, asmr100Api, asmr200Api, asmr300Api)
+        for (backup in backupApis) {
+            val from = runCatching {
+                backup.api.search(keyword = " $rj", page = 1, silentIoError = NetworkHeaders.SILENT_IO_ERROR_ON)
+            }.getOrNull()
+            if (from != null) anySucceeded = true
+            val mapped = mapBackupWorks(from?.works.orEmpty(), rj)
+            if (mapped.any { it.source_id.trim().uppercase() == rj }) return true
+        }
+
+        return if (anySucceeded) false else null
+    }
+
+    suspend fun hasWorkFast(sourceId: String, timeoutMs: Long = 2_000L): Boolean? {
+        val normalized = sourceId.trim().uppercase()
+        val rj = RJ_CODE_REGEX.find(normalized)?.value ?: return null
+
+        fun contains(resp: SearchResponse): Boolean {
+            return resp.works.any { w ->
+                val wid = w.source_id.trim().uppercase()
+                RJ_CODE_REGEX.find(wid)?.value == rj
+            }
+        }
+
+        return withTimeoutOrNull(timeoutMs) {
+            var anySucceeded = false
+
+            val preferredSite = runCatching { settingsRepository.asmrOneSite.first() }.getOrDefault(200)
+            val backupApis = backupApisInOrder(preferredSite, asmr100Api, asmr200Api, asmr300Api)
+            for (backup in backupApis.take(2)) {
+                val from = tryTwice {
+                    backup.api.search(keyword = " $rj", page = 1, silentIoError = NetworkHeaders.SILENT_IO_ERROR_ON)
+                }
+                if (from != null) anySucceeded = true
+                val mapped = mapBackupWorks(from?.works.orEmpty(), rj)
+                if (mapped.any { it.source_id.trim().uppercase() == rj }) return@withTimeoutOrNull true
+            }
+
+            val primary = tryTwice { api.search(keyword = rj, page = 1, silentIoError = NetworkHeaders.SILENT_IO_ERROR_ON) }
+            if (primary != null) {
+                anySucceeded = true
+                if (contains(primary)) return@withTimeoutOrNull true
+            }
+            val primarySpaced = tryTwice { api.search(keyword = " $rj", page = 1, silentIoError = NetworkHeaders.SILENT_IO_ERROR_ON) }
+            if (primarySpaced != null) {
+                anySucceeded = true
+                if (contains(primarySpaced)) return@withTimeoutOrNull true
+            }
+
+            if (anySucceeded) false else null
+        }
     }
 
     suspend fun getDetails(workId: String): WorkDetailsResponse {
         val normalized = workId.trim()
         val preferredSite = runCatching { settingsRepository.asmrOneSite.first() }.getOrDefault(200)
         val backupApis = backupApisInOrder(preferredSite, asmr100Api, asmr200Api, asmr300Api)
-        return runCatching { api.getWorkDetails(normalized, silentIoError = NetworkHeaders.SILENT_IO_ERROR_ON) }.getOrElse {
-            var last: Throwable = it
-            for (backupApi in backupApis) {
-                val result = runCatching {
-                    backupApi.getWorkDetails(normalized, silentIoError = NetworkHeaders.SILENT_IO_ERROR_ON)
-                }.getOrElse { e ->
-                    last = e
-                    null
-                }
-                if (result != null) return result
+        val primaryTry = runCatching {
+            withTimeout(PRIMARY_CALL_TIMEOUT_MS) {
+                api.getWorkDetails(normalized, silentIoError = NetworkHeaders.SILENT_IO_ERROR_ON)
             }
-            throw last
         }
+        val primary = primaryTry.getOrNull()
+        if (primaryTry.isSuccess && primary != null) return primary
+
+        var last: Throwable = primaryTry.exceptionOrNull() ?: RuntimeException("unknown error")
+        if (last is CancellationException && last !is TimeoutCancellationException) throw last
+        for (backupApi in backupApis) {
+            val result = runCatching {
+                withTimeout(BACKUP_CALL_TIMEOUT_MS) {
+                    backupApi.api.getWorkDetails(normalized, silentIoError = NetworkHeaders.SILENT_IO_ERROR_ON)
+                }
+            }.getOrElse { e ->
+                if (e is CancellationException && e !is TimeoutCancellationException) throw e
+                last = e
+                null
+            }
+            if (result != null) return result
+        }
+        throw last
+    }
+
+    suspend fun getDetailsFromSite(site: Int, workId: String): WorkDetailsResponse {
+        val normalized = workId.trim()
+        val result = runCatching {
+            withTimeout(PRIMARY_CALL_TIMEOUT_MS) {
+                when (site) {
+                    100 -> asmr100Api.getWorkDetails(normalized, silentIoError = NetworkHeaders.SILENT_IO_ERROR_ON)
+                    300 -> asmr300Api.getWorkDetails(normalized, silentIoError = NetworkHeaders.SILENT_IO_ERROR_ON)
+                    200 -> asmr200Api.getWorkDetails(normalized, silentIoError = NetworkHeaders.SILENT_IO_ERROR_ON)
+                    else -> api.getWorkDetails(normalized, silentIoError = NetworkHeaders.SILENT_IO_ERROR_ON)
+                }
+            }
+        }.getOrElse { e ->
+            if (e is CancellationException && e !is TimeoutCancellationException) throw e
+            null
+        }
+        return result ?: getDetails(normalized)
     }
 
     suspend fun getTracks(workId: String): List<AsmrOneTrackNodeResponse> {
         val normalized = workId.trim()
         val preferredSite = runCatching { settingsRepository.asmrOneSite.first() }.getOrDefault(200)
         val backupApis = backupApisInOrder(preferredSite, asmr100Api, asmr200Api, asmr300Api)
-        return runCatching { api.getTracks(normalized, silentIoError = NetworkHeaders.SILENT_IO_ERROR_ON) }.getOrElse {
-            var last: Throwable = it
-            for (backupApi in backupApis) {
-                val result = runCatching {
-                    backupApi.getTracks(normalized, silentIoError = NetworkHeaders.SILENT_IO_ERROR_ON)
-                }.getOrElse { e ->
-                    last = e
-                    null
-                }
-                if (result != null) return result
+        val primaryTry1 = runCatching {
+            withTimeout(TRACKS_CALL_TIMEOUT_SHORT_MS) {
+                api.getTracks(normalized, silentIoError = NetworkHeaders.SILENT_IO_ERROR_ON)
             }
-            throw last
         }
+        val primary1 = primaryTry1.getOrNull()
+        if (primaryTry1.isSuccess && primary1 != null) return primary1
+
+        val primaryTry2 = if (primaryTry1.exceptionOrNull() is TimeoutCancellationException) {
+            runCatching {
+                withTimeout(TRACKS_CALL_TIMEOUT_LONG_MS) {
+                    api.getTracks(normalized, silentIoError = NetworkHeaders.SILENT_IO_ERROR_ON)
+                }
+            }
+        } else primaryTry1
+        val primary2 = primaryTry2.getOrNull()
+        if (primaryTry2.isSuccess && primary2 != null) return primary2
+
+        var last: Throwable = primaryTry2.exceptionOrNull() ?: RuntimeException("unknown error")
+        if (last is CancellationException && last !is TimeoutCancellationException) throw last
+        for (backupApi in backupApis) {
+            val result = runCatching {
+                withTimeout(TRACKS_CALL_TIMEOUT_LONG_MS) {
+                    backupApi.api.getTracks(normalized, silentIoError = NetworkHeaders.SILENT_IO_ERROR_ON)
+                }
+            }.getOrElse { e ->
+                if (e is CancellationException && e !is TimeoutCancellationException) throw e
+                last = e
+                null
+            }
+            if (result != null) return result
+        }
+        throw last
+    }
+
+    suspend fun getTracksFromSite(site: Int, workId: String): List<AsmrOneTrackNodeResponse> {
+        val normalized = workId.trim()
+        val result = runCatching {
+            withTimeout(TRACKS_CALL_TIMEOUT_SHORT_MS) {
+                when (site) {
+                    100 -> asmr100Api.getTracks(normalized, silentIoError = NetworkHeaders.SILENT_IO_ERROR_ON)
+                    300 -> asmr300Api.getTracks(normalized, silentIoError = NetworkHeaders.SILENT_IO_ERROR_ON)
+                    200 -> asmr200Api.getTracks(normalized, silentIoError = NetworkHeaders.SILENT_IO_ERROR_ON)
+                    else -> api.getTracks(normalized, silentIoError = NetworkHeaders.SILENT_IO_ERROR_ON)
+                }
+            }
+        }.getOrElse { e ->
+            if (e is CancellationException && e !is TimeoutCancellationException) throw e
+            if (e is TimeoutCancellationException) {
+                runCatching {
+                    withTimeout(TRACKS_CALL_TIMEOUT_LONG_MS) {
+                        when (site) {
+                            100 -> asmr100Api.getTracks(normalized, silentIoError = NetworkHeaders.SILENT_IO_ERROR_ON)
+                            300 -> asmr300Api.getTracks(normalized, silentIoError = NetworkHeaders.SILENT_IO_ERROR_ON)
+                            200 -> asmr200Api.getTracks(normalized, silentIoError = NetworkHeaders.SILENT_IO_ERROR_ON)
+                            else -> api.getTracks(normalized, silentIoError = NetworkHeaders.SILENT_IO_ERROR_ON)
+                        }
+                    }
+                }.getOrNull()
+            } else null
+        }
+        return result ?: getTracks(normalized)
     }
 }
+
+private val RJ_CODE_REGEX = Regex("""RJ\d{6,}""")
+private const val PRIMARY_CALL_TIMEOUT_MS = 1_500L
+private const val BACKUP_CALL_TIMEOUT_MS = 1_500L
+private const val TRACKS_CALL_TIMEOUT_SHORT_MS = 2_000L
+private const val TRACKS_CALL_TIMEOUT_LONG_MS = 6_000L
+
+private suspend fun <T> tryTwice(delayMs: Long = 150L, block: suspend () -> T): T? {
+    repeat(2) { idx ->
+        val result = runCatching { block() }
+        if (result.isSuccess) return result.getOrNull()
+        if (idx == 0) delay(delayMs)
+    }
+    return null
+}
+
+private data class AsmrBackupApiEntry(
+    val site: Int,
+    val api: AsmrBackupApi
+)
 
 private interface AsmrBackupApi {
     suspend fun search(
@@ -137,14 +433,26 @@ private fun backupApisInOrder(
     asmr100Api: Asmr100Api,
     asmr200Api: Asmr200Api,
     asmr300Api: Asmr300Api
-): List<AsmrBackupApi> {
+): List<AsmrBackupApiEntry> {
     val api100 = asmr100Api.asBackup()
     val api200 = asmr200Api.asBackup()
     val api300 = asmr300Api.asBackup()
     return when (preferredSite) {
-        100 -> listOf(api100, api200, api300)
-        300 -> listOf(api300, api200, api100)
-        else -> listOf(api200, api100, api300)
+        100 -> listOf(
+            AsmrBackupApiEntry(100, api100),
+            AsmrBackupApiEntry(200, api200),
+            AsmrBackupApiEntry(300, api300)
+        )
+        300 -> listOf(
+            AsmrBackupApiEntry(300, api300),
+            AsmrBackupApiEntry(200, api200),
+            AsmrBackupApiEntry(100, api100)
+        )
+        else -> listOf(
+            AsmrBackupApiEntry(200, api200),
+            AsmrBackupApiEntry(100, api100),
+            AsmrBackupApiEntry(300, api300)
+        )
     }
 }
 

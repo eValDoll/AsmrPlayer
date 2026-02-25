@@ -183,8 +183,15 @@ fun NowPlayingScreen(
         modifier = Modifier.fillMaxSize()
     ) {
         if (!isVideo) {
+            val backgroundArtwork = remember(metadata?.artworkUri) {
+                metadata?.artworkUri?.takeUnless { u ->
+                    val s = u.toString()
+                    u.scheme.equals("android.resource", ignoreCase = true) ||
+                        s.contains("ic_placeholder", ignoreCase = true)
+                }
+            }
             CoverArtworkBackground(
-                artworkModel = metadata?.artworkUri,
+                artworkModel = backgroundArtwork,
                 enabled = coverBackgroundEnabled,
                 clarity = coverBackgroundClarity,
                 overlayBaseColor = colorScheme.background,

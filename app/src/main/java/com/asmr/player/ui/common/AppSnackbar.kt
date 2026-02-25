@@ -10,20 +10,29 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.asmr.player.util.MessageType
 
 @Composable
 fun AppSnackbar(
+    messageId: Long,
     message: String,
     type: MessageType,
+    count: Int,
+    durationMs: Long,
     modifier: Modifier = Modifier
 ) {
     val (icon, color) = when (type) {
@@ -35,33 +44,65 @@ fun AppSnackbar(
 
     Surface(
         modifier = modifier
-            .padding(horizontal = 24.dp, vertical = 12.dp)
-            .clip(RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(18.dp))
             .background(Color.Transparent),
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
-        tonalElevation = 4.dp,
-        shadowElevation = 8.dp,
-        shape = RoundedCornerShape(16.dp)
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.82f),
+        tonalElevation = 3.dp,
+        shadowElevation = 10.dp,
+        shape = RoundedCornerShape(18.dp),
+        border = androidx.compose.foundation.BorderStroke(
+            width = 1.dp,
+            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)
+        )
     ) {
-        Row(
-            modifier = Modifier
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = color,
-                modifier = Modifier.size(24.dp)
+        val progress = remember(messageId) { Animatable(1f) }
+        LaunchedEffect(messageId, durationMs) {
+            progress.snapTo(1f)
+            progress.animateTo(
+                targetValue = 0f,
+                animationSpec = tween(
+                    durationMillis = durationMs.coerceAtLeast(1L).coerceAtMost(Int.MAX_VALUE.toLong()).toInt(),
+                    easing = LinearEasing
+                )
             )
-            Text(
-                text = message,
-                style = MaterialTheme.typography.bodyMedium.copy(
-                    fontWeight = FontWeight.Medium,
-                    letterSpacing = 0.5.sp
-                ),
-                color = MaterialTheme.colorScheme.onSurface
+        }
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = color,
+                    modifier = Modifier.size(24.dp)
+                )
+                Text(
+                    text = message,
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        fontWeight = FontWeight.Medium,
+                        letterSpacing = 0.3.sp
+                    ),
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false)
+                )
+                if (count > 1) {
+                    Text(
+                        text = "×$count",
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            LinearProgressIndicator(
+                progress = { progress.value.coerceIn(0f, 1f) },
+                color = color.copy(alpha = 0.85f),
+                trackColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.22f),
+                modifier = Modifier.fillMaxWidth().height(2.dp)
             )
         }
     }
@@ -80,8 +121,11 @@ fun AppSnackbarHost(
             // 稍后在 MessageManager 集成时，我们会通过 SnackbarHostState.showSnackbar 传入特定格式的字符串
             val (message, type) = parseSnackbarMessage(data.visuals.message)
             AppSnackbar(
+                messageId = 0L,
                 message = message,
-                type = type
+                type = type,
+                count = 1,
+                durationMs = 3_000L
             )
         }
     )

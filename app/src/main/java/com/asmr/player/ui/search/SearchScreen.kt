@@ -66,6 +66,12 @@ fun SearchScreen(
     val colorScheme = AsmrTheme.colorScheme
     val scope = rememberCoroutineScope()
 
+    DisposableEffect(Unit) {
+        onDispose {
+            viewModel.stopBackgroundLoading()
+        }
+    }
+
     LaunchedEffect(Unit) {
         if (uiState is SearchUiState.Idle) {
             viewModel.setPurchasedOnly(purchasedOnly)
@@ -246,7 +252,8 @@ fun SearchScreen(
                         singleLine = true
                     )
 
-                    if (success?.isEnriching == true) {
+                    val shouldShowTopProgress = success?.isAsmrOneChecking == true || success?.isEnriching == true
+                    if (shouldShowTopProgress) {
                         LinearProgressIndicator(
                             modifier = Modifier
                                 .fillMaxWidth()

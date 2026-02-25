@@ -38,9 +38,15 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
     composeOptions {
         kotlinCompilerExtensionVersion = "1.5.8"
+    }
+    testOptions {
+        unitTests.all {
+            it.systemProperty("asmr.latency", (project.findProperty("asmr.latency") as? String).orEmpty())
+        }
     }
     packaging {
         resources {
@@ -58,6 +64,9 @@ dependencies {
     val haze_version = "0.7.0"
 
     implementation("androidx.core:core-ktx:1.12.0")
+    implementation("androidx.lifecycle:lifecycle-runtime:2.7.0")
+    implementation("androidx.lifecycle:lifecycle-viewmodel:2.7.0")
+    implementation("androidx.savedstate:savedstate:1.2.1")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")
     implementation("androidx.activity:activity-compose:1.8.2")
     implementation(platform("androidx.compose:compose-bom:2024.02.00"))
