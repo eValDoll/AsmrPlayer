@@ -16,6 +16,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.asmr.player.util.MessageType
@@ -24,6 +25,7 @@ import com.asmr.player.util.MessageType
 fun AppSnackbar(
     message: String,
     type: MessageType,
+    count: Int,
     modifier: Modifier = Modifier
 ) {
     val (icon, color) = when (type) {
@@ -35,17 +37,20 @@ fun AppSnackbar(
 
     Surface(
         modifier = modifier
-            .padding(horizontal = 24.dp, vertical = 12.dp)
-            .clip(RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(18.dp))
             .background(Color.Transparent),
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
-        tonalElevation = 4.dp,
-        shadowElevation = 8.dp,
-        shape = RoundedCornerShape(16.dp)
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
+        tonalElevation = 3.dp,
+        shadowElevation = 10.dp,
+        shape = RoundedCornerShape(18.dp),
+        border = androidx.compose.foundation.BorderStroke(
+            width = 1.dp,
+            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)
+        )
     ) {
         Row(
             modifier = Modifier
-                .padding(horizontal = 16.dp, vertical = 12.dp),
+                .padding(horizontal = 14.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
@@ -59,10 +64,20 @@ fun AppSnackbar(
                 text = message,
                 style = MaterialTheme.typography.bodyMedium.copy(
                     fontWeight = FontWeight.Medium,
-                    letterSpacing = 0.5.sp
+                    letterSpacing = 0.3.sp
                 ),
-                color = MaterialTheme.colorScheme.onSurface
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false)
             )
+            if (count > 1) {
+                Text(
+                    text = "×$count",
+                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
     }
 }
@@ -81,7 +96,8 @@ fun AppSnackbarHost(
             val (message, type) = parseSnackbarMessage(data.visuals.message)
             AppSnackbar(
                 message = message,
-                type = type
+                type = type,
+                count = 1
             )
         }
     )
