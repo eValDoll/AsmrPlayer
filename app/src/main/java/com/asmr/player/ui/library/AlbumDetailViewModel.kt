@@ -46,6 +46,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import java.io.FileOutputStream
 import javax.inject.Inject
@@ -61,6 +62,7 @@ import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Rect
+import android.os.SystemClock
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import javax.inject.Named
@@ -108,10 +110,27 @@ class AlbumDetailViewModel @Inject constructor(
     private var lastAlbumKey: String? = null
     private var localTracksObserveJob: Job? = null
     private val asmrOneAttemptedRj = linkedSetOf<String>()
+    private val asmrOneCollectedCache = linkedMapOf<String, Pair<Long, Boolean?>>()
+    private val autoFallbackToJpnOnceByKey = linkedSetOf<String>()
 
     private val treeExpandedByKey = linkedMapOf<String, List<String>>()
     private val treeInitializedKeys = linkedSetOf<String>()
     private val listScrollByKey = linkedMapOf<String, Pair<Int, Int>>()
+
+    private suspend fun isAsmrOneCollected(rj: String, timeoutMs: Long = 1_200L): Boolean? {
+        val key = rj.trim().uppercase()
+        if (key.isBlank()) return null
+        val now = SystemClock.elapsedRealtime()
+        val cached = asmrOneCollectedCache[key]
+        if (cached != null && (now - cached.first) <= 60_000L) return cached.second
+        val result = runCatching { asmrOneCrawler.hasWorkFast(key, timeoutMs = timeoutMs) }.getOrNull()
+        asmrOneCollectedCache[key] = now to result
+        if (asmrOneCollectedCache.size > 300) {
+            val firstKey = asmrOneCollectedCache.entries.firstOrNull()?.key
+            if (firstKey != null) asmrOneCollectedCache.remove(firstKey)
+        }
+        return result
+    }
 
     fun getTreeExpanded(stateKey: String): List<String> {
         return treeExpandedByKey[stateKey].orEmpty()
@@ -188,6 +207,7 @@ class AlbumDetailViewModel @Inject constructor(
                         dlsiteEditions = defaultDlsiteEditions(rj),
                         dlsiteSelectedLang = "JPN",
                         asmrOneWorkId = null,
+                        asmrOneSite = null,
                         asmrOneTree = emptyList(),
                         dlsitePlayTree = emptyList(),
                         isLoadingDlsite = false,
@@ -388,19 +408,18 @@ class AlbumDetailViewModel @Inject constructor(
             val current = _uiState.value as? AlbumDetailUiState.Success ?: return@launch
             if (!current.model.baseRjCode.equals(clean, ignoreCase = true)) return@launch
 
-            val autoPickLang = run {
-                val langs = merged.asSequence().map { it.lang }.toSet()
-                when {
-                    "CHI_HANS" in langs -> "CHI_HANS"
-                    "CHI_HANT" in langs -> "CHI_HANT"
-                    else -> "JPN"
-                }
-            }
             val isFirstLangFetch = current.model.dlsiteEditions.size <= 1
             val currentSelectedLang = current.model.dlsiteSelectedLang.trim().uppercase().ifBlank { "JPN" }
-            if (isFirstLangFetch && currentSelectedLang == "JPN" && autoPickLang != "JPN") {
+            if (isFirstLangFetch && currentSelectedLang == "JPN") {
                 _uiState.value = AlbumDetailUiState.Success(model = current.model.copy(dlsiteEditions = merged))
-                selectDlsiteLanguage(autoPickLang)
+                val picked = when {
+                    merged.any { it.lang.equals("CHI_HANS", ignoreCase = true) } -> "CHI_HANS"
+                    merged.any { it.lang.equals("CHI_HANT", ignoreCase = true) } -> "CHI_HANT"
+                    else -> "JPN"
+                }
+                if (picked != "JPN") {
+                    selectDlsiteLanguage(picked)
+                }
                 return@launch
             }
 
@@ -558,6 +577,7 @@ class AlbumDetailViewModel @Inject constructor(
                 dlsiteTrialTracks = emptyList(),
                 dlsiteRecommendations = DlsiteRecommendations(),
                 asmrOneWorkId = null,
+                asmrOneSite = null,
                 asmrOneTree = emptyList(),
                 dlsitePlayTree = emptyList(),
                 isLoadingDlsite = false,
@@ -605,15 +625,99 @@ class AlbumDetailViewModel @Inject constructor(
             _uiState.value = AlbumDetailUiState.Success(model = latestBefore.model.copy(isLoadingAsmrOne = true))
             try {
                 val latest = (_uiState.value as? AlbumDetailUiState.Success)?.model ?: return@launch
-                val titleFallback = latest.dlsiteInfo?.title.orEmpty().ifBlank { latest.displayAlbum.title }
+                val collected = isAsmrOneCollected(keyRj, timeoutMs = 1_200L)
+                if (collected == false) {
+                    val baseKey = latest.baseRjCode.trim().uppercase()
+                    val preferred = listOf("CHI_HANS", "CHI_HANT", "JPN")
+                    var fallbackLang: String? = null
+                    for (lang in preferred) {
+                        val workno = if (lang == "JPN") {
+                            baseKey
+                        } else {
+                            latest.dlsiteEditions.firstOrNull { it.lang.equals(lang, ignoreCase = true) }
+                                ?.workno
+                                ?.trim()
+                                ?.uppercase()
+                                .orEmpty()
+                        }
+                        if (workno.isBlank() || workno.equals(keyRj, ignoreCase = true)) continue
+                        val ok = isAsmrOneCollected(workno, timeoutMs = 1_200L)
+                        if (ok == true) {
+                            fallbackLang = lang
+                            break
+                        }
+                    }
+                    val fallbackKey = "base:$baseKey|cur:$keyRj|to:${fallbackLang.orEmpty()}"
+                    if (!fallbackLang.isNullOrBlank() && !autoFallbackToJpnOnceByKey.contains(fallbackKey)) {
+                        autoFallbackToJpnOnceByKey.add(fallbackKey)
+                        val updated0 = (_uiState.value as? AlbumDetailUiState.Success)?.model ?: return@launch
+                        val updatedKey0 = updated0.rjCode.trim().uppercase()
+                        if (updatedKey0.equals(keyRj, ignoreCase = true) && updated0.isLoadingAsmrOne) {
+                            _uiState.value = AlbumDetailUiState.Success(model = updated0.copy(isLoadingAsmrOne = false))
+                        }
+                        selectDlsiteLanguage(fallbackLang)
+                        return@launch
+                    }
+                    val updated = (_uiState.value as? AlbumDetailUiState.Success)?.model ?: return@launch
+                    val updatedKey = updated.rjCode.trim().uppercase()
+                    if (updatedKey.equals(keyRj, ignoreCase = true) && updated.isLoadingAsmrOne) {
+                        _uiState.value = AlbumDetailUiState.Success(model = updated.copy(isLoadingAsmrOne = false))
+                    }
+                    return@launch
+                }
+                if (collected == null) {
+                    val confirmed = runCatching {
+                        withTimeoutOrNull(1_800L) { asmrOneCrawler.searchWithTrace(keyRj) }
+                    }.getOrNull()
+                    val exact = confirmed
+                        ?.response
+                        ?.works
+                        ?.firstOrNull { it.source_id.equals(keyRj, ignoreCase = true) }
+                    val workId = exact?.id?.toString()
+                    if (!workId.isNullOrBlank()) {
+                        val now = SystemClock.elapsedRealtime()
+                        asmrOneCollectedCache[keyRj] = now to true
+                        val site = confirmed?.trace?.takeIf { it.fallbackUsed }?.fallbackSite
+                        val tree = runCatching {
+                            if (site != null) asmrOneCrawler.getTracksFromSite(site, workId) else asmrOneCrawler.getTracks(workId)
+                        }.getOrDefault(emptyList())
+                        val updated = (_uiState.value as? AlbumDetailUiState.Success)?.model ?: return@launch
+                        if (token != asmrOneLoadToken) {
+                            asmrOneAttemptedRj.remove(keyRj)
+                            val updatedKey = updated.rjCode.trim().uppercase()
+                            if (updatedKey.equals(keyRj, ignoreCase = true) && updated.isLoadingAsmrOne) {
+                                _uiState.value = AlbumDetailUiState.Success(model = updated.copy(isLoadingAsmrOne = false))
+                            }
+                            return@launch
+                        }
+                        val displayAlbum = buildDisplayAlbum(updated.rjCode, updated.localAlbum, updated.dlsiteInfo, workId)
+                        _uiState.value = AlbumDetailUiState.Success(
+                            model = updated.copy(
+                                displayAlbum = displayAlbum,
+                                asmrOneWorkId = workId,
+                                asmrOneSite = site,
+                                asmrOneTree = tree,
+                                isLoadingAsmrOne = false
+                            )
+                        )
+                        return@launch
+                    }
+                    if (confirmed != null && confirmed.response.works.isEmpty() && confirmed.trace.primarySucceeded) {
+                        val updated = (_uiState.value as? AlbumDetailUiState.Success)?.model ?: return@launch
+                        val updatedKey = updated.rjCode.trim().uppercase()
+                        if (updatedKey.equals(keyRj, ignoreCase = true) && updated.isLoadingAsmrOne) {
+                            _uiState.value = AlbumDetailUiState.Success(model = updated.copy(isLoadingAsmrOne = false))
+                        }
+                        return@launch
+                    }
+                }
                 val latestBase = latest.baseRjCode.trim().uppercase()
-                val (workId, tree) = if (latestBase.isNotBlank() && !latestBase.equals(keyRj, ignoreCase = true)) {
+                val (workId, site, tree) = if (latestBase.isNotBlank() && !latestBase.equals(keyRj, ignoreCase = true)) {
                     fetchAsmrOneExactOnly(keyRj)
                 } else {
                     fetchAsmrOneWithFallback(
                         primaryRj = keyRj,
-                        fallbackRj = keyRj,
-                        titleFallback = titleFallback
+                        fallbackRj = keyRj
                     )
                 }
                 val updated = (_uiState.value as? AlbumDetailUiState.Success)?.model ?: return@launch
@@ -630,6 +734,7 @@ class AlbumDetailViewModel @Inject constructor(
                     model = updated.copy(
                         displayAlbum = displayAlbum,
                         asmrOneWorkId = workId,
+                        asmrOneSite = site,
                         asmrOneTree = tree,
                         isLoadingAsmrOne = false
                     )
@@ -660,15 +765,18 @@ class AlbumDetailViewModel @Inject constructor(
         }
     }
 
-    private suspend fun fetchAsmrOneExactOnly(workNo: String): Pair<String?, List<AsmrOneTrackNodeResponse>> {
+    private suspend fun fetchAsmrOneExactOnly(workNo: String): Triple<String?, Int?, List<AsmrOneTrackNodeResponse>> {
         val normalized = workNo.trim()
-        if (normalized.isBlank()) return null to emptyList()
-        val byRj = runCatching { asmrOneCrawler.search(normalized) }.getOrNull()
-        val exact = byRj?.works?.firstOrNull { it.source_id.equals(normalized, ignoreCase = true) }
+        if (normalized.isBlank()) return Triple(null, null, emptyList())
+        val result = runCatching { asmrOneCrawler.searchWithTrace(normalized) }.getOrNull()
+        val exact = result?.response?.works?.firstOrNull { it.source_id.equals(normalized, ignoreCase = true) }
         val workId = exact?.id?.toString()
-        if (workId.isNullOrBlank()) return null to emptyList()
-        val tree = runCatching { asmrOneCrawler.getTracks(workId) }.getOrDefault(emptyList())
-        return workId to tree
+        if (workId.isNullOrBlank()) return Triple(null, null, emptyList())
+        val site = result?.trace?.takeIf { it.fallbackUsed }?.fallbackSite
+        val tree = runCatching {
+            if (site != null) asmrOneCrawler.getTracksFromSite(site, workId) else asmrOneCrawler.getTracks(workId)
+        }.getOrDefault(emptyList())
+        return Triple(workId, site, tree)
     }
 
     fun ensureDlsitePlayLoaded() {
@@ -747,37 +855,20 @@ class AlbumDetailViewModel @Inject constructor(
 
     private suspend fun fetchAsmrOneWithFallback(
         primaryRj: String,
-        fallbackRj: String,
-        titleFallback: String
-    ): Pair<String?, List<AsmrOneTrackNodeResponse>> {
-        suspend fun pickExact(workNo: String): Pair<String?, List<AsmrOneTrackNodeResponse>> {
+        fallbackRj: String
+    ): Triple<String?, Int?, List<AsmrOneTrackNodeResponse>> {
+        suspend fun pickExact(workNo: String): Triple<String?, Int?, List<AsmrOneTrackNodeResponse>> {
             val normalized = workNo.trim()
-            if (normalized.isBlank()) return null to emptyList()
-            val byRj = runCatching { asmrOneCrawler.search(normalized) }.getOrNull()
-            val exact = byRj?.works?.firstOrNull { it.source_id.equals(normalized, ignoreCase = true) }
+            if (normalized.isBlank()) return Triple(null, null, emptyList())
+            val result = runCatching { asmrOneCrawler.searchWithTrace(normalized) }.getOrNull()
+            val exact = result?.response?.works?.firstOrNull { it.source_id.equals(normalized, ignoreCase = true) }
             val workId = exact?.id?.toString()
-            if (workId.isNullOrBlank()) return null to emptyList()
-            val tree = runCatching { asmrOneCrawler.getTracks(workId) }.getOrDefault(emptyList())
-            return workId to tree
-        }
-
-        suspend fun pickFuzzy(workNo: String, keyword: String): Pair<String?, List<AsmrOneTrackNodeResponse>> {
-            val normalized = workNo.trim()
-            val byRj = runCatching { asmrOneCrawler.search(normalized) }.getOrNull()
-            val targetFromRj = byRj?.works?.firstOrNull { it.source_id.equals(normalized, ignoreCase = true) }
-                ?: byRj?.works?.firstOrNull()
-
-            val byTitle = if (targetFromRj == null) {
-                runCatching { asmrOneCrawler.search(keyword.trim().ifBlank { normalized }) }.getOrNull()
-            } else null
-            val target = targetFromRj
-                ?: byTitle?.works?.firstOrNull { it.source_id.equals(normalized, ignoreCase = true) }
-                ?: byTitle?.works?.firstOrNull()
-
-            val workId = target?.id?.toString()
-            if (workId.isNullOrBlank()) return null to emptyList()
-            val tree = runCatching { asmrOneCrawler.getTracks(workId) }.getOrDefault(emptyList())
-            return workId to tree
+            if (workId.isNullOrBlank()) return Triple(null, null, emptyList())
+            val site = result?.trace?.takeIf { it.fallbackUsed }?.fallbackSite
+            val tree = runCatching {
+                if (site != null) asmrOneCrawler.getTracksFromSite(site, workId) else asmrOneCrawler.getTracks(workId)
+            }.getOrDefault(emptyList())
+            return Triple(workId, site, tree)
         }
 
         val primary = pickExact(primaryRj)
@@ -790,9 +881,7 @@ class AlbumDetailViewModel @Inject constructor(
             if (fallback.first != null) return fallback
         }
 
-        val keyword = titleFallback.trim().ifBlank { normalizedPrimary.ifBlank { normalizedFallback } }
-        val fuzzyBase = if (normalizedFallback.isNotBlank()) normalizedFallback else normalizedPrimary
-        return pickFuzzy(fuzzyBase, keyword)
+        return Triple(null, null, emptyList())
     }
 
     private fun buildDisplayAlbum(
@@ -1685,6 +1774,7 @@ data class AlbumDetailModel(
     val dlsiteEditions: List<DlsiteLanguageEdition>,
     val dlsiteSelectedLang: String,
     val asmrOneWorkId: String?,
+    val asmrOneSite: Int?,
     val asmrOneTree: List<AsmrOneTrackNodeResponse>,
     val dlsitePlayTree: List<AsmrOneTrackNodeResponse>,
     val isLoadingDlsite: Boolean,

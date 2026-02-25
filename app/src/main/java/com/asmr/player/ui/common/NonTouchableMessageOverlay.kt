@@ -6,9 +6,6 @@ import android.graphics.PixelFormat
 import android.view.Gravity
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
@@ -20,7 +17,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalContext
@@ -45,6 +41,7 @@ fun NonTouchableAppMessageOverlay(
 
     var currentMessages by remember { mutableStateOf<List<VisibleAppMessage>>(emptyList()) }
     SideEffect { currentMessages = messages }
+    val shouldShow = currentMessages.isNotEmpty()
 
     var currentColorScheme by remember { mutableStateOf(colorScheme) }
     var currentTypography by remember { mutableStateOf(typography) }
@@ -57,6 +54,9 @@ fun NonTouchableAppMessageOverlay(
 
     val overlayView = remember(activity) {
         ComposeView(activity).apply {
+            setTag(androidx.lifecycle.runtime.R.id.view_tree_lifecycle_owner, activity)
+            setTag(androidx.lifecycle.viewmodel.R.id.view_tree_view_model_store_owner, activity)
+            setTag(androidx.savedstate.R.id.view_tree_saved_state_registry_owner, activity)
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindow)
             setContent {
                 MaterialTheme(
@@ -64,36 +64,31 @@ fun NonTouchableAppMessageOverlay(
                     typography = currentTypography,
                     shapes = currentShapes
                 ) {
-                    if (currentMessages.isNotEmpty()) {
-                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.BottomStart) {
-                            Box(modifier = Modifier.padding(start = startPadding, bottom = bottomPadding)) {
-                                AppMessageOverlay(messages = currentMessages)
-                            }
-                        }
-                    }
+                    if (currentMessages.isNotEmpty()) AppMessageOverlay(messages = currentMessages)
                 }
             }
         }
     }
 
-    val layoutParams = remember(activity) {
+    val layoutParams = remember(activity, startPadding, bottomPadding) {
+        val density = activity.resources.displayMetrics.density
         WindowManager.LayoutParams(
-            WindowManager.LayoutParams.MATCH_PARENT,
-            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.TYPE_APPLICATION_PANEL,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
-                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
-                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+                WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
             PixelFormat.TRANSLUCENT
         ).apply {
-            gravity = Gravity.TOP or Gravity.START
+            gravity = Gravity.BOTTOM or Gravity.START
             token = activity.window.decorView.windowToken
+            x = (startPadding.value * density).toInt()
+            y = (bottomPadding.value * density).toInt()
         }
     }
 
-    DisposableEffect(activity) {
-        runCatching { windowManager.addView(overlayView, layoutParams) }
+    DisposableEffect(activity, shouldShow) {
+        if (shouldShow) runCatching { windowManager.addView(overlayView, layoutParams) }
         onDispose {
             runCatching { windowManager.removeViewImmediate(overlayView) }
         }

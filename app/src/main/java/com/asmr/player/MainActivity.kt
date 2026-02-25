@@ -272,13 +272,21 @@ class MainActivity : ComponentActivity() {
 
                     val existingIndex = visibleMessages.indexOfFirst { it.key == dedupeKey }
                     if (existingIndex >= 0 && shouldMerge) {
-                        val old = visibleMessages.removeAt(existingIndex)
-                        dismissJobs.remove(old.id)?.cancel()
-                        val id = ++messageSeq
+                        val old = visibleMessages[existingIndex]
+                        val removedIds = visibleMessages
+                            .asSequence()
+                            .filter { it.key == dedupeKey }
+                            .map { it.id }
+                            .toList()
+                        visibleMessages.removeAll { it.key == dedupeKey }
+                        removedIds.forEach { rid -> dismissJobs.remove(rid)?.cancel() }
+
+                        val id = old.id
+                        val renderId = ++messageSeq
                         visibleMessages.add(
                             0,
                             old.copy(
-                                id = id,
+                                renderId = renderId,
                                 count = (old.count + 1).coerceAtMost(99),
                                 durationMs = displayMs
                             )
@@ -296,6 +304,7 @@ class MainActivity : ComponentActivity() {
                         0,
                         VisibleAppMessage(
                             id = id,
+                            renderId = id,
                             key = dedupeKey,
                             message = normalized,
                             type = appMessage.type,
@@ -328,7 +337,7 @@ class MainActivity : ComponentActivity() {
                             val old = visibleMessages[summaryIndex]
                             dismissJobs.remove(old.id)?.cancel()
                             val sid = ++messageSeq
-                            visibleMessages[summaryIndex] = old.copy(id = sid, message = summaryText, count = 1, durationMs = summaryDuration)
+                            visibleMessages[summaryIndex] = old.copy(id = sid, renderId = sid, message = summaryText, count = 1, durationMs = summaryDuration)
                             dismissJobs[sid] = launch {
                                 delay(summaryDuration)
                                 visibleMessages.removeAll { it.id == sid }
@@ -340,6 +349,7 @@ class MainActivity : ComponentActivity() {
                             visibleMessages.add(
                                 VisibleAppMessage(
                                     id = sid,
+                                    renderId = sid,
                                     key = overflowKey,
                                     message = summaryText,
                                     type = com.asmr.player.util.MessageType.Info,

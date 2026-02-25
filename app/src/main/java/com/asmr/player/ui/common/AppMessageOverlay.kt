@@ -12,6 +12,7 @@ import com.asmr.player.util.MessageType
 
 data class VisibleAppMessage(
     val id: Long,
+    val renderId: Long = id,
     val key: String,
     val message: String,
     val type: MessageType,
@@ -32,7 +33,7 @@ fun AppMessageOverlay(
         messages.asReversed().forEach { msg ->
             Box {
                 AppSnackbar(
-                    messageId = msg.id,
+                    messageId = msg.renderId,
                     message = msg.message,
                     type = msg.type,
                     count = msg.count,
