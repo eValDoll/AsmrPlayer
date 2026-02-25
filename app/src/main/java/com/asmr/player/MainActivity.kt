@@ -1260,7 +1260,7 @@ fun MainContainer(
                 )
             }
 
-            if (visibleMessages.isNotEmpty() && !immersivePlayer) {
+            if (visibleMessages.isNotEmpty()) {
                 androidx.compose.ui.window.Popup(
                     alignment = Alignment.BottomStart,
                     properties = androidx.compose.ui.window.PopupProperties(focusable = false)

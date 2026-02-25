@@ -47,6 +47,7 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.FileOutputStream
 import javax.inject.Inject
 
 import com.asmr.player.util.MessageManager
@@ -55,6 +56,14 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.Rect
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import javax.inject.Named
 
 @HiltViewModel
 class AlbumDetailViewModel @Inject constructor(
@@ -68,6 +77,7 @@ class AlbumDetailViewModel @Inject constructor(
     private val downloadManager: DownloadManager,
     private val lyricsLoader: LyricsLoader,
     private val syncCoordinator: SyncCoordinator,
+    @Named("image") private val imageOkHttpClient: OkHttpClient,
     val messageManager: MessageManager,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
@@ -1208,7 +1218,15 @@ class AlbumDetailViewModel @Inject constructor(
             val result = withContext(Dispatchers.IO) {
                 val leaves = flattenOnlineSaveLeaves(tree)
                 val selected = if (selectedLeafPaths.isEmpty()) leaves else leaves.filter { selectedLeafPaths.contains(it.relativePath) }
-                if (selected.isEmpty()) return@withContext (0 to 0)
+                if (selected.isEmpty()) {
+                    return@withContext SaveOnlineToLibraryResult(
+                        selectedCount = 0,
+                        insertedCount = 0,
+                        albumId = 0L,
+                        coverUrl = "",
+                        coverPath = ""
+                    )
+                }
 
                 val rj = normalizeRj(displayAlbum.rjCode.ifBlank { displayAlbum.workId }.ifBlank { model.rjCode })
                 val workKey = rj.ifBlank { displayAlbum.workId.trim().ifBlank { displayAlbum.title.trim() } }
@@ -1219,6 +1237,9 @@ class AlbumDetailViewModel @Inject constructor(
                 }
 
                 var insertedCount = 0
+                var albumIdResult = 0L
+                var coverUrlResult = ""
+                var coverPathResult = ""
                 database.withTransaction {
                     val existing = if (workKey.isNotBlank()) {
                         runCatching { albumDao.getAlbumByWorkIdOnce(workKey) }.getOrNull()
@@ -1244,6 +1265,9 @@ class AlbumDetailViewModel @Inject constructor(
                     val insertedId = runCatching { albumDao.insertAlbum(entity) }.getOrDefault(0L)
                     val albumId = if (insertedId > 0L) insertedId else (existing?.id ?: 0L)
                     if (albumId <= 0L) return@withTransaction
+                    albumIdResult = albumId
+                    coverUrlResult = entity.coverUrl
+                    coverPathResult = entity.coverPath
 
                     val fts = AlbumFtsEntity(
                         albumId = albumId,
@@ -1306,11 +1330,28 @@ class AlbumDetailViewModel @Inject constructor(
                     }
                 }
 
-                selected.size to insertedCount
+                SaveOnlineToLibraryResult(
+                    selectedCount = selected.size,
+                    insertedCount = insertedCount,
+                    albumId = albumIdResult,
+                    coverUrl = coverUrlResult,
+                    coverPath = coverPathResult
+                )
             }
 
-            val selectedCount = result.first
-            val insertedCount = result.second
+            val selectedCount = result.selectedCount
+            val insertedCount = result.insertedCount
+
+            if (result.albumId > 0L) {
+                val ensured = try {
+                    ensureAlbumCoverSaved(result.albumId, result.coverPath, result.coverUrl)
+                } catch (_: Exception) {
+                    false
+                }
+                if (!ensured && result.coverPath.isBlank() && result.coverUrl.isNotBlank()) {
+                    messageManager.showInfo("封面未能保存到本地（不影响音轨保存）")
+                }
+            }
             if (selectedCount <= 0) {
                 messageManager.showInfo("没有可保存的音频/视频文件")
             } else if (insertedCount <= 0) {
@@ -1322,6 +1363,98 @@ class AlbumDetailViewModel @Inject constructor(
                 messageManager.showSuccess("已保存到本地库（${insertedCount}项）")
             }
         }
+    }
+
+    private data class SaveOnlineToLibraryResult(
+        val selectedCount: Int,
+        val insertedCount: Int,
+        val albumId: Long,
+        val coverUrl: String,
+        val coverPath: String
+    )
+
+    private fun isLikelyPlaceholderCover(url: String): Boolean {
+        val s = url.trim().lowercase()
+        if (!s.startsWith("http")) return true
+        return s.contains("noimage") ||
+            s.contains("no_image") ||
+            s.contains("no-image") ||
+            s.contains("placeholder") ||
+            s.endsWith("/0.jpg") ||
+            s.endsWith("/0.png")
+    }
+
+    private suspend fun ensureAlbumCoverSaved(
+        albumId: Long,
+        coverPath: String,
+        coverUrl: String
+    ): Boolean {
+        val existingPath = coverPath.trim().takeIf { it.isNotBlank() && it != "null" }
+        if (existingPath != null) {
+            val f = File(existingPath)
+            if (f.exists() && f.length() > 0L) return true
+        }
+        val url = coverUrl.trim()
+        if (url.isBlank() || isLikelyPlaceholderCover(url)) return false
+
+        val sourceHash = url.hashCode().toString()
+        val coverDir = File(context.filesDir, "album_covers").apply { if (!exists()) mkdirs() }
+        val thumbDir = File(context.filesDir, "album_thumbs").apply { if (!exists()) mkdirs() }
+        val coverFile = File(coverDir, "a_${albumId}_$sourceHash.jpg")
+        val thumbFile = File(thumbDir, "a_${albumId}_$sourceHash.jpg")
+
+        if (coverFile.exists() && coverFile.length() > 0L && thumbFile.exists() && thumbFile.length() > 0L) {
+            val entity = try {
+                albumDao.getAlbumById(albumId)
+            } catch (_: Exception) {
+                null
+            }
+            if (entity != null && (entity.coverPath != coverFile.absolutePath || entity.coverThumbPath != thumbFile.absolutePath)) {
+                try {
+                    albumDao.updateAlbum(entity.copy(coverPath = coverFile.absolutePath, coverThumbPath = thumbFile.absolutePath))
+                } catch (_: Exception) {
+                }
+            }
+            return true
+        }
+
+        val req = Request.Builder().url(url).get().build()
+        val bytes = imageOkHttpClient.newCall(req).execute().use { resp ->
+            if (!resp.isSuccessful) return false
+            resp.body?.bytes() ?: return false
+        }
+        val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size) ?: return false
+
+        FileOutputStream(coverFile).use { out ->
+            bitmap.compress(Bitmap.CompressFormat.JPEG, 92, out)
+        }
+        val thumb = centerCropSquare(bitmap, 320)
+        FileOutputStream(thumbFile).use { out ->
+            thumb.compress(Bitmap.CompressFormat.JPEG, 85, out)
+        }
+
+        val entity = albumDao.getAlbumById(albumId) ?: return true
+        albumDao.updateAlbum(entity.copy(coverPath = coverFile.absolutePath, coverThumbPath = thumbFile.absolutePath))
+        return true
+    }
+
+    private fun centerCropSquare(src: Bitmap, size: Int): Bitmap {
+        val w = src.width
+        val h = src.height
+        if (w <= 0 || h <= 0) return Bitmap.createBitmap(size, size, Bitmap.Config.RGB_565)
+        val side = minOf(w, h)
+        val left = (w - side) / 2
+        val top = (h - side) / 2
+        val out = Bitmap.createBitmap(size, size, Bitmap.Config.RGB_565)
+        val canvas = Canvas(out)
+        val paint = Paint(Paint.FILTER_BITMAP_FLAG)
+        canvas.drawBitmap(
+            src,
+            Rect(left, top, left + side, top + side),
+            Rect(0, 0, size, size),
+            paint
+        )
+        return out
     }
 
     private data class OnlineSaveLeaf(
