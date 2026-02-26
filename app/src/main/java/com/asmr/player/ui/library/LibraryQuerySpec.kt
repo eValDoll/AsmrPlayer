@@ -45,12 +45,20 @@ object LibraryQueryBuilder {
         }
 
         if (hasText) {
-            val ftsQuery = toFtsQuery(spec.textQuery.orEmpty())
-            if (ftsQuery.isNotBlank()) {
-                sql.append(" JOIN album_fts f ON f.rowid = a.id")
-                where.add("album_fts MATCH ?")
-                args.add(ftsQuery)
-            }
+            val like = "%${spec.textQuery.orEmpty().trim()}%"
+            where.add(
+                """
+                (
+                    a.title LIKE ? OR
+                    a.circle LIKE ? OR
+                    a.cv LIKE ? OR
+                    a.rjCode LIKE ? OR
+                    a.workId LIKE ? OR
+                    a.tags LIKE ?
+                )
+                """.trimIndent()
+            )
+            repeat(6) { args.add(like) }
         }
 
         if (hasIncludeTags) {
@@ -107,37 +115,6 @@ object LibraryQueryBuilder {
         )
 
         return SimpleSQLiteQuery(sql.toString(), args.toTypedArray())
-    }
-
-    private fun toFtsQuery(input: String): String {
-        val normalized = input
-            .trim()
-            .replace('%', ' ')
-            .replace('_', ' ')
-
-        val tokens = normalized
-            .split(Regex("\\s+"))
-            .map { it.trim() }
-            .filter { it.isNotBlank() }
-            .take(10)
-
-        if (tokens.isEmpty()) return ""
-
-        val cleanedTokens = tokens
-            .map { token ->
-                token
-                    .replace("\"", "")
-                    .replace("*", "")
-                    .replace(":", "")
-                    .replace("(", "")
-                    .replace(")", "")
-                    .trim()
-            }
-            .filter { it.isNotBlank() }
-
-        if (cleanedTokens.isEmpty()) return ""
-
-        return cleanedTokens.joinToString(" AND ") { token -> "${token}*" }
     }
 
     private fun normalizeCvToken(input: String): String {
