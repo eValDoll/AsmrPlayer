@@ -19,6 +19,7 @@ import javax.inject.Named
 
 import com.asmr.player.data.remote.TrafficStatsInterceptor
 import com.asmr.player.data.remote.NetworkHeaders
+import com.asmr.player.data.remote.dns.DnsBypassManager
 import com.asmr.player.util.MessageManager
 import java.io.IOException
 
@@ -30,7 +31,8 @@ object NetworkModule {
     @Singleton
     fun provideOkHttpClient(
         messageManager: MessageManager,
-        trafficStatsInterceptor: TrafficStatsInterceptor
+        trafficStatsInterceptor: TrafficStatsInterceptor,
+        dnsBypassManager: DnsBypassManager
     ): OkHttpClient {
         val logging = HttpLoggingInterceptor().apply {
             level = HttpLoggingInterceptor.Level.BASIC
@@ -81,6 +83,7 @@ object NetworkModule {
             }
         }
         return OkHttpClient.Builder()
+            .dns(dnsBypassManager.getDns())
             .addInterceptor(asmrHeaders)
             .addInterceptor(trafficStatsInterceptor)
             .addInterceptor(logging)
@@ -91,7 +94,8 @@ object NetworkModule {
     @Singleton
     @Named("image")
     fun provideImageOkHttpClient(
-        trafficStatsInterceptor: TrafficStatsInterceptor
+        trafficStatsInterceptor: TrafficStatsInterceptor,
+        dnsBypassManager: DnsBypassManager
     ): OkHttpClient {
         val logging = HttpLoggingInterceptor().apply {
             level = HttpLoggingInterceptor.Level.BASIC
@@ -127,6 +131,7 @@ object NetworkModule {
 
         return OkHttpClient.Builder()
             .dispatcher(dispatcher)
+            .dns(dnsBypassManager.getDns())
             .addInterceptor(headers)
             .addInterceptor(trafficStatsInterceptor)
             .addInterceptor(logging)

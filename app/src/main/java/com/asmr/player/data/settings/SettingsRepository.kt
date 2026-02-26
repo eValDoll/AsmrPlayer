@@ -9,11 +9,19 @@ import javax.inject.Singleton
 import androidx.datastore.preferences.core.edit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import com.asmr.player.data.remote.sni.SniBypassMode
+import com.asmr.player.data.remote.sni.SniBypassDefaults
+import com.asmr.player.data.remote.sni.SniBypassProxySource
+import com.asmr.player.data.remote.sni.SniBypassRule
+import com.asmr.player.data.remote.dns.DnsBypassDefaults
+import com.google.gson.Gson
 
 @Singleton
 class SettingsRepository @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
+    private val gson = Gson()
+
     val libraryViewMode: Flow<Int> = context.settingsDataStore.data.map { prefs ->
         prefs[SettingsKeys.LIBRARY_VIEW_MODE] ?: 0
     }
@@ -72,6 +80,53 @@ class SettingsRepository @Inject constructor(
 
     val customEqualizerPresets: Flow<List<AsmrPreset>> = context.settingsDataStore.data.map { prefs ->
         EqualizerPresets.decodeCustomPresets(prefs[SettingsKeys.CUSTOM_EQ_PRESETS])
+    }
+
+    val sniBypassEnabled: Flow<Boolean> = context.settingsDataStore.data.map { prefs ->
+        prefs[SettingsKeys.SNI_BYPASS_ENABLED] ?: false
+    }
+
+    val sniBypassProxySource: Flow<SniBypassProxySource> = context.settingsDataStore.data.map { prefs ->
+        val legacy = prefs[SettingsKeys.SNI_BYPASS_PROXY_BASE_URL].orEmpty()
+        val source = prefs[SettingsKeys.SNI_BYPASS_PROXY_SOURCE]?.let { SniBypassProxySource.fromCode(it) }
+        source ?: if (legacy.isNotBlank()) SniBypassProxySource.Custom else SniBypassProxySource.BuiltIn
+    }
+
+    val sniBypassProxyCustomBaseUrl: Flow<String> = context.settingsDataStore.data.map { prefs ->
+        val legacy = prefs[SettingsKeys.SNI_BYPASS_PROXY_BASE_URL].orEmpty()
+        prefs[SettingsKeys.SNI_BYPASS_PROXY_CUSTOM_BASE_URL].orEmpty().ifBlank { legacy }
+    }
+
+    val sniBypassProxyBaseUrl: Flow<String> = context.settingsDataStore.data.map { prefs ->
+        val legacy = prefs[SettingsKeys.SNI_BYPASS_PROXY_BASE_URL].orEmpty()
+        val source = prefs[SettingsKeys.SNI_BYPASS_PROXY_SOURCE]?.let { SniBypassProxySource.fromCode(it) }
+            ?: if (legacy.isNotBlank()) SniBypassProxySource.Custom else SniBypassProxySource.BuiltIn
+        val custom = prefs[SettingsKeys.SNI_BYPASS_PROXY_CUSTOM_BASE_URL].orEmpty().ifBlank { legacy }
+        when (source) {
+            SniBypassProxySource.BuiltIn -> SniBypassDefaults.BUILTIN_PROXY_BASE_URL
+            SniBypassProxySource.Custom -> custom.ifBlank { SniBypassDefaults.BUILTIN_PROXY_BASE_URL }
+        }
+    }
+
+    val sniBypassMode: Flow<SniBypassMode> = context.settingsDataStore.data.map { prefs ->
+        SniBypassMode.fromCode(prefs[SettingsKeys.SNI_BYPASS_MODE] ?: SniBypassMode.HostHeader.code)
+    }
+
+    val sniBypassRules: Flow<List<SniBypassRule>> = context.settingsDataStore.data.map { prefs ->
+        val json = prefs[SettingsKeys.SNI_BYPASS_RULES].orEmpty()
+        decodeRules(json).ifEmpty { defaultRules() }
+    }
+
+    val dnsBypassEnabled: Flow<Boolean> = context.settingsDataStore.data.map { prefs ->
+        prefs[SettingsKeys.DNS_BYPASS_ENABLED] ?: false
+    }
+
+    val dnsDohEnabled: Flow<Boolean> = context.settingsDataStore.data.map { prefs ->
+        prefs[SettingsKeys.DNS_DOH_ENABLED] ?: true
+    }
+
+    val dnsBypassHostsText: Flow<String> = context.settingsDataStore.data.map { prefs ->
+        prefs[SettingsKeys.DNS_BYPASS_HOSTS].orEmpty().ifBlank { DnsBypassDefaults.defaultHostsText }
     }
 
     suspend fun setFloatingLyricsEnabled(enabled: Boolean) {
@@ -164,5 +219,86 @@ class SettingsRepository @Inject constructor(
             context.settingsDataStore.edit { it[SettingsKeys.ASMR_ONE_SITE] = site }
         }
     }
+
+    suspend fun setSniBypassEnabled(enabled: Boolean) {
+        withContext(Dispatchers.IO) {
+            context.settingsDataStore.edit { it[SettingsKeys.SNI_BYPASS_ENABLED] = enabled }
+        }
+    }
+
+    suspend fun setSniBypassProxyBaseUrl(url: String) {
+        val clean = url.trim()
+        withContext(Dispatchers.IO) {
+            context.settingsDataStore.edit {
+                it[SettingsKeys.SNI_BYPASS_PROXY_SOURCE] = SniBypassProxySource.Custom.code
+                it[SettingsKeys.SNI_BYPASS_PROXY_CUSTOM_BASE_URL] = clean
+                it[SettingsKeys.SNI_BYPASS_PROXY_BASE_URL] = clean
+            }
+        }
+    }
+
+    suspend fun setSniBypassProxySource(source: SniBypassProxySource) {
+        withContext(Dispatchers.IO) {
+            context.settingsDataStore.edit {
+                it[SettingsKeys.SNI_BYPASS_PROXY_SOURCE] = source.code
+            }
+        }
+    }
+
+    suspend fun useBuiltInSniProxy() {
+        withContext(Dispatchers.IO) {
+            context.settingsDataStore.edit {
+                it[SettingsKeys.SNI_BYPASS_PROXY_SOURCE] = SniBypassProxySource.BuiltIn.code
+            }
+        }
+    }
+
+    suspend fun setSniBypassMode(mode: SniBypassMode) {
+        withContext(Dispatchers.IO) {
+            context.settingsDataStore.edit { it[SettingsKeys.SNI_BYPASS_MODE] = mode.code }
+        }
+    }
+
+    suspend fun setSniBypassRules(rules: List<SniBypassRule>) {
+        withContext(Dispatchers.IO) {
+            context.settingsDataStore.edit { prefs ->
+                prefs[SettingsKeys.SNI_BYPASS_RULES] = gson.toJson(rules)
+            }
+        }
+    }
+
+    suspend fun setDnsBypassEnabled(enabled: Boolean) {
+        withContext(Dispatchers.IO) {
+            context.settingsDataStore.edit { it[SettingsKeys.DNS_BYPASS_ENABLED] = enabled }
+        }
+    }
+
+    suspend fun setDnsBypassHostsText(text: String) {
+        withContext(Dispatchers.IO) {
+            context.settingsDataStore.edit { it[SettingsKeys.DNS_BYPASS_HOSTS] = text.trim() }
+        }
+    }
+
+    suspend fun setDnsDohEnabled(enabled: Boolean) {
+        withContext(Dispatchers.IO) {
+            context.settingsDataStore.edit { it[SettingsKeys.DNS_DOH_ENABLED] = enabled }
+        }
+    }
+
+    private fun decodeRules(json: String): List<SniBypassRule> {
+        val clean = json.trim()
+        if (clean.isBlank()) return emptyList()
+        val parsed = runCatching { gson.fromJson(clean, Array<SniBypassRule>::class.java)?.toList() }.getOrNull()
+        return parsed.orEmpty().mapNotNull { r ->
+            val p = r.pattern.trim().lowercase()
+            if (p.isBlank()) null else r.copy(pattern = p)
+        }
+    }
+
+    private fun defaultRules(): List<SniBypassRule> = listOf(
+        SniBypassRule("dlsite.com", true),
+        SniBypassRule("chobit.cc", true),
+        SniBypassRule("byteair.volces.com", true)
+    )
 
 }

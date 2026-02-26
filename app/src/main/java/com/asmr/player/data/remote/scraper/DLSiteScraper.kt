@@ -14,9 +14,10 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.withContext
 import org.jsoup.Jsoup
-import org.jsoup.Connection
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
+import okhttp3.OkHttpClient
+import okhttp3.Request
 import java.net.URI
 import java.net.URLEncoder
 import kotlin.math.absoluteValue
@@ -44,7 +45,8 @@ data class DlsiteRecommendations(
 
 @Singleton
 class DLSiteScraper @Inject constructor(
-    @ApplicationContext context: Context
+    @ApplicationContext context: Context,
+    private val okHttpClient: OkHttpClient
 ) {
     private val searchBaseUrlLegacy =
         "https://www.dlsite.com/maniax/fsr/=/language/cn/sex_category%5B0%5D/male/work_category%5B0%5D/doujin/work_type_category%5B0%5D/audio/per_page/30/show_type/1/keyword/"
@@ -85,13 +87,37 @@ class DLSiteScraper @Inject constructor(
         }
     }
 
-    private fun connect(url: String, locale: String? = null, acceptLanguage: String? = null): Connection {
-        return Jsoup.connect(url)
-            .userAgent(NetworkHeaders.USER_AGENT)
+    private suspend fun fetchText(
+        url: String,
+        locale: String? = null,
+        acceptLanguage: String? = null,
+        headers: Map<String, String> = emptyMap()
+    ): String {
+        val request = Request.Builder()
+            .url(url)
+            .header("User-Agent", NetworkHeaders.USER_AGENT)
             .header("Accept-Language", acceptLanguage ?: acceptLanguageForLocale(locale))
             .header("Cookie", cookieHeader(locale))
-            .ignoreHttpErrors(true)
-            .timeout(10000)
+            .apply { headers.forEach { (k, v) -> header(k, v) } }
+            .get()
+            .build()
+        return runInterruptible {
+            okHttpClient.newCall(request).execute().use { resp ->
+                resp.body?.string().orEmpty()
+            }
+        }
+    }
+
+    private suspend fun fetchDocument(
+        url: String,
+        locale: String? = null,
+        acceptLanguage: String? = null,
+        headers: Map<String, String> = emptyMap()
+    ): Document? {
+        val html = runCatching { fetchText(url, locale = locale, acceptLanguage = acceptLanguage, headers = headers) }
+            .getOrDefault("")
+        if (html.isBlank()) return null
+        return Jsoup.parse(html, url)
     }
 
     private fun parseRecommendHtml(doc: Document): List<DlsiteRecommendedWork> {
@@ -135,7 +161,7 @@ class DLSiteScraper @Inject constructor(
             if (clean.isBlank()) return@withContext DlsiteRecommendations()
 
             // 1. 获取主页面以查找异步加载推荐的 data-href
-            val mainDoc = runCatching { runInterruptible { connect("$workBaseUrl$clean.html", locale = locale).get() } }.getOrNull()
+            val mainDoc = fetchDocument("$workBaseUrl$clean.html", locale = locale)
 
             // 2. 提取各推荐板块的 URL
             val circleWorksUrl = mainDoc?.selectFirst("div[data-type=maker_works], div.recommend_list[data-href*='maker_works']")?.attr("data-href")
@@ -151,7 +177,7 @@ class DLSiteScraper @Inject constructor(
                     "https://www.dlsite.com/maniax/load/recommend/v2/=/type/viewsales2/reject/RG68316/product_id/$id.html"
                 )
                 for (u in candidates) {
-                    val parsed = runCatching { runInterruptible { connect(u, locale = locale).get() } }.getOrNull()?.let { parseRecommendHtml(it) }
+                    val parsed = fetchDocument(u, locale = locale)?.let { parseRecommendHtml(it) }
                     if (!parsed.isNullOrEmpty()) return parsed
                 }
                 return emptyList()
@@ -161,17 +187,17 @@ class DLSiteScraper @Inject constructor(
             coroutineScope {
                 val circleDeferred = async {
                     circleWorksUrl?.let { url ->
-                        runCatching { runInterruptible { connect(url, locale = locale).get() } }.getOrNull()?.let { parseRecommendHtml(it) }
+                        fetchDocument(url, locale = locale)?.let { parseRecommendHtml(it) }
                     } ?: emptyList()
                 }
                 val sameVoiceDeferred = async {
                     sameVoiceWorksUrl?.let { url ->
-                        runCatching { runInterruptible { connect(url, locale = locale).get() } }.getOrNull()?.let { parseRecommendHtml(it) }
+                        fetchDocument(url, locale = locale)?.let { parseRecommendHtml(it) }
                     } ?: emptyList()
                 }
                 val alsoBoughtDeferred = async {
                     if (!alsoBoughtUrlFromDoc.isNullOrBlank()) {
-                        runCatching { runInterruptible { connect(alsoBoughtUrlFromDoc, locale = locale).get() } }.getOrNull()?.let { parseRecommendHtml(it) } ?: emptyList()
+                        fetchDocument(alsoBoughtUrlFromDoc, locale = locale)?.let { parseRecommendHtml(it) } ?: emptyList()
                     } else {
                         fetchViewsales2Fallback(clean)
                     }
@@ -192,17 +218,15 @@ class DLSiteScraper @Inject constructor(
         val callback = "jQuery${(ts * 1103515245L).absoluteValue}_${ts}"
         val apiUrl = "https://chobit.cc/api/v1/dlsite/embed?callback=$callback&workno=$clean&_=$ts"
         val body = runCatching {
-            runInterruptible {
-                Jsoup.connect(apiUrl)
-                    .userAgent(NetworkHeaders.USER_AGENT)
-                    .header("Referer", NetworkHeaders.REFERER_DLSITE)
-                    .header("Accept", "*/*")
-                    .ignoreContentType(true)
-                    .timeout(10000)
-                    .execute()
-                    .body()
-            }
+            fetchText(
+                apiUrl,
+                headers = mapOf(
+                    "Referer" to NetworkHeaders.REFERER_DLSITE,
+                    "Accept" to "*/*"
+                )
+            )
         }.getOrDefault("")
+        if (body.isBlank()) return ""
         if (body.isBlank()) return ""
         val jsonp = body.trim()
         val start = jsonp.indexOf('(')
@@ -301,7 +325,7 @@ class DLSiteScraper @Inject constructor(
         var lastEmpty: List<Album> = emptyList()
         for (u in urls) {
             Log.d("DLSiteScraper", "Searching URL: $u")
-            val doc = runInterruptible { connect(u).get() }
+            val doc = fetchDocument(u) ?: continue
             val parsed = parseDoc(doc)
             if (parsed.isNotEmpty()) return@withContext parsed
             lastEmpty = parsed
@@ -319,7 +343,7 @@ class DLSiteScraper @Inject constructor(
 
     suspend fun getWorkInfo(workId: String, locale: String? = null): DlsiteWorkInfo? = withContext(Dispatchers.IO) {
         val url = "$workBaseUrl$workId.html"
-        val doc = runCatching { runInterruptible { connect(url, locale = locale).get() } }.getOrNull() ?: return@withContext null
+        val doc = fetchDocument(url, locale = locale) ?: return@withContext null
 
         val title = doc.selectFirst("#work_name")?.text()?.trim() ?: return@withContext null
         val circle = doc.selectFirst(".maker_name a")?.text()?.trim() ?: ""
@@ -469,7 +493,7 @@ class DLSiteScraper @Inject constructor(
 
         suspend fun internal(workId0: String, allowFallback: Boolean): List<Track> {
             val url = "$workBaseUrl$workId0.html"
-            val doc = runInterruptible { connect(url, locale = locale).get() }
+            val doc = fetchDocument(url, locale = locale) ?: return emptyList()
             val tracks = mutableListOf<Track>()
 
             tracks.addAll(parseTrackListFromDoc(doc))
@@ -490,15 +514,13 @@ class DLSiteScraper @Inject constructor(
             }
             if (embedUrl.isNotBlank()) {
                 val acceptLanguage = acceptLanguageForLocale(locale)
-                val embedDoc = runInterruptible {
-                    Jsoup.connect(embedUrl)
-                        .userAgent(NetworkHeaders.USER_AGENT)
-                        .header("Referer", NetworkHeaders.REFERER_DLSITE)
-                        .header("Accept-Language", acceptLanguage)
-                        .ignoreHttpErrors(true)
-                        .timeout(10000)
-                        .get()
-                }
+                val embedDoc = fetchDocument(
+                    embedUrl,
+                    locale = locale,
+                    acceptLanguage = acceptLanguage,
+                    headers = mapOf("Referer" to NetworkHeaders.REFERER_DLSITE)
+                )
+                if (embedDoc == null) return@internal emptyList()
                 val t = parseTrackListFromDoc(embedDoc)
                 if (t.isNotEmpty()) return t
                 val v = parseVideoFromDoc(embedDoc)

@@ -64,6 +64,9 @@ fun SettingsScreen(
     val staticHueArgb by viewModel.staticHueArgb.collectAsState()
     val coverBackgroundEnabled by viewModel.coverBackgroundEnabled.collectAsState()
     val coverBackgroundClarity by viewModel.coverBackgroundClarity.collectAsState()
+    val dnsBypassEnabled by viewModel.dnsBypassEnabled.collectAsState()
+    val dnsDohEnabled by viewModel.dnsDohEnabled.collectAsState()
+    val dnsDiagnostics by viewModel.dnsDiagnostics.collectAsState()
     val scanRoots by libraryViewModel.scanRoots.collectAsState()
     val bulkProgress by libraryViewModel.bulkProgress.collectAsState()
     val isGlobalSyncRunning by libraryViewModel.isGlobalSyncRunning.collectAsState()
@@ -474,6 +477,42 @@ fun SettingsScreen(
                 }
             }
 
+                }
+
+                item(key = "group:network") {
+                    SettingsGroup(title = "网络") {
+                        SettingsToggleRow(
+                            text = "固定解析（绕过 DNS 污染）",
+                            checked = dnsBypassEnabled,
+                            onCheckedChange = { viewModel.setDnsBypassEnabled(it) }
+                        )
+
+                        SettingsToggleRow(
+                            text = "使用 DoH 解析（推荐）",
+                            checked = dnsDohEnabled,
+                            onCheckedChange = { viewModel.setDnsDohEnabled(it) }
+                        )
+
+                        FilledTonalButton(
+                            onClick = { viewModel.runDnsDiagnostics() },
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text("运行 DNS 诊断") }
+
+                        if (!dnsDiagnostics.isNullOrBlank()) {
+                            Surface(
+                                shape = RoundedCornerShape(14.dp),
+                                color = colorScheme.surface.copy(alpha = 0.35f),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(
+                                    text = dnsDiagnostics.orEmpty(),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = colorScheme.onSurface,
+                                    modifier = Modifier.padding(12.dp)
+                                )
+                            }
+                        }
+                    }
                 }
 
                 item(key = "bottom_spacer") {

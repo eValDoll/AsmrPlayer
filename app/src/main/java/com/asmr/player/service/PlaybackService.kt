@@ -21,7 +21,7 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.datasource.DefaultDataSource
-import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.datasource.ResolvingDataSource
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
@@ -62,6 +62,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -122,6 +123,9 @@ class PlaybackService : MediaSessionService() {
     @Inject
     lateinit var statisticsRepository: StatisticsRepository
 
+    @Inject
+    lateinit var okHttpClient: OkHttpClient
+
     private var lastMarkedMediaId: String? = null
     private var lastMarkedElapsedMs: Long = 0L
 
@@ -148,9 +152,8 @@ class PlaybackService : MediaSessionService() {
             spectrumAnalyzer.setVisualDelayMs(delayMs)
         }
         val authStore = DlsiteAuthStore(applicationContext)
-        val httpFactory = DefaultHttpDataSource.Factory()
+        val httpFactory = OkHttpDataSource.Factory(okHttpClient)
             .setUserAgent(DLSITE_UA)
-            .setAllowCrossProtocolRedirects(true)
         
         val transferListener = object : TransferListener {
             override fun onTransferInitializing(source: DataSource, dataSpec: DataSpec, isNetwork: Boolean) {}
@@ -170,23 +173,22 @@ class PlaybackService : MediaSessionService() {
             ResolvingDataSource.Factory(httpFactory) { dataSpec ->
                 val uri = dataSpec.uri
                 val host = uri.host.orEmpty().lowercase()
-                if (
-                    host.endsWith("dlsite.com") ||
-                    host.endsWith("chobit.cc") ||
-                    host.endsWith("dlsite.com")
-                ) {
-                    val headers = LinkedHashMap(dataSpec.httpRequestHeaders)
-                    headers["User-Agent"] = DLSITE_UA
-                    headers["Accept-Language"] = NetworkHeaders.ACCEPT_LANGUAGE
-                    headers["Referer"] = "https://www.dlsite.com/"
+                val newHeaders = LinkedHashMap(dataSpec.httpRequestHeaders)
+                var headersChanged = false
+                if (host.endsWith("dlsite.com") || host.endsWith("chobit.cc")) {
+                    newHeaders["User-Agent"] = DLSITE_UA
+                    newHeaders["Accept-Language"] = NetworkHeaders.ACCEPT_LANGUAGE
+                    newHeaders["Referer"] = "https://www.dlsite.com/"
                     val cookie = buildDlsiteCookieHeader(authStore.getDlsiteCookie())
-                    if (cookie.isNotBlank() && !headers.containsKey("Cookie")) {
-                        headers["Cookie"] = cookie
+                    if (cookie.isNotBlank() && !newHeaders.containsKey("Cookie")) {
+                        newHeaders["Cookie"] = cookie
                     }
-                    dataSpec.buildUpon().setHttpRequestHeaders(headers).build()
-                } else {
-                    dataSpec
+                    headersChanged = true
                 }
+
+                val b = dataSpec.buildUpon()
+                if (headersChanged) b.setHttpRequestHeaders(newHeaders)
+                b.build()
             }
         ).apply {
             setTransferListener(transferListener)

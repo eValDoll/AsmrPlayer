@@ -42,4 +42,15 @@ object SettingsKeys {
     val FX_ORBIT_ENABLED = booleanPreferencesKey("fx_orbit_enabled")
     val FX_ORBIT_SPEED = floatPreferencesKey("fx_orbit_speed") // 0-50
     val FX_ORBIT_DISTANCE = floatPreferencesKey("fx_orbit_distance") // 0-10
+
+    val SNI_BYPASS_ENABLED = booleanPreferencesKey("sni_bypass_enabled")
+    val SNI_BYPASS_PROXY_BASE_URL = stringPreferencesKey("sni_bypass_proxy_base_url")
+    val SNI_BYPASS_PROXY_SOURCE = intPreferencesKey("sni_bypass_proxy_source")
+    val SNI_BYPASS_PROXY_CUSTOM_BASE_URL = stringPreferencesKey("sni_bypass_proxy_custom_base_url")
+    val SNI_BYPASS_MODE = intPreferencesKey("sni_bypass_mode")
+    val SNI_BYPASS_RULES = stringPreferencesKey("sni_bypass_rules_json")
+
+    val DNS_BYPASS_ENABLED = booleanPreferencesKey("dns_bypass_enabled")
+    val DNS_BYPASS_HOSTS = stringPreferencesKey("dns_bypass_hosts_text")
+    val DNS_DOH_ENABLED = booleanPreferencesKey("dns_doh_enabled")
 }

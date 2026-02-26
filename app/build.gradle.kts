@@ -85,6 +85,7 @@ dependencies {
     implementation("androidx.media3:media3-session:$media3_version")
     implementation("androidx.media3:media3-ui:$media3_version")
     implementation("androidx.media3:media3-common:$media3_version")
+    implementation("androidx.media3:media3-datasource-okhttp:$media3_version")
 
     // Room
     implementation("androidx.room:room-runtime:$room_version")
@@ -102,6 +103,7 @@ dependencies {
     implementation("com.squareup.retrofit2:converter-gson:2.9.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
+    implementation("com.squareup.okhttp3:okhttp-dnsoverhttps:4.12.0")
 
     // Jsoup
     implementation("org.jsoup:jsoup:1.17.2")
