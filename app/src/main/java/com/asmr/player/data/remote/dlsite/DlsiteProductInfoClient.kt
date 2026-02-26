@@ -28,7 +28,11 @@ class DlsiteProductInfoClient @Inject constructor(
         if (clean.isBlank() || json.isBlank()) return emptyList()
 
         val root = runCatching { gson.fromJson(json, Map::class.java) as? Map<*, *> }.getOrNull() ?: return emptyList()
-        val workObj = (root[clean] as? Map<*, *>) ?: (root.entries.firstOrNull()?.value as? Map<*, *>)
+        val workObj = (root[clean] as? Map<*, *>)
+            ?: (root.entries.firstOrNull { (k, _) ->
+                (k as? String)?.trim()?.equals(clean, ignoreCase = true) == true
+            }?.value as? Map<*, *>)
+            ?: return emptyList()
         val rawItems = workObj?.get("dl_count_items") as? List<*> ?: return emptyList()
 
         return rawItems.mapNotNull { it as? Map<*, *> }

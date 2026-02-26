@@ -7,6 +7,7 @@ import com.asmr.player.data.remote.api.AsmrOneApi
 import com.asmr.player.data.remote.api.AsmrOneTrackNodeResponse
 import com.asmr.player.data.remote.api.Asmr300Api
 import com.asmr.player.data.remote.api.Asmr200Work
+import com.asmr.player.data.remote.api.AsmrOneLanguageEdition
 import com.asmr.player.data.remote.api.Circle
 import com.asmr.player.data.remote.api.Pagination
 import com.asmr.player.data.remote.api.SearchResponse
@@ -18,6 +19,7 @@ import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.first
+import retrofit2.HttpException
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -161,10 +163,7 @@ class AsmrOneCrawler @Inject constructor(
         val rj = RJ_CODE_REGEX.find(normalized)?.value ?: return null
 
         fun contains(resp: SearchResponse): Boolean {
-            return resp.works.any { w ->
-                val wid = w.source_id.trim().uppercase()
-                RJ_CODE_REGEX.find(wid)?.value == rj
-            }
+            return resp.works.any { w -> asmrOneWorkMatchesRj(w, rj) }
         }
 
         val resp1 = tryTwice { api.search(keyword = rj, page = 1, silentIoError = NetworkHeaders.SILENT_IO_ERROR_ON) }
@@ -182,10 +181,7 @@ class AsmrOneCrawler @Inject constructor(
         val rj = RJ_CODE_REGEX.find(normalized)?.value ?: return null
 
         fun contains(resp: SearchResponse): Boolean {
-            return resp.works.any { w ->
-                val wid = w.source_id.trim().uppercase()
-                RJ_CODE_REGEX.find(wid)?.value == rj
-            }
+            return resp.works.any { w -> asmrOneWorkMatchesRj(w, rj) }
         }
 
         var anySucceeded = false
@@ -218,41 +214,43 @@ class AsmrOneCrawler @Inject constructor(
     suspend fun hasWorkFast(sourceId: String, timeoutMs: Long = 2_000L): Boolean? {
         val normalized = sourceId.trim().uppercase()
         val rj = RJ_CODE_REGEX.find(normalized)?.value ?: return null
+        val digits = rj.removePrefix("RJ")
+        val digitsTrimmed = digits.trimStart('0').ifBlank { digits }
+        val candidates = linkedSetOf(digits, digitsTrimmed).filter { it.isNotBlank() }
+        if (candidates.isEmpty()) return null
 
-        fun contains(resp: SearchResponse): Boolean {
-            return resp.works.any { w ->
-                val wid = w.source_id.trim().uppercase()
-                RJ_CODE_REGEX.find(wid)?.value == rj
-            }
-        }
+        val preferredSite = runCatching { settingsRepository.asmrOneSite.first() }.getOrDefault(200)
 
-        return withTimeoutOrNull(timeoutMs) {
-            var anySucceeded = false
-
-            val preferredSite = runCatching { settingsRepository.asmrOneSite.first() }.getOrDefault(200)
-            val backupApis = backupApisInOrder(preferredSite, asmr100Api, asmr200Api, asmr300Api)
-            for (backup in backupApis.take(2)) {
-                val from = tryTwice {
-                    backup.api.search(keyword = " $rj", page = 1, silentIoError = NetworkHeaders.SILENT_IO_ERROR_ON)
+        suspend fun fetchFromPreferred(workId: String): Pair<WorkDetailsResponse?, Boolean?> {
+            val resp = runCatching {
+                withTimeoutOrNull(timeoutMs) {
+                    when (preferredSite) {
+                        100 -> asmr100Api.getWorkDetails(workId, silentIoError = NetworkHeaders.SILENT_IO_ERROR_ON)
+                        300 -> asmr300Api.getWorkDetails(workId, silentIoError = NetworkHeaders.SILENT_IO_ERROR_ON)
+                        200 -> asmr200Api.getWorkDetails(workId, silentIoError = NetworkHeaders.SILENT_IO_ERROR_ON)
+                        else -> api.getWorkDetails(workId, silentIoError = NetworkHeaders.SILENT_IO_ERROR_ON)
+                    }
                 }
-                if (from != null) anySucceeded = true
-                val mapped = mapBackupWorks(from?.works.orEmpty(), rj)
-                if (mapped.any { it.source_id.trim().uppercase() == rj }) return@withTimeoutOrNull true
+            }.getOrElse { e ->
+                if (e is CancellationException && e !is TimeoutCancellationException) throw e
+                if (e is HttpException && e.code() == 404) return@fetchFromPreferred null to false
+                return@fetchFromPreferred null to null
             }
-
-            val primary = tryTwice { api.search(keyword = rj, page = 1, silentIoError = NetworkHeaders.SILENT_IO_ERROR_ON) }
-            if (primary != null) {
-                anySucceeded = true
-                if (contains(primary)) return@withTimeoutOrNull true
+            return when {
+                resp == null -> null to null
+                asmrOneWorkMatchesRj(resp, rj) -> resp to true
+                else -> resp to null
             }
-            val primarySpaced = tryTwice { api.search(keyword = " $rj", page = 1, silentIoError = NetworkHeaders.SILENT_IO_ERROR_ON) }
-            if (primarySpaced != null) {
-                anySucceeded = true
-                if (contains(primarySpaced)) return@withTimeoutOrNull true
-            }
-
-            if (anySucceeded) false else null
         }
+
+        var sawDefiniteNotFound = false
+        for (workId in candidates) {
+            val (details, matched) = fetchFromPreferred(workId)
+            if (matched == true) return true
+            if (matched == false) sawDefiniteNotFound = true
+            if (details != null && matched == null) return null
+        }
+        return if (sawDefiniteNotFound) false else null
     }
 
     suspend fun getDetails(workId: String): WorkDetailsResponse {
@@ -467,6 +465,8 @@ private fun mapBackupWorks(works: List<Asmr200Work>, normalizedRj: String): List
         WorkDetailsResponse(
             id = w.id,
             source_id = mappedSourceId,
+            original_workno = w.original_workno,
+            language_editions = w.language_editions?.map { AsmrOneLanguageEdition(lang = it.lang, label = it.label, workno = it.workno) },
             title = w.title.orEmpty(),
             circle = w.circle ?: w.name?.takeIf { it.isNotBlank() }?.let { Circle(it) },
             vas = w.vas,
@@ -476,5 +476,17 @@ private fun mapBackupWorks(works: List<Asmr200Work>, normalizedRj: String): List
             dl_count = w.dl_count ?: 0,
             price = w.price ?: 0
         )
+    }
+}
+
+internal fun asmrOneWorkMatchesRj(w: WorkDetailsResponse, rj: String): Boolean {
+    val sid = RJ_CODE_REGEX.find(w.source_id.trim().uppercase())?.value
+    if (sid == rj) return true
+    val ow = RJ_CODE_REGEX.find(w.original_workno.orEmpty().trim().uppercase())?.value
+    if (ow == rj) return true
+    val editions = w.language_editions.orEmpty()
+    return editions.any { e ->
+        val workno = RJ_CODE_REGEX.find(e.workno.orEmpty().trim().uppercase())?.value
+        workno == rj
     }
 }
