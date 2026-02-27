@@ -12,7 +12,7 @@ import androidx.work.WorkerParameters
 import com.asmr.player.cache.CacheImageModel
 import com.asmr.player.cache.ImageCacheEntryPoint
 import com.asmr.player.data.local.db.AppDatabaseProvider
-import com.asmr.player.data.remote.NetworkHeaders
+import com.asmr.player.util.DlsiteAntiHotlink
 import dagger.hilt.android.EntryPointAccessors
 import java.io.File
 import java.io.FileOutputStream
@@ -43,18 +43,9 @@ class AlbumCoverThumbWorker(
         }
 
         val manager = EntryPointAccessors.fromApplication(applicationContext, ImageCacheEntryPoint::class.java).imageCacheManager()
-        val model: Any = if (source.startsWith("http", ignoreCase = true) && source.contains("dlsite", ignoreCase = true)) {
-            CacheImageModel(
-                data = source,
-                headers = mapOf(
-                    "Referer" to NetworkHeaders.REFERER_DLSITE,
-                    "User-Agent" to NetworkHeaders.USER_AGENT,
-                    "Accept-Language" to NetworkHeaders.ACCEPT_LANGUAGE
-                ),
-                keyTag = "dlsite"
-            )
-        } else {
-            source
+        val model: Any = run {
+            val headers = if (source.startsWith("http", ignoreCase = true)) DlsiteAntiHotlink.headersForImageUrl(source) else emptyMap()
+            if (headers.isEmpty()) source else CacheImageModel(data = source, headers = headers, keyTag = "dlsite")
         }
         val bitmap = manager.loadImage(model = model, size = IntSize(THUMB_SIZE_PX, THUMB_SIZE_PX)).asAndroidBitmap()
         val thumb = centerCropSquare(bitmap, THUMB_SIZE_PX)

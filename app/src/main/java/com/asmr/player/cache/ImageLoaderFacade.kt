@@ -2,14 +2,17 @@ package com.asmr.player.cache
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.util.Log
 import androidx.core.graphics.drawable.toBitmap
 import androidx.compose.ui.unit.IntSize
 import coil.ImageLoader
 import coil.request.ImageRequest
+import coil.request.ErrorResult
 import coil.request.SuccessResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
 class ImageLoaderFacade(
     private val context: Context,
@@ -27,6 +30,17 @@ class ImageLoaderFacade(
         if (result is SuccessResult) {
             result.drawable.toBitmap().also { it.prepareToDraw() }
         } else {
+            val url = when (model) {
+                is CacheImageModel -> model.data as? String
+                is String -> model
+                else -> null
+            }
+            if (result is ErrorResult && url != null) {
+                val parsed = url.toHttpUrlOrNull()
+                val host = parsed?.host.orEmpty()
+                val path = parsed?.encodedPath.orEmpty()
+                Log.w("ImageLoaderFacade", "image load failed host=$host path=$path", result.throwable)
+            }
             throw IllegalStateException("Image load failed: ${result::class.java.simpleName}")
         }
     }

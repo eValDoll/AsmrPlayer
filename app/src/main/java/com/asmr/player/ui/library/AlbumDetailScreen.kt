@@ -66,6 +66,7 @@ import com.asmr.player.data.remote.NetworkHeaders
 import com.asmr.player.cache.CacheImageModel
 import com.asmr.player.data.remote.dlsite.DlsiteLanguageEdition
 import com.asmr.player.ui.dlsite.DlsitePlayViewModel
+import com.asmr.player.util.DlsiteAntiHotlink
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import android.webkit.CookieManager
@@ -564,19 +565,8 @@ private fun AlbumHeader(
     val colorScheme = AsmrTheme.colorScheme
     val data = album.coverPath.ifEmpty { album.coverUrl }
     val imageModel = remember(data) {
-        if (data.startsWith("http", ignoreCase = true) && data.contains("dlsite", ignoreCase = true)) {
-            CacheImageModel(
-                data = data,
-                headers = mapOf(
-                    "Referer" to NetworkHeaders.REFERER_DLSITE,
-                    "User-Agent" to NetworkHeaders.USER_AGENT,
-                    "Accept-Language" to NetworkHeaders.ACCEPT_LANGUAGE
-                ),
-                keyTag = "dlsite"
-            )
-        } else {
-            data
-        }
+        val headers = if (data.startsWith("http", ignoreCase = true)) DlsiteAntiHotlink.headersForImageUrl(data) else emptyMap()
+        if (headers.isEmpty()) data else CacheImageModel(data = data, headers = headers, keyTag = "dlsite")
     }
 
     val rj = album.rjCode.ifBlank { album.workId }
@@ -1014,13 +1004,12 @@ private fun DlsiteRecommendedWorkCard(
     }
     val imageModel = remember(coverModel) {
         val s = coverModel.toString()
-        if (s.startsWith("http", ignoreCase = true) && s.contains("dlsite", ignoreCase = true)) {
+        val baseHeaders = if (s.startsWith("http", ignoreCase = true)) DlsiteAntiHotlink.headersForImageUrl(s) else emptyMap()
+        if (baseHeaders.isNotEmpty()) {
             val cookieManager = CookieManager.getInstance()
             val cookie = cookieManager.getCookie(s).orEmpty().ifBlank { cookieManager.getCookie(NetworkHeaders.REFERER_DLSITE).orEmpty() }
             val headers = buildMap {
-                put("Referer", NetworkHeaders.REFERER_DLSITE)
-                put("User-Agent", NetworkHeaders.USER_AGENT)
-                put("Accept-Language", NetworkHeaders.ACCEPT_LANGUAGE)
+                putAll(baseHeaders)
                 if (cookie.isNotBlank()) put("Cookie", cookie)
             }
             CacheImageModel(data = s, headers = headers, keyTag = "dlsite")
@@ -3323,17 +3312,8 @@ private fun AlbumDlsiteInfoTab(
                 ) {
                     items(galleryUrls) { url ->
                         val model = remember(url) {
-                            if (url.contains("dlsite", ignoreCase = true) || url.contains("img.dlsite", ignoreCase = true)) {
-                                CacheImageModel(
-                                    data = url,
-                                    headers = mapOf(
-                                        "Referer" to NetworkHeaders.REFERER_DLSITE,
-                                        "User-Agent" to NetworkHeaders.USER_AGENT,
-                                        "Accept-Language" to NetworkHeaders.ACCEPT_LANGUAGE
-                                    ),
-                                    keyTag = "dlsite"
-                                )
-                            } else url
+                            val headers = DlsiteAntiHotlink.headersForImageUrl(url)
+                            if (headers.isEmpty()) url else CacheImageModel(data = url, headers = headers, keyTag = "dlsite")
                         }
                         Card(
                             modifier = Modifier
@@ -3585,17 +3565,8 @@ private fun AlbumDlsiteInfoTab(
                 ) {
                     val url = previewUrl.orEmpty()
                     val model = remember(url) {
-                        if (url.contains("dlsite", ignoreCase = true) || url.contains("img.dlsite", ignoreCase = true)) {
-                            CacheImageModel(
-                                data = url,
-                                headers = mapOf(
-                                    "Referer" to NetworkHeaders.REFERER_DLSITE,
-                                    "User-Agent" to NetworkHeaders.USER_AGENT,
-                                    "Accept-Language" to NetworkHeaders.ACCEPT_LANGUAGE
-                                ),
-                                keyTag = "dlsite"
-                            )
-                        } else url
+                        val headers = DlsiteAntiHotlink.headersForImageUrl(url)
+                        if (headers.isEmpty()) url else CacheImageModel(data = url, headers = headers, keyTag = "dlsite")
                     }
                     AsmrAsyncImage(
                         model = model,

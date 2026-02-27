@@ -274,12 +274,47 @@ class DLSiteScraper @Inject constructor(
                     .distinct()
                     .joinToString(", ")
 
-                val imgTag = item.selectFirst(".work_thumb img")
-                val coverUrl = imgTag?.let {
-                    val attr = if (it.hasAttr("data-src") && it.attr("data-src").isNotBlank()) "data-src" else "src"
-                    val abs = it.absUrl(attr)
-                    if (abs.isNotBlank()) abs else normalizeUrl(it.attr(attr), doc.baseUri())
-                } ?: ""
+                fun firstFromSrcset(srcset: String): String {
+                    val first = srcset.split(",").firstOrNull().orEmpty().trim()
+                    return first.split(Regex("\\s+")).firstOrNull().orEmpty().trim()
+                }
+
+                fun pickBestImageUrl(img: Element): String {
+                    val candidates = sequenceOf(
+                        img.attr("data-src"),
+                        img.attr("data-original"),
+                        img.attr("data-lazy"),
+                        img.attr("data-lazy-src"),
+                        img.attr("data-srcset").let { firstFromSrcset(it) },
+                        img.attr("srcset").let { firstFromSrcset(it) },
+                        img.attr("src")
+                    )
+                        .map { it.trim() }
+                        .filter { it.isNotBlank() && !it.startsWith("data:", ignoreCase = true) }
+                        .map { raw -> normalizeUrl(raw, doc.baseUri()) }
+                        .toList()
+
+                    return candidates.firstOrNull().orEmpty()
+                }
+
+                fun scoreUrl(url: String): Int {
+                    val u = url.lowercase()
+                    var s = 0
+                    if (u.contains("/resize/images2/work/")) s += 30
+                    if (u.contains("/modpub/images2/work/") || u.contains("/images2/work/")) s += 20
+                    if (u.contains("img.dlsite.jp")) s += 10
+                    if (u.contains("dlsite")) s += 5
+                    if (u.endsWith(".jpg") || u.endsWith(".jpeg") || u.endsWith(".png") || u.endsWith(".webp")) s += 2
+                    return s
+                }
+
+                val imgs = item.select("img").toList()
+                val coverUrl = imgs.asSequence()
+                    .map { pickBestImageUrl(it) }
+                    .filter { it.isNotBlank() }
+                    .sortedByDescending { scoreUrl(it) }
+                    .firstOrNull()
+                    .orEmpty()
 
                 results.add(
                     Album(
