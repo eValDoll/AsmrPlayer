@@ -50,6 +50,8 @@ import com.asmr.player.ui.common.SubtitleStamp
 import com.asmr.player.ui.common.DiscPlaceholder
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
 import com.asmr.player.ui.common.CoverContentRow
+import com.asmr.player.ui.common.CvChipsFlow
+import com.asmr.player.ui.common.CvChipsSingleLine
 import com.asmr.player.ui.common.withAddedBottomPadding
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ListItem
@@ -1201,15 +1203,7 @@ private fun AlbumGridItem(
                 )
             }
 
-            if (album.cv.isNotBlank()) {
-                Text(
-                    text = "CV：${album.cv}",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = colorScheme.textSecondary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
+            CvChipsFlow(cvText = album.cv)
 
             val statsText = buildString {
                 val rv = album.ratingValue
@@ -1264,7 +1258,8 @@ private fun AlbumItem(
     onLongClick: () -> Unit
 ) {
     val colorScheme = AsmrTheme.colorScheme
-    val coverSize = 92.dp
+    val listItemHeight = 128.dp
+    val coverSize = listItemHeight
 
     Box(
         modifier = Modifier
@@ -1283,7 +1278,7 @@ private fun AlbumItem(
             spacing = 16.dp,
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(min = coverSize),
+                .height(listItemHeight),
             cover = {
                 Box(
                     modifier = Modifier
@@ -1334,8 +1329,8 @@ private fun AlbumItem(
             },
             content = {
                 Column(
-                    modifier = Modifier.padding(top = 8.dp, bottom = 8.dp, end = 12.dp),
-                    verticalArrangement = Arrangement.Center
+                    modifier = Modifier.padding(top = 4.dp, bottom = 4.dp, end = 12.dp),
+                    verticalArrangement = Arrangement.Top
                 ) {
                 Text(
                     text = album.title,
@@ -1370,12 +1365,10 @@ private fun AlbumItem(
                 }
 
                 if (album.cv.isNotBlank()) {
-                    Text(
-                        text = "CV：${album.cv}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = colorScheme.textSecondary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                    Spacer(modifier = Modifier.height(4.dp))
+                    CvChipsSingleLine(
+                        cvText = album.cv,
+                        modifier = Modifier.fillMaxWidth(),
                     )
                 }
 
@@ -1412,7 +1405,7 @@ private fun AlbumItem(
                 if (album.tags.isNotEmpty()) {
                     Row(
                         modifier = Modifier
-                            .padding(top = 4.dp)
+                            .padding(top = 2.dp)
                             .fillMaxWidth()
                             .clipToBounds()
                             .horizontalScroll(rememberScrollState()),
