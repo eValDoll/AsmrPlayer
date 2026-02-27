@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -40,6 +41,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -72,7 +74,8 @@ fun AlbumItem(
         val headers = if (data.startsWith("http", ignoreCase = true)) DlsiteAntiHotlink.headersForImageUrl(data) else emptyMap()
         if (headers.isEmpty()) data else CacheImageModel(data = data, headers = headers, keyTag = "dlsite")
     }
-    val listItemHeight = 128.dp
+    val screenWidthDp = LocalConfiguration.current.screenWidthDp
+    val listItemHeight = (screenWidthDp.dp * 0.24f).coerceIn(112.dp, 140.dp)
     val coverSize = listItemHeight
 
     Box(
@@ -110,103 +113,104 @@ fun AlbumItem(
             },
             content = {
                 Column(
-                    modifier = Modifier.padding(top = 4.dp, bottom = 4.dp, end = 12.dp),
-                    verticalArrangement = Arrangement.Top
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .padding(top = 4.dp, bottom = 4.dp, end = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp, Alignment.Bottom)
                 ) {
-                val rj = album.rjCode.ifBlank { album.workId }
-                Text(
-                    text = album.title,
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                    color = colorScheme.textPrimary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (rj.isNotBlank()) {
-                        Text(
-                            text = rj,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = colorScheme.primary,
-                            modifier = Modifier
-                                .background(colorScheme.primaryContainer, RoundedCornerShape(4.dp))
-                                .padding(horizontal = 4.dp, vertical = 2.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
+                    val rj = album.rjCode.ifBlank { album.workId }
+                    Text(
+                        text = album.title,
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                        color = colorScheme.textPrimary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (rj.isNotBlank()) {
+                            Text(
+                                text = rj,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = colorScheme.primary,
+                                modifier = Modifier
+                                    .background(colorScheme.primaryContainer, RoundedCornerShape(4.dp))
+                                    .padding(horizontal = 4.dp, vertical = 2.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                        }
+                        if (album.circle.isNotBlank()) {
+                            Text(
+                                text = album.circle,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = colorScheme.primary.copy(alpha = 0.8f),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
                     }
-                    if (album.circle.isNotBlank()) {
+
+                    if (album.cv.isNotBlank()) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        CvChipsSingleLine(
+                            cvText = album.cv,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+
+                    val statsText = buildString {
+                        val rv = album.ratingValue
+                        if (rv != null && rv > 0.0) {
+                            append("★")
+                            append(String.format("%.1f", rv))
+                            if (album.ratingCount > 0) append("(${album.ratingCount})")
+                        }
+                        if (album.dlCount > 0) {
+                            if (isNotEmpty()) append(" · ")
+                            append("DL ${album.dlCount}")
+                        }
+                        if (album.priceJpy > 0) {
+                            if (isNotEmpty()) append(" · ")
+                            append("¥${album.priceJpy}")
+                        }
+                        if (album.releaseDate.isNotBlank()) {
+                            if (isNotEmpty()) append(" · ")
+                            append(album.releaseDate)
+                        }
+                    }
+                    if (statsText.isNotBlank()) {
                         Text(
-                            text = album.circle,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = colorScheme.primary.copy(alpha = 0.8f),
+                            text = statsText,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = colorScheme.textTertiary,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
                     }
-                }
 
-                if (album.cv.isNotBlank()) {
-                    Spacer(modifier = Modifier.height(4.dp))
-                    CvChipsSingleLine(
-                        cvText = album.cv,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
-
-                val statsText = buildString {
-                    val rv = album.ratingValue
-                    if (rv != null && rv > 0.0) {
-                        append("★")
-                        append(String.format("%.1f", rv))
-                        if (album.ratingCount > 0) append("(${album.ratingCount})")
-                    }
-                    if (album.dlCount > 0) {
-                        if (isNotEmpty()) append(" · ")
-                        append("DL ${album.dlCount}")
-                    }
-                    if (album.priceJpy > 0) {
-                        if (isNotEmpty()) append(" · ")
-                        append("¥${album.priceJpy}")
-                    }
-                    if (album.releaseDate.isNotBlank()) {
-                        if (isNotEmpty()) append(" · ")
-                        append(album.releaseDate)
-                    }
-                }
-                if (statsText.isNotBlank()) {
-                    Text(
-                        text = statsText,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = colorScheme.textTertiary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-
-                if (album.tags.isNotEmpty()) {
-                    Row(
-                        modifier = Modifier
-                            .padding(top = 2.dp)
-                            .fillMaxWidth()
-                            .clipToBounds()
-                            .horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        album.tags.forEach { tag ->
-                            Text(
-                                text = tag,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = colorScheme.primary.copy(alpha = 0.7f),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier
-                                    .widthIn(max = 200.dp)
-                                    .background(colorScheme.primary.copy(alpha = 0.08f), RoundedCornerShape(4.dp))
-                                    .padding(horizontal = 4.dp, vertical = 1.dp)
-                            )
+                    if (album.tags.isNotEmpty()) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clipToBounds()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            album.tags.forEach { tag ->
+                                Text(
+                                    text = tag,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = colorScheme.primary.copy(alpha = 0.7f),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier
+                                        .widthIn(max = 200.dp)
+                                        .background(colorScheme.primary.copy(alpha = 0.08f), RoundedCornerShape(4.dp))
+                                        .padding(horizontal = 4.dp, vertical = 1.dp)
+                                )
+                            }
                         }
                     }
-                }
                 }
             },
         )
