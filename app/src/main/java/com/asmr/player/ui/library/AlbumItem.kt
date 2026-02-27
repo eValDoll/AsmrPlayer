@@ -48,11 +48,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import com.asmr.player.domain.model.Album
-import com.asmr.player.data.remote.NetworkHeaders
 import com.asmr.player.cache.CacheImageModel
 import com.asmr.player.ui.common.AsmrAsyncImage
  import com.asmr.player.ui.common.CoverContentRow
 import com.asmr.player.ui.common.rememberDominantColor
+import com.asmr.player.util.DlsiteAntiHotlink
 
 import com.asmr.player.ui.theme.AsmrTheme
 
@@ -67,19 +67,8 @@ fun AlbumItem(
     val colorScheme = AsmrTheme.colorScheme
     val data = album.coverThumbPath.ifBlank { album.coverPath }.ifEmpty { album.coverUrl }
     val imageModel = remember(data) {
-        if (data.startsWith("http", ignoreCase = true) && data.contains("dlsite", ignoreCase = true)) {
-            CacheImageModel(
-                data = data,
-                headers = mapOf(
-                    "Referer" to NetworkHeaders.REFERER_DLSITE,
-                    "User-Agent" to NetworkHeaders.USER_AGENT,
-                    "Accept-Language" to NetworkHeaders.ACCEPT_LANGUAGE
-                ),
-                keyTag = "dlsite"
-            )
-        } else {
-            data
-        }
+        val headers = if (data.startsWith("http", ignoreCase = true)) DlsiteAntiHotlink.headersForImageUrl(data) else emptyMap()
+        if (headers.isEmpty()) data else CacheImageModel(data = data, headers = headers, keyTag = "dlsite")
     }
     val coverSize = 92.dp
 
@@ -242,19 +231,8 @@ fun AlbumGridItem(
     val colorScheme = AsmrTheme.colorScheme
     val data = album.coverThumbPath.ifBlank { album.coverPath }.ifEmpty { album.coverUrl }
     val imageModel = remember(data) {
-        if (data.startsWith("http", ignoreCase = true) && data.contains("dlsite", ignoreCase = true)) {
-            CacheImageModel(
-                data = data,
-                headers = mapOf(
-                    "Referer" to NetworkHeaders.REFERER_DLSITE,
-                    "User-Agent" to NetworkHeaders.USER_AGENT,
-                    "Accept-Language" to NetworkHeaders.ACCEPT_LANGUAGE
-                ),
-                keyTag = "dlsite"
-            )
-        } else {
-            data
-        }
+        val headers = if (data.startsWith("http", ignoreCase = true)) DlsiteAntiHotlink.headersForImageUrl(data) else emptyMap()
+        if (headers.isEmpty()) data else CacheImageModel(data = data, headers = headers, keyTag = "dlsite")
     }
 
     Column(

@@ -20,6 +20,7 @@ import javax.inject.Named
 import com.asmr.player.data.remote.TrafficStatsInterceptor
 import com.asmr.player.data.remote.NetworkHeaders
 import com.asmr.player.util.MessageManager
+import com.asmr.player.util.DlsiteAntiHotlink
 import java.io.IOException
 
 @Module
@@ -109,12 +110,11 @@ object NetworkModule {
             } else if (host.contains("asmr-100.com") || host.contains("asmr-200.com") || host.contains("asmr-300.com")) {
                 builder.header("Origin", "https://www.asmr.one")
                 builder.header("Referer", "https://www.asmr.one/")
-            } else if (host.contains("dlsite.")) {
-                builder.header("Referer", NetworkHeaders.REFERER_DLSITE)
-                builder.header("Accept-Language", NetworkHeaders.ACCEPT_LANGUAGE)
-            } else if (host.contains("byteair.volces.com")) {
-                builder.header("Referer", NetworkHeaders.REFERER_DLSITE)
-                builder.header("Accept-Language", NetworkHeaders.ACCEPT_LANGUAGE)
+            } else {
+                val dlsiteHeaders = DlsiteAntiHotlink.headersForImageUrl(request.url.toString())
+                dlsiteHeaders.forEach { (k, v) ->
+                    if (request.header(k) == null) builder.header(k, v)
+                }
             }
 
             chain.proceed(builder.build())
