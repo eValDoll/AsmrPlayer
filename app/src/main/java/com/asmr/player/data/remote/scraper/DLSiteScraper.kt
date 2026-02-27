@@ -94,6 +94,16 @@ class DLSiteScraper @Inject constructor(
             .timeout(10000)
     }
 
+    private fun languageSegmentForLocale(locale: String?): String {
+        val l = locale?.trim().orEmpty()
+        return when {
+            l.startsWith("zh_CN", ignoreCase = true) -> "cn"
+            l.startsWith("zh_TW", ignoreCase = true) -> "tw"
+            l.startsWith("ja", ignoreCase = true) -> "jp"
+            else -> "cn"
+        }
+    }
+
     private fun parseRecommendHtml(doc: Document): List<DlsiteRecommendedWork> {
         fun sanitizeTitle(s: String): String = s.trim().replace(Regex("\\s+"), " ")
 
@@ -222,7 +232,7 @@ class DLSiteScraper @Inject constructor(
         return embedUrl
     }
 
-    suspend fun search(keyword: String, page: Int = 1, order: String = "trend"): List<Album> = withContext(Dispatchers.IO) {
+    suspend fun search(keyword: String, page: Int = 1, order: String = "trend", locale: String? = null): List<Album> = withContext(Dispatchers.IO) {
         val normalizedKeyword = keyword.trim()
         val encodedKeyword = URLEncoder.encode(normalizedKeyword, "UTF-8")
         val normalizedOrder = order.trim().ifBlank { "trend" }
@@ -230,8 +240,9 @@ class DLSiteScraper @Inject constructor(
             val p = page.coerceAtLeast(1)
             val kw = encodedKeyword
             val o = URLEncoder.encode(normalizedOrder, "UTF-8")
+            val lang = languageSegmentForLocale(locale)
             val modernBase =
-                "https://www.dlsite.com/maniax/fsr/=/language/cn/sex_category%5B0%5D/male/work_category%5B0%5D/doujin/" +
+                "https://www.dlsite.com/maniax/fsr/=/language/$lang/sex_category%5B0%5D/male/work_category%5B0%5D/doujin/" +
                     "order%5B0%5D/$o/work_type_category%5B0%5D/audio/per_page/30/show_type/3/from/fsr.again"
             val modern = if (normalizedKeyword.isBlank()) {
                 "$modernBase/page/$p"
@@ -239,9 +250,9 @@ class DLSiteScraper @Inject constructor(
                 "$modernBase/keyword/$kw/page/$p"
             }
             val legacy = if (normalizedKeyword.isBlank()) {
-                "https://www.dlsite.com/maniax/fsr/=/language/cn/sex_category%5B0%5D/male/work_category%5B0%5D/doujin/work_type_category%5B0%5D/audio/per_page/30/show_type/1/page/$p/without_order/1/order/$o"
+                "https://www.dlsite.com/maniax/fsr/=/language/$lang/sex_category%5B0%5D/male/work_category%5B0%5D/doujin/work_type_category%5B0%5D/audio/per_page/30/show_type/1/page/$p/without_order/1/order/$o"
             } else {
-                "$searchBaseUrlLegacy$kw/page/$p/without_order/1/order/$o"
+                "https://www.dlsite.com/maniax/fsr/=/language/$lang/sex_category%5B0%5D/male/work_category%5B0%5D/doujin/work_type_category%5B0%5D/audio/per_page/30/show_type/1/keyword/$kw/page/$p/without_order/1/order/$o"
             }
             return listOf(modern, legacy)
         }
@@ -336,7 +347,7 @@ class DLSiteScraper @Inject constructor(
         var lastEmpty: List<Album> = emptyList()
         for (u in urls) {
             Log.d("DLSiteScraper", "Searching URL: $u")
-            val doc = runInterruptible { connect(u).get() }
+            val doc = runInterruptible { connect(u, locale = locale).get() }
             val parsed = parseDoc(doc)
             if (parsed.isNotEmpty()) return@withContext parsed
             lastEmpty = parsed

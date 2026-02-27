@@ -50,6 +50,8 @@ class SearchViewModel @Inject constructor(
     private val _viewMode = MutableStateFlow(1) // 0: List, 1: Grid
     val viewMode = _viewMode.asStateFlow()
 
+    private var currentLocale: String? = "ja_JP"
+
     fun setViewMode(mode: Int) {
         _viewMode.value = mode
     }
@@ -79,6 +81,13 @@ class SearchViewModel @Inject constructor(
     fun setPurchasedOnly(enabled: Boolean) {
         if (purchasedOnly == enabled) return
         purchasedOnly = enabled
+        val current = _uiState.value as? SearchUiState.Success ?: return
+        goToPage(current.keyword, targetPage = 1, showFullScreenLoading = false)
+    }
+
+    fun setLocale(locale: String?) {
+        if (currentLocale == locale) return
+        currentLocale = locale
         val current = _uiState.value as? SearchUiState.Success ?: return
         goToPage(current.keyword, targetPage = 1, showFullScreenLoading = false)
     }
@@ -169,15 +178,22 @@ class SearchViewModel @Inject constructor(
         val normalizedKeyword = keyword.trim()
         val normalizedRj = normalizedKeyword.uppercase()
         if (page == 1 && Regex("""RJ\d{6,}""").matches(normalizedRj)) {
-            val info = runCatching { dlsiteScraper.getWorkInfo(normalizedRj, locale = "zh_CN") }.getOrNull()
-                ?: runCatching { dlsiteScraper.getWorkInfo(normalizedRj, locale = "ja_JP") }.getOrNull()
-                ?: runCatching { dlsiteScraper.getWorkInfo(normalizedRj) }.getOrNull()
+            val preferred = currentLocale
+            val info = when {
+                !preferred.isNullOrBlank() -> runCatching { dlsiteScraper.getWorkInfo(normalizedRj, locale = preferred) }.getOrNull()
+                    ?: runCatching { dlsiteScraper.getWorkInfo(normalizedRj, locale = "zh_CN") }.getOrNull()
+                    ?: runCatching { dlsiteScraper.getWorkInfo(normalizedRj, locale = "ja_JP") }.getOrNull()
+                    ?: runCatching { dlsiteScraper.getWorkInfo(normalizedRj) }.getOrNull()
+                else -> runCatching { dlsiteScraper.getWorkInfo(normalizedRj, locale = "zh_CN") }.getOrNull()
+                    ?: runCatching { dlsiteScraper.getWorkInfo(normalizedRj, locale = "ja_JP") }.getOrNull()
+                    ?: runCatching { dlsiteScraper.getWorkInfo(normalizedRj) }.getOrNull()
+            }
             if (info != null) {
                 val album = info.album.copy(workId = normalizedRj, rjCode = normalizedRj)
                 return SearchPageResult(items = listOf(album), canGoNext = false)
             }
         }
-        val items = dlsiteScraper.search(keyword, page, order.dlsiteOrder)
+        val items = dlsiteScraper.search(keyword, page, order.dlsiteOrder, locale = currentLocale)
         return SearchPageResult(items = items, canGoNext = items.size >= pageSize)
     }
 
