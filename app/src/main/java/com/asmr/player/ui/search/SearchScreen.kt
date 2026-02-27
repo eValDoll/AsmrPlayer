@@ -58,7 +58,9 @@ fun SearchScreen(
     var keyword by rememberSaveable { mutableStateOf("") }
     val viewMode by viewModel.viewMode.collectAsState()
     var scopeMenuExpanded by remember { mutableStateOf(false) }
+    var languageMenuExpanded by remember { mutableStateOf(false) }
     var purchasedOnly by rememberSaveable { mutableStateOf(false) }
+    var selectedLocale by rememberSaveable { mutableStateOf("ja_JP") }
     val uiState by viewModel.uiState.collectAsState()
     val currentPageKey = (uiState as? SearchUiState.Success)?.page ?: 0
     val listState = rememberSaveable(currentPageKey, saver = LazyListState.Saver) { LazyListState(0, 0) }
@@ -216,6 +218,58 @@ fun SearchScreen(
                         },
                         trailingIcon = {
                             Row(verticalAlignment = Alignment.CenterVertically) {
+                                val languageLabel = when (selectedLocale.trim()) {
+                                    "zh_CN" -> "简中"
+                                    "zh_TW" -> "繁中"
+                                    else -> "日语"
+                                }
+                                Box {
+                                    TextButton(
+                                        onClick = { languageMenuExpanded = true },
+                                        enabled = success != null && !(success.isPaging),
+                                        modifier = Modifier.height(32.dp),
+                                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
+                                        colors = ButtonDefaults.textButtonColors(contentColor = colorScheme.primary)
+                                    ) {
+                                        Text(languageLabel, style = MaterialTheme.typography.labelSmall, maxLines = 1)
+                                    }
+                                    DropdownMenu(
+                                        expanded = languageMenuExpanded,
+                                        onDismissRequest = { languageMenuExpanded = false },
+                                        modifier = Modifier.background(colorScheme.surface)
+                                    ) {
+                                        DropdownMenuItem(
+                                            text = { Text("日语", color = colorScheme.textPrimary) },
+                                            onClick = {
+                                                languageMenuExpanded = false
+                                                purchasedOnly = false
+                                                selectedLocale = "ja_JP"
+                                                viewModel.setPurchasedOnly(false)
+                                                viewModel.setLocale("ja_JP")
+                                            }
+                                        )
+                                        DropdownMenuItem(
+                                            text = { Text("简中", color = colorScheme.textPrimary) },
+                                            onClick = {
+                                                languageMenuExpanded = false
+                                                purchasedOnly = false
+                                                selectedLocale = "zh_CN"
+                                                viewModel.setPurchasedOnly(false)
+                                                viewModel.setLocale("zh_CN")
+                                            }
+                                        )
+                                        DropdownMenuItem(
+                                            text = { Text("繁中", color = colorScheme.textPrimary) },
+                                            onClick = {
+                                                languageMenuExpanded = false
+                                                purchasedOnly = false
+                                                selectedLocale = "zh_TW"
+                                                viewModel.setPurchasedOnly(false)
+                                                viewModel.setLocale("zh_TW")
+                                            }
+                                        )
+                                    }
+                                }
                                 IconButton(
                                     onClick = {
                                         viewModel.search(keyword)
