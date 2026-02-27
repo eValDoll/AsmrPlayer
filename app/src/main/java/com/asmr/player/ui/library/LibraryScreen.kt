@@ -87,6 +87,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.asmr.player.domain.model.Album
@@ -1258,7 +1259,8 @@ private fun AlbumItem(
     onLongClick: () -> Unit
 ) {
     val colorScheme = AsmrTheme.colorScheme
-    val listItemHeight = 128.dp
+    val screenWidthDp = LocalConfiguration.current.screenWidthDp
+    val listItemHeight = (screenWidthDp.dp * 0.24f).coerceIn(112.dp, 140.dp)
     val coverSize = listItemHeight
 
     Box(
@@ -1329,8 +1331,10 @@ private fun AlbumItem(
             },
             content = {
                 Column(
-                    modifier = Modifier.padding(top = 4.dp, bottom = 4.dp, end = 12.dp),
-                    verticalArrangement = Arrangement.Top
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .padding(top = 4.dp, bottom = 4.dp, end = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp, Alignment.Bottom)
                 ) {
                 Text(
                     text = album.title,
@@ -1401,11 +1405,9 @@ private fun AlbumItem(
                         overflow = TextOverflow.Ellipsis
                     )
                 }
-
                 if (album.tags.isNotEmpty()) {
                     Row(
                         modifier = Modifier
-                            .padding(top = 2.dp)
                             .fillMaxWidth()
                             .clipToBounds()
                             .horizontalScroll(rememberScrollState()),
