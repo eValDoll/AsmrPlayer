@@ -39,19 +39,19 @@ fun CoverContentRow(
         )
         var contentPlaceable = measurables[1].measure(contentConstraints)
 
-        val desiredHeight = max(minHeightPx, contentPlaceable.height)
+        val desiredHeight = max(minHeightPx, max(coverWidthPx, contentPlaceable.height))
         val finalHeight = desiredHeight.coerceIn(constraints.minHeight, constraints.maxHeight)
 
         if (finalHeight != desiredHeight) {
             contentPlaceable = measurables[1].measure(contentConstraints.copy(maxHeight = finalHeight))
         }
 
-        val coverPlaceable = measurables[0].measure(Constraints.fixed(coverWidthPx, finalHeight))
+        val coverPlaceable = measurables[0].measure(Constraints.fixed(coverWidthPx, coverWidthPx))
 
         layout(width = maxWidth, height = finalHeight) {
-            coverPlaceable.placeRelative(0, 0)
-            val contentY = ((finalHeight - contentPlaceable.height) / 2).coerceAtLeast(0)
-            contentPlaceable.placeRelative(coverWidthPx + spacingPx, contentY)
+            val coverY = ((finalHeight - coverWidthPx) / 2).coerceAtLeast(0)
+            coverPlaceable.placeRelative(0, coverY)
+            contentPlaceable.placeRelative(coverWidthPx + spacingPx, 0)
         }
     }
 }

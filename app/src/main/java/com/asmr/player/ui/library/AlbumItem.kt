@@ -51,6 +51,8 @@ import com.asmr.player.domain.model.Album
 import com.asmr.player.cache.CacheImageModel
 import com.asmr.player.ui.common.AsmrAsyncImage
  import com.asmr.player.ui.common.CoverContentRow
+import com.asmr.player.ui.common.CvChipsFlow
+import com.asmr.player.ui.common.CvChipsSingleLine
 import com.asmr.player.ui.common.rememberDominantColor
 import com.asmr.player.util.DlsiteAntiHotlink
 
@@ -70,7 +72,8 @@ fun AlbumItem(
         val headers = if (data.startsWith("http", ignoreCase = true)) DlsiteAntiHotlink.headersForImageUrl(data) else emptyMap()
         if (headers.isEmpty()) data else CacheImageModel(data = data, headers = headers, keyTag = "dlsite")
     }
-    val coverSize = 92.dp
+    val listItemHeight = 128.dp
+    val coverSize = listItemHeight
 
     Box(
         modifier = modifier
@@ -89,7 +92,7 @@ fun AlbumItem(
             spacing = 16.dp,
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(min = coverSize),
+                .height(listItemHeight),
             cover = {
                 Box(
                     modifier = Modifier
@@ -107,8 +110,8 @@ fun AlbumItem(
             },
             content = {
                 Column(
-                    modifier = Modifier.padding(top = 8.dp, bottom = 8.dp, end = 12.dp),
-                    verticalArrangement = Arrangement.Center
+                    modifier = Modifier.padding(top = 4.dp, bottom = 4.dp, end = 12.dp),
+                    verticalArrangement = Arrangement.Top
                 ) {
                 val rj = album.rjCode.ifBlank { album.workId }
                 Text(
@@ -143,12 +146,10 @@ fun AlbumItem(
                 }
 
                 if (album.cv.isNotBlank()) {
-                    Text(
-                        text = "CV：${album.cv}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = colorScheme.textSecondary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                    Spacer(modifier = Modifier.height(4.dp))
+                    CvChipsSingleLine(
+                        cvText = album.cv,
+                        modifier = Modifier.fillMaxWidth(),
                     )
                 }
 
@@ -185,7 +186,7 @@ fun AlbumItem(
                 if (album.tags.isNotEmpty()) {
                     Row(
                         modifier = Modifier
-                            .padding(top = 4.dp)
+                            .padding(top = 2.dp)
                             .fillMaxWidth()
                             .clipToBounds()
                             .horizontalScroll(rememberScrollState()),
@@ -310,15 +311,7 @@ fun AlbumGridItem(
                 )
             }
 
-            if (album.cv.isNotBlank()) {
-                Text(
-                    text = "CV：${album.cv}",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = colorScheme.textSecondary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
+            CvChipsFlow(cvText = album.cv)
 
             val statsText = buildString {
                 val rv = album.ratingValue

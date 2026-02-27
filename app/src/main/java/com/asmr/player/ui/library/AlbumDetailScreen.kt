@@ -91,6 +91,7 @@ import com.asmr.player.ui.common.rememberDominantColor
 import com.asmr.player.ui.common.SubtitleStamp
 import com.asmr.player.ui.common.DiscPlaceholder
 import com.asmr.player.ui.common.AsmrAsyncImage
+import com.asmr.player.ui.common.CvChipsFlow
 import com.asmr.player.ui.theme.AsmrTheme
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
 import com.asmr.player.ui.theme.AsmrPlayerTheme
@@ -669,14 +670,12 @@ private fun AlbumHeader(
             }
 
             Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                if (album.cv.isNotBlank()) {
-                    Text(
-                        text = "CV：${album.cv}",
-                        modifier = Modifier.clickable { copy("CV", album.cv) },
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = colorScheme.textPrimary
-                    )
-                }
+                CvChipsFlow(
+                    cvText = album.cv,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                    onCvClick = { cv -> copy("CV", cv) },
+                )
 
                 val langCandidates = remember(dlsiteEditions) {
                     dlsiteEditions
