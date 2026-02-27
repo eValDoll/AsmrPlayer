@@ -86,8 +86,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.asmr.player.domain.model.Album
@@ -1330,52 +1333,6 @@ private fun AlbumItem(
                 }
             },
             content = {
-                Column(
-                    modifier = Modifier
-                        .fillMaxHeight()
-                        .padding(top = 4.dp, bottom = 4.dp, end = 12.dp),
-                    verticalArrangement = Arrangement.spacedBy(2.dp, Alignment.Bottom)
-                ) {
-                Text(
-                    text = album.title,
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                    color = colorScheme.textPrimary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            
-                val rj = album.rjCode.ifBlank { album.workId }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (rj.isNotBlank()) {
-                        Text(
-                            text = rj,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = colorScheme.primary,
-                            modifier = Modifier
-                                .background(colorScheme.primaryContainer, RoundedCornerShape(4.dp))
-                                .padding(horizontal = 4.dp, vertical = 2.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                    }
-                    if (album.circle.isNotBlank()) {
-                        Text(
-                            text = album.circle,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = colorScheme.primary.copy(alpha = 0.8f),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                }
-
-                if (album.cv.isNotBlank()) {
-                    Spacer(modifier = Modifier.height(4.dp))
-                    CvChipsSingleLine(
-                        cvText = album.cv,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
-
                 val statsText = buildString {
                     val rv = album.ratingValue
                     if (rv != null && rv > 0.0) {
@@ -1396,40 +1353,130 @@ private fun AlbumItem(
                         append(album.releaseDate)
                     }
                 }
-                if (statsText.isNotBlank()) {
+
+                BalancedColumn(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .padding(top = 4.dp, bottom = 4.dp, end = 12.dp),
+                    minGap = 4.dp,
+                    maxGap = 12.dp,
+                ) {
                     Text(
-                        text = statsText,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = colorScheme.textTertiary,
+                        text = album.title,
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                        color = colorScheme.textPrimary,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
-                }
-                if (album.tags.isNotEmpty()) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clipToBounds()
-                            .horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        album.tags.forEach { tag ->
+
+                    val rj = album.rjCode.ifBlank { album.workId }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (rj.isNotBlank()) {
                             Text(
-                                text = tag,
+                                text = rj,
                                 style = MaterialTheme.typography.labelSmall,
-                                color = colorScheme.primary.copy(alpha = 0.7f),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
+                                color = colorScheme.primary,
                                 modifier = Modifier
-                                    .widthIn(max = 200.dp)
-                                    .background(colorScheme.primary.copy(alpha = 0.08f), RoundedCornerShape(4.dp))
-                                    .padding(horizontal = 4.dp, vertical = 1.dp)
+                                    .background(colorScheme.primaryContainer, RoundedCornerShape(4.dp))
+                                    .padding(horizontal = 4.dp, vertical = 2.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                        }
+                        if (album.circle.isNotBlank()) {
+                            Text(
+                                text = album.circle,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = colorScheme.primary.copy(alpha = 0.8f),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
                     }
-                }
+
+                    if (album.cv.isNotBlank()) {
+                        CvChipsSingleLine(
+                            cvText = album.cv,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+
+                    if (statsText.isNotBlank()) {
+                        Text(
+                            text = statsText,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = colorScheme.textTertiary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+
+                    if (album.tags.isNotEmpty()) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clipToBounds()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            album.tags.forEach { tag ->
+                                Text(
+                                    text = tag,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = colorScheme.primary.copy(alpha = 0.7f),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier
+                                        .widthIn(max = 200.dp)
+                                        .background(colorScheme.primary.copy(alpha = 0.08f), RoundedCornerShape(4.dp))
+                                        .padding(horizontal = 4.dp, vertical = 1.dp)
+                                )
+                            }
+                        }
+                    }
                 }
             },
         )
+    }
+}
+
+@Composable
+private fun BalancedColumn(
+    modifier: Modifier = Modifier,
+    minGap: Dp = 4.dp,
+    maxGap: Dp = 12.dp,
+    content: @Composable () -> Unit,
+) {
+    Layout(content = content, modifier = modifier) { measurables, constraints ->
+        val placeables = measurables.map { measurable ->
+            measurable.measure(constraints.copy(minHeight = 0))
+        }
+
+        val layoutWidth = if (constraints.maxWidth != Constraints.Infinity) {
+            constraints.maxWidth
+        } else {
+            maxOf(constraints.minWidth, placeables.maxOfOrNull { it.width } ?: 0)
+        }
+
+        val childrenHeight = placeables.sumOf { it.height }
+        val layoutHeight = if (constraints.maxHeight != Constraints.Infinity) {
+            maxOf(constraints.minHeight, constraints.maxHeight, childrenHeight)
+        } else {
+            maxOf(constraints.minHeight, childrenHeight)
+        }
+
+        val remaining = (layoutHeight - childrenHeight).coerceAtLeast(0)
+        val gapCount = placeables.size + 1
+        val idealGap = if (gapCount > 0) remaining / gapCount else 0
+        val gap = idealGap.coerceIn(minGap.roundToPx(), maxGap.roundToPx())
+        val used = gap * gapCount
+        val extra = remaining - used
+
+        layout(layoutWidth, layoutHeight) {
+            var y = (extra / 2) + gap
+            placeables.forEach { placeable ->
+                placeable.placeRelative(0, y)
+                y += placeable.height + gap
+            }
+        }
     }
 }
