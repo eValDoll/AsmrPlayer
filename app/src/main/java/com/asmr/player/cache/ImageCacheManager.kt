@@ -3,6 +3,8 @@ package com.asmr.player.cache
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.os.Build
+import android.os.Trace
 import android.util.Log
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -49,26 +51,36 @@ class ImageCacheManager(
         size: IntSize?,
         cachePolicy: CachePolicy = CachePolicy.DEFAULT
     ): ImageBitmap {
+        Trace.beginSection("img.load")
+        try {
         val key = CacheKeyFactory.createKey(appContext, model, size, config.cacheVersion)
 
         if (cachePolicy.readMemory) {
+            Trace.beginSection("img.mem")
             val cached = memoryCache.get(key)
             if (cached != null) {
                 stats.onMemoryHit()
+                Trace.endSection()
                 return cached.asImageBitmap()
             }
             stats.onMemoryMiss()
+            Trace.endSection()
         }
 
         if (cachePolicy.readDisk) {
-            val entry = diskCache.get(key)
+            Trace.beginSection("img.disk")
+            val entry = withContext(Dispatchers.IO) { diskCache.get(key) }
             if (entry != null) {
                 stats.onDiskHit()
+                Trace.beginSection("img.decodeDisk")
                 val bmp = decodeBytes(entry.bytes)
+                Trace.endSection()
                 if (cachePolicy.writeMemory) memoryCache.put(key, bmp)
+                Trace.endSection()
                 return bmp.asImageBitmap()
             }
             stats.onDiskMiss()
+            Trace.endSection()
         }
 
         val existing = inFlight[key]
@@ -79,10 +91,14 @@ class ImageCacheManager(
         val created = scope.async {
             runCatching {
                 stats.onNetworkFetch()
+                Trace.beginSection("img.net")
                 val bmp = loaderFacade.loadBitmap(model, size)
+                Trace.endSection()
                 stats.onDecode()
                 if (cachePolicy.writeDisk) {
-                    val bytes = encodePng(bmp)
+                    Trace.beginSection("img.encode")
+                    val bytes = encodeBitmapForDisk(bmp)
+                    Trace.endSection()
                     diskCache.put(
                         key,
                         DiskCache.Entry(
@@ -106,6 +122,9 @@ class ImageCacheManager(
         inFlight[key] = created
         created.invokeOnCompletion { inFlight.remove(key, created) }
         return created.await().getOrThrow()
+        } finally {
+            Trace.endSection()
+        }
     }
 
     suspend fun loadImageFromCache(
@@ -125,7 +144,7 @@ class ImageCacheManager(
         }
 
         if (cachePolicy.readDisk) {
-            val entry = diskCache.get(key)
+            val entry = withContext(Dispatchers.IO) { diskCache.get(key) }
             if (entry != null) {
                 stats.onDiskHit()
                 val bmp = decodeBytes(entry.bytes)
@@ -146,10 +165,27 @@ class ImageCacheManager(
         }
     }
 
+    fun preload(models: List<Any>, size: IntSize?) {
+        if (models.isEmpty()) return
+        models.forEach { m ->
+            scope.launch {
+                runCatching { loadImage(model = m, size = size, cachePolicy = CachePolicy.DEFAULT) }
+            }
+        }
+    }
+
     fun preload(scope: CoroutineScope, models: List<Any>): Job {
         return scope.launch(Dispatchers.IO) {
             models.forEach { m ->
                 runCatching { loadImage(model = m, size = null, cachePolicy = CachePolicy.DEFAULT) }
+            }
+        }
+    }
+
+    fun preload(scope: CoroutineScope, models: List<Any>, size: IntSize?): Job {
+        return scope.launch(Dispatchers.IO) {
+            models.forEach { m ->
+                runCatching { loadImage(model = m, size = size, cachePolicy = CachePolicy.DEFAULT) }
             }
         }
     }
@@ -161,9 +197,14 @@ class ImageCacheManager(
             ?: throw IllegalStateException("Disk cache decode failed")
     }
 
-    private suspend fun encodePng(bitmap: Bitmap): ByteArray = withContext(decodeDispatcher) {
+    private suspend fun encodeBitmapForDisk(bitmap: Bitmap): ByteArray = withContext(decodeDispatcher) {
         val out = ByteArrayOutputStream()
-        bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
+        val format = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            Bitmap.CompressFormat.WEBP_LOSSLESS
+        } else {
+            Bitmap.CompressFormat.PNG
+        }
+        bitmap.compress(format, 100, out)
         out.toByteArray()
     }
 }

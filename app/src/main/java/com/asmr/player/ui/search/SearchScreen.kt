@@ -45,8 +45,16 @@ import com.asmr.player.ui.sidepanel.LandscapeRightPanelHost
 import kotlinx.coroutines.launch
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.material3.pulltorefresh.PullToRefreshContainer
+import kotlin.math.absoluteValue
 
 private enum class SearchResultViewMode { Grid, List }
+
+private fun stableAlbumKey(album: Album): String {
+    val id = album.rjCode.ifBlank { album.workId }.trim()
+    if (id.isNotEmpty()) return id
+    val seed = "${album.coverUrl}|${album.title}|${album.circle}|${album.cv}"
+    return "h${seed.hashCode().absoluteValue}"
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -361,7 +369,8 @@ fun SearchScreen(
                                     ) {
                                         lazyItems(
                                             items = state.results,
-                                            key = { album -> album.rjCode.ifBlank { album.workId }.ifBlank { album.title } }
+                                            key = { album -> stableAlbumKey(album) },
+                                            contentType = { "album" }
                                         ) { album ->
                                             AlbumItem(album = album, onClick = { onAlbumClick(album) }, emptyCoverUseShimmer = true)
                                         }
@@ -380,8 +389,9 @@ fun SearchScreen(
                                             state.results.size,
                                             key = { idx ->
                                                 val a = state.results[idx]
-                                                a.rjCode.ifBlank { a.workId }.ifBlank { idx.toString() }
-                                            }
+                                                stableAlbumKey(a)
+                                            },
+                                            contentType = { "albumGrid" }
                                         ) { idx ->
                                             val album = state.results[idx]
                                             AlbumGridItem(

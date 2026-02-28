@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -41,7 +40,7 @@ fun AsmrShimmerPlaceholder(
     }
 
     val transition = rememberInfiniteTransition(label = "asmrShimmer")
-    val t by transition.animateFloat(
+    val shimmerT = transition.animateFloat(
         initialValue = 0f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
@@ -57,6 +56,7 @@ fun AsmrShimmerPlaceholder(
                 val w = size.width.coerceAtLeast(1f)
                 val h = size.height.coerceAtLeast(1f)
                 val band = w * 0.75f
+                val t = shimmerT.value
                 val startX = (t * (w + band)) - band
                 val endX = startX + band
                 val brush = Brush.linearGradient(

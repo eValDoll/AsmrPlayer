@@ -322,7 +322,11 @@ fun AppleLyricsView(
             contentPadding = contentPadding,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            itemsIndexed(lyrics) { index, entry ->
+            itemsIndexed(
+                items = lyrics,
+                key = { _, entry -> entry.startMs },
+                contentType = { _, _ -> "appleLyricLine" }
+            ) { index, entry ->
                 val isActive = index == activeIndex
                 val isPast = index < activeIndex
                 

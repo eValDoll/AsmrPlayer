@@ -3,6 +3,7 @@ plugins {
     id("org.jetbrains.kotlin.android")
     id("com.google.dagger.hilt.android")
     id("com.google.devtools.ksp")
+    id("androidx.baselineprofile")
 }
 
 android {
@@ -26,6 +27,12 @@ android {
         release {
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            signingConfig = signingConfigs.getByName("debug")
+        }
+        create("benchmark") {
+            initWith(getByName("release"))
+            matchingFallbacks += listOf("release")
+            isDebuggable = false
             signingConfig = signingConfigs.getByName("debug")
         }
     }
@@ -115,6 +122,10 @@ dependencies {
     // Paging 3
     implementation("androidx.paging:paging-runtime-ktx:$paging_version")
     implementation("androidx.paging:paging-compose:$paging_version")
+
+    implementation("androidx.metrics:metrics-performance:1.0.0-beta01")
+    implementation("androidx.profileinstaller:profileinstaller:1.4.1")
+    baselineProfile(project(":baselineprofile"))
 
     // Coil (Image Loading)
     implementation("io.coil-kt:coil-compose:2.5.0")

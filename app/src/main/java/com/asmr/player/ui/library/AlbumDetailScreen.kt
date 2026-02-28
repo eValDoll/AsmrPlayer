@@ -1146,7 +1146,10 @@ fun AlbumTracks(album: Album, onTrackClick: (Track) -> Unit) {
         ) {
             groupedTracks.forEach { (group, tracks) ->
                 if (group.isNotEmpty()) {
-                    item {
+                    item(
+                        key = "group:$group",
+                        contentType = "groupHeader"
+                    ) {
                         Box(
                             modifier = Modifier.fillMaxWidth()
                         ) {
@@ -1159,7 +1162,13 @@ fun AlbumTracks(album: Album, onTrackClick: (Track) -> Unit) {
                         }
                     }
                 }
-                itemsIndexed(tracks) { index, track ->
+                itemsIndexed(
+                    items = tracks,
+                    key = { index, track ->
+                        if (track.id > 0L) track.id else "${track.path}#$index"
+                    },
+                    contentType = { _, _ -> "trackRow" }
+                ) { index, track ->
                     val showStamp = track.id > 0L && (subtitleTrackIds.contains(track.id) || remoteSubtitleTrackIds.contains(track.id))
                     TrackItem(track = track, showSubtitleStamp = showStamp, onClick = { onTrackClick(track) })
                     if (index < tracks.size - 1) {
@@ -3321,7 +3330,11 @@ private fun AlbumDlsiteInfoTab(
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                     contentPadding = PaddingValues(vertical = 10.dp)
                 ) {
-                    items(galleryUrls) { url ->
+                    items(
+                        items = galleryUrls,
+                        key = { it },
+                        contentType = { "galleryThumb" }
+                    ) { url ->
                         val model = remember(url) {
                             val headers = DlsiteAntiHotlink.headersForImageUrl(url)
                             if (headers.isEmpty()) url else CacheImageModel(data = url, headers = headers, keyTag = "dlsite")
@@ -3502,7 +3515,11 @@ private fun AlbumDlsiteInfoTab(
                     }
                 }
             }
-            items(videoTracks) { track ->
+            items(
+                items = videoTracks,
+                key = { track -> if (track.id > 0L) track.id else track.path },
+                contentType = { "trialVideo" }
+            ) { track ->
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -3524,7 +3541,11 @@ private fun AlbumDlsiteInfoTab(
                     )
                 }
             }
-            items(audioTracks) { track ->
+            items(
+                items = audioTracks,
+                key = { track -> if (track.id > 0L) track.id else track.path },
+                contentType = { "trialAudioTrack" }
+            ) { track ->
                 TrackItem(
                     track = track,
                     onClick = { onPlayTracks(album, audioTracks, track) },

@@ -89,8 +89,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.asmr.player.domain.model.Album
@@ -596,24 +598,36 @@ fun LibraryScreen(
                                                     workId = header.workId,
                                                     rjCode = header.rjCode.ifBlank { header.workId }
                                                 )
-                                                itemsIndexed(rows, key = { _, row -> row.trackId }) { index, row ->
-                                                    val track = Track(
-                                                        id = row.trackId,
-                                                        albumId = row.albumId,
-                                                        title = row.trackTitle,
-                                                        path = row.trackPath,
-                                                        duration = row.duration,
-                                                        group = row.trackGroup
-                                                    )
+                                                itemsIndexed(
+                                                    items = rows,
+                                                    key = { _, row -> row.trackId },
+                                                    contentType = { _, _ -> "albumTrackRow" }
+                                                ) { index, row ->
+                                                    val track = remember(
+                                                        row.trackId,
+                                                        row.albumId,
+                                                        row.trackTitle,
+                                                        row.trackPath,
+                                                        row.duration,
+                                                        row.trackGroup
+                                                    ) {
+                                                        Track(
+                                                            id = row.trackId,
+                                                            albumId = row.albumId,
+                                                            title = row.trackTitle,
+                                                            path = row.trackPath,
+                                                            duration = row.duration,
+                                                            group = row.trackGroup
+                                                        )
+                                                    }
+                                                    val subtitleText = remember(row.duration) {
+                                                        if (row.duration > 0) Formatting.formatTrackTime(row.duration.toLong()) else ""
+                                                    }
 
                                                     Column {
                                                         TrackListRow(
                                                             title = track.title,
-                                                            subtitle = run {
-                                                                val parts = mutableListOf<String>()
-                                                                if (track.duration > 0) parts.add(Formatting.formatTrackTime(track.duration.toLong()))
-                                                                parts.joinToString(" · ")
-                                                            },
+                                                            subtitle = subtitleText,
                                                             showSubtitleStamp = row.hasSubtitles,
                                                             onClick = {
                                                                 scope.launch {
@@ -716,10 +730,16 @@ fun LibraryScreen(
                                         EntryPointAccessors.fromApplication(app, ImageCacheEntryPoint::class.java)
                                             .imageCacheManager()
                                     }
+                                    val density = LocalDensity.current
+                                    val screenWidthDp = LocalConfiguration.current.screenWidthDp
+                                    val listItemHeight = (screenWidthDp.dp * 0.24f).coerceIn(112.dp, 140.dp)
+                                    val coverPx = remember(listItemHeight, density) { with(density) { listItemHeight.roundToPx() } }
+                                    val preloadSize = remember(coverPx) { IntSize(coverPx, coverPx) }
                                     LazyListPreloader(
                                         state = listState,
                                         itemCount = pagedAlbums.itemCount,
                                         preloadNext = 10,
+                                        preloadSize = preloadSize,
                                         cacheManagerProvider = { cacheManager },
                                         modelAt = { idx ->
                                             val a = pagedAlbums.itemSnapshotList.getOrNull(idx)
@@ -740,7 +760,8 @@ fun LibraryScreen(
                                     ) {
                                         items(
                                             count = pagedAlbums.itemCount,
-                                            key = { idx -> pagedAlbums.itemSnapshotList.getOrNull(idx)?.id?.takeIf { it > 0L } ?: idx }
+                                            key = { idx -> pagedAlbums.itemSnapshotList.getOrNull(idx)?.id?.takeIf { it > 0L } ?: idx },
+                                            contentType = { "albumListItem" }
                                         ) { idx ->
                                             val album = pagedAlbums.itemSnapshotList.getOrNull(idx) ?: return@items
                                             AlbumItem(

@@ -16,4 +16,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "asmr_player_android"
 include(":app")
-
+include(":baselineprofile")

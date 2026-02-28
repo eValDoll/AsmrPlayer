@@ -2,6 +2,7 @@ package com.asmr.player.cache
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.os.Trace
 import android.util.Log
 import androidx.core.graphics.drawable.toBitmap
 import androidx.compose.ui.unit.IntSize
@@ -25,23 +26,33 @@ class ImageLoaderFacade(
         .build()
 
     suspend fun loadBitmap(model: Any, size: IntSize?): Bitmap = withContext(Dispatchers.IO) {
-        val request = buildRequest(model, size)
-        val result = imageLoader.execute(request)
-        if (result is SuccessResult) {
-            result.drawable.toBitmap().also { it.prepareToDraw() }
-        } else {
-            val url = when (model) {
-                is CacheImageModel -> model.data as? String
-                is String -> model
-                else -> null
+        Trace.beginSection("img.coilExec")
+        try {
+            val request = buildRequest(model, size)
+            val result = imageLoader.execute(request)
+            if (result is SuccessResult) {
+                Trace.beginSection("img.toBitmap")
+                try {
+                    result.drawable.toBitmap().also { it.prepareToDraw() }
+                } finally {
+                    Trace.endSection()
+                }
+            } else {
+                val url = when (model) {
+                    is CacheImageModel -> model.data as? String
+                    is String -> model
+                    else -> null
+                }
+                if (result is ErrorResult && url != null) {
+                    val parsed = url.toHttpUrlOrNull()
+                    val host = parsed?.host.orEmpty()
+                    val path = parsed?.encodedPath.orEmpty()
+                    Log.w("ImageLoaderFacade", "image load failed host=$host path=$path", result.throwable)
+                }
+                throw IllegalStateException("Image load failed: ${result::class.java.simpleName}")
             }
-            if (result is ErrorResult && url != null) {
-                val parsed = url.toHttpUrlOrNull()
-                val host = parsed?.host.orEmpty()
-                val path = parsed?.encodedPath.orEmpty()
-                Log.w("ImageLoaderFacade", "image load failed host=$host path=$path", result.throwable)
-            }
-            throw IllegalStateException("Image load failed: ${result::class.java.simpleName}")
+        } finally {
+            Trace.endSection()
         }
     }
 

@@ -12,6 +12,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.DefaultAlpha
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
@@ -95,7 +96,15 @@ fun AsmrAsyncImage(
     Box {
         if (state.value == AsmrAsyncImageState.Loading || (fadeIn && progress < 1f)) {
             val loadingAlpha = if (state.value == AsmrAsyncImageState.Loading) 1f else (1f - progress)
-            loading(sizedModifier.graphicsLayer(alpha = loadingAlpha))
+            val loadingModifier = if (loadingAlpha >= 0.999f) {
+                sizedModifier
+            } else {
+                sizedModifier.graphicsLayer {
+                    this.alpha = loadingAlpha
+                    compositingStrategy = CompositingStrategy.ModulateAlpha
+                }
+            }
+            loading(loadingModifier)
         }
         if (p != null) {
             Image(
