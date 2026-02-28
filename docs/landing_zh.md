@@ -1,7 +1,7 @@
-# ASMR Player（Android）
+# Eara（Android）
 
 <p align="center">
-  <img src="../asmr_logo.svg" width="160" alt="ASMR Player logo" />
+  <img src="../asmr_logo.svg" width="160" alt="Eara logo" />
 </p>
 
 <p align="center">
@@ -12,7 +12,7 @@
 
 ## 一句话介绍
 
-ASMR Player 是一款面向 ASMR 内容的 Android 播放器：既拥有顺滑的本地媒体库体验，又提供“播放器级增强能力”，包括同步歌词、后台下载、左右声道可视化与声道控制、深度主题定制等。
+Eara 是一款面向 ASMR 内容的 Android 播放器：既拥有顺滑的本地媒体库体验，又提供“播放器级增强能力”，包括同步歌词、后台下载、左右声道可视化与声道控制、深度主题定制等。
 
 ## 亮点功能
 

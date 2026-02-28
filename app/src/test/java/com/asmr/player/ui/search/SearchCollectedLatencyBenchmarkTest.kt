@@ -271,7 +271,7 @@ class SearchCollectedLatencyBenchmarkTest {
             val url = "$base$workId"
             val req = Request.Builder()
                 .url(url)
-                .header("User-Agent", "AsmrPlayer-LatencyTest")
+                .header("User-Agent", "Eara-LatencyTest")
                 .build()
             val (code, body) = client.newCall(req).execute().use { resp ->
                 val b = resp.body?.string().orEmpty()
@@ -301,7 +301,7 @@ class SearchCollectedLatencyBenchmarkTest {
         val url = "https://api.asmr-200.com/api/search/$normalized?page=1&order=create_date&sort=desc&pageSize=20&subtitle=0&includeTranslationWorks=true"
         val req = Request.Builder()
             .url(url)
-            .header("User-Agent", "AsmrPlayer-LatencyTest")
+            .header("User-Agent", "Eara-LatencyTest")
             .build()
         val body = client.newCall(req).execute().use { resp ->
             if (!resp.isSuccessful) return CollectedResult.Unknown

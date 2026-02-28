@@ -31,6 +31,7 @@ import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.material3.windowsizeclass.WindowSizeClass
 import androidx.compose.material3.windowsizeclass.calculateWindowSizeClass
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
@@ -80,6 +81,7 @@ import com.asmr.player.ui.drawer.SiteStatusType
 import com.asmr.player.ui.nav.AppNavigator
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
 import com.asmr.player.ui.player.MiniPlayerOverlayHeight
+import com.asmr.player.ui.splash.EaraSplashOverlay
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.haze
 import dagger.hilt.android.AndroidEntryPoint
@@ -89,6 +91,7 @@ import java.net.URLEncoder
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import com.asmr.player.ui.theme.AsmrPlayerTheme
@@ -109,6 +112,7 @@ import androidx.compose.animation.*
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.ui.input.pointer.pointerInteropFilter
+import androidx.compose.ui.res.painterResource
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -366,6 +370,8 @@ class MainActivity : ComponentActivity() {
             }
 
             AsmrPlayerTheme(mode = mode, hue = globalHue) {
+                var showSplash by rememberSaveable { mutableStateOf(true) }
+                var contentReady by remember { mutableStateOf(false) }
                 Box(modifier = Modifier.fillMaxSize()) {
                     MainContainer(
                         windowSizeClass = windowSizeClass,
@@ -375,13 +381,22 @@ class MainActivity : ComponentActivity() {
                         recentAlbumsPanelExpandedInitial = recentAlbumsPanelExpandedInitial,
                         startRouteFromIntent = startRouteFromIntent,
                         onShowQueue = { showQueue = true },
+                        onContentReady = { contentReady = true },
                         visibleMessages = visibleMessages,
                         mode = mode,
                         globalDynamicHueEnabled = globalDynamicHueEnabled,
                         coverBackgroundEnabled = coverBackgroundEnabled,
                         coverBackgroundClarity = coverBackgroundClarity,
+                        forceImmersive = showSplash,
                         baseStaticHue = baseStaticHue
                     )
+
+                    if (showSplash) {
+                        EaraSplashOverlay(
+                            isReady = contentReady,
+                            onFinished = { showSplash = false }
+                        )
+                    }
                     
                     if (showQueue) {
                         val screenHeight = androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp.dp
@@ -422,11 +437,13 @@ fun MainContainer(
     recentAlbumsPanelExpandedInitial: Boolean,
     startRouteFromIntent: String?,
     onShowQueue: () -> Unit,
+    onContentReady: () -> Unit,
     visibleMessages: List<VisibleAppMessage>,
     mode: ThemeMode,
     globalDynamicHueEnabled: Boolean,
     coverBackgroundEnabled: Boolean,
     coverBackgroundClarity: Float,
+    forceImmersive: Boolean,
     baseStaticHue: HuePalette
 ) {
     val navController = rememberNavController()
@@ -435,6 +452,11 @@ fun MainContainer(
     val currentRoute = navBackStackEntry?.destination?.route
     val initialDestination = remember(startRouteFromIntent) {
         if (startRouteFromIntent == "search") "search" else "library"
+    }
+    LaunchedEffect(Unit) {
+        withFrameNanos { }
+        withFrameNanos { }
+        onContentReady()
     }
     var blockNavTouches by remember { mutableStateOf(false) }
     var lastRouteForTouchBlock by remember { mutableStateOf(currentRoute) }
@@ -455,7 +477,7 @@ fun MainContainer(
     val isPhone = configuration.smallestScreenWidthDp < 600
     val context = LocalContext.current
     val activity = remember(context) { context.findActivity() }
-    val immersivePlayer = currentRoute == "now_playing" || currentRoute == "lyrics"
+    val immersivePlayer = forceImmersive || currentRoute == "now_playing" || currentRoute == "lyrics"
 
     LaunchedEffect(currentRoute) {
         val last = lastRouteForTouchBlock
@@ -595,12 +617,23 @@ fun MainContainer(
 
                     Column(modifier = Modifier.fillMaxSize()) {
                         Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            "ASMR Player",
-                            modifier = Modifier.padding(horizontal = 28.dp, vertical = 16.dp),
-                            style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
-                            color = colorScheme.onSurface
-                        )
+                        Row(
+                            modifier = Modifier.padding(horizontal = 24.dp, vertical = 14.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_launcher_foreground),
+                                contentDescription = null,
+                                tint = colorScheme.onSurface,
+                                modifier = Modifier.size(46.dp)
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text(
+                                stringResource(R.string.app_name),
+                                style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
+                                color = colorScheme.onSurface
+                            )
+                        }
                         Spacer(modifier = Modifier.height(8.dp))
 
                         LazyColumn(
@@ -691,6 +724,7 @@ fun MainContainer(
                                             val systemPlaylistType = if (currentRoute == "playlist_system/{type}") {
                                                 entry?.arguments?.getString("type").orEmpty()
                                             } else ""
+                                            val appName = stringResource(R.string.app_name)
                                             Text(
                                                 when {
                                                     currentRoute == "library" -> "本地库"
@@ -710,7 +744,7 @@ fun MainContainer(
                                                     currentRoute == "dlsite_login" -> "DLsite 登录"
                                                     currentRoute?.startsWith("playlist_picker") == true -> "添加到我的列表"
                                                     currentRoute?.startsWith("album_detail") == true -> "专辑详情"
-                                                    else -> "ASMR Player"
+                                                    else -> appName
                                                 },
                                                 style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
                                             )

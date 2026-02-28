@@ -1,4 +1,4 @@
-# ASMR Player (Android) 🎧
+# Eara (Android) 🎧
 
 > **THIS REPOSITORY AND ITS CONTENT WERE GENERATED 100% BY AI.**
 
@@ -6,11 +6,11 @@
 
 ## 中文简介
 
-**ASMR Player（Android）** 是一款面向 ASMR 内容的本地播放器：以“专辑/曲目”的库管理体验为核心，提供同步歌词、后台下载、耳机向音效（均衡器/声道平衡/空间化）、左右声道频谱可视化与深度主题定制等“播放器级增强能力”。
+**Eara（Android）** 是一款面向 ASMR 内容的本地播放器：以“专辑/曲目”的库管理体验为核心，提供同步歌词、后台下载、耳机向音效（均衡器/声道平衡/空间化）、左右声道频谱可视化与深度主题定制等“播放器级增强能力”。
 
 ## 📖 Overview
 
-**ASMR Player (Android)** is a modern, feature-rich audio player specifically designed for ASMR content, built with **Jetpack Compose** and **Media3**. It offers a premium local library experience combined with powerful app-level features like playlist management, synchronized lyrics, background downloads, and deep customization.
+**Eara (Android)** is a modern, feature-rich audio player specifically designed for ASMR content, built with **Jetpack Compose** and **Media3**. It offers a premium local library experience combined with powerful app-level features like playlist management, synchronized lyrics, background downloads, and deep customization.
 
 *This repository is provided as-is and may be incomplete or experimental.*
 

@@ -24,7 +24,7 @@ class GitHubUpdateClient(
         val req = Request.Builder()
             .url(url)
             .header("Accept", "application/vnd.github+json")
-            .header("User-Agent", "AsmrPlayer-Android")
+            .header("User-Agent", "Eara-Android")
             .get()
             .build()
 
