@@ -1125,6 +1125,7 @@ private fun AlbumGridItem(
     onLongClick: () -> Unit
 ) {
     val colorScheme = AsmrTheme.colorScheme
+    val coverShape = remember { RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp, bottomStart = 0.dp, bottomEnd = 0.dp) }
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -1143,15 +1144,14 @@ private fun AlbumGridItem(
                 model = coverModel,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
-                placeholderCornerRadius = 20,
-                modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(20.dp)),
+                placeholderCornerRadius = 0,
+                modifier = Modifier.fillMaxSize().clip(coverShape),
             )
             
             if (syncStatus is SyncStatus.Syncing) {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .clip(RoundedCornerShape(20.dp))
                         .background(Color.Black.copy(alpha = 0.4f))
                         .blur(4.dp),
                     contentAlignment = Alignment.Center
@@ -1166,7 +1166,6 @@ private fun AlbumGridItem(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .clip(RoundedCornerShape(20.dp))
                         .background(Color.Red.copy(alpha = 0.3f)),
                     contentAlignment = Alignment.Center
                 ) {
@@ -1283,6 +1282,7 @@ private fun AlbumItem(
     onLongClick: () -> Unit
 ) {
     val colorScheme = AsmrTheme.colorScheme
+    val coverShape = remember { RoundedCornerShape(topStart = 16.dp, bottomStart = 16.dp, topEnd = 0.dp, bottomEnd = 0.dp) }
     val screenWidthDp = LocalConfiguration.current.screenWidthDp
     val listItemHeight = (screenWidthDp.dp * 0.24f).coerceIn(112.dp, 140.dp)
     val coverSize = listItemHeight
@@ -1309,7 +1309,6 @@ private fun AlbumItem(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .clip(RoundedCornerShape(16.dp))
                 ) {
                     val coverModel = remember(album.coverThumbPath, album.coverPath, album.coverUrl) {
                         album.coverThumbPath.ifBlank { album.coverPath }.ifBlank { album.coverUrl }.trim().ifBlank { null }
@@ -1318,8 +1317,8 @@ private fun AlbumItem(
                         model = coverModel,
                         contentDescription = null,
                         contentScale = ContentScale.Crop,
-                        placeholderCornerRadius = 16,
-                        modifier = Modifier.fillMaxSize(),
+                        placeholderCornerRadius = 0,
+                        modifier = Modifier.fillMaxSize().clip(coverShape),
                     )
                     
                     if (syncStatus is SyncStatus.Syncing) {

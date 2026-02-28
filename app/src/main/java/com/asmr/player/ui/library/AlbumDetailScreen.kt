@@ -592,24 +592,14 @@ private fun AlbumHeader(
                     .fillMaxWidth()
                     .height(240.dp)
             ) {
-                if (canSaveOnline) {
-                    AsmrAsyncImage(
-                        model = imageModel,
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        placeholderCornerRadius = 0,
-                        modifier = Modifier.fillMaxSize(),
-                        empty = { m -> AsmrShimmerPlaceholder(modifier = m, cornerRadius = 0) },
-                    )
-                } else {
-                    AsmrAsyncImage(
-                        model = imageModel,
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        placeholderCornerRadius = 0,
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                }
+                AsmrAsyncImage(
+                    model = imageModel,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    placeholderCornerRadius = 0,
+                    modifier = Modifier.fillMaxSize(),
+                    empty = { m -> AsmrShimmerPlaceholder(modifier = m, cornerRadius = 0) },
+                )
                 if (onPickLocalCover != null) {
                     IconButton(
                         onClick = onPickLocalCover,

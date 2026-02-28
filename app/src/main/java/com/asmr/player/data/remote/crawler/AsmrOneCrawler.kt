@@ -111,32 +111,39 @@ class AsmrOneCrawler @Inject constructor(
             )
         }
 
+        val rj = RJ_CODE_REGEX.find(normalized.trim().uppercase())?.value ?: normalized.trim().uppercase()
+        val digits = rj.removePrefix("RJ")
+        val digitsTrimmed = digits.trimStart('0').ifBlank { digits }
+        val digitCandidates = linkedSetOf(digits, digitsTrimmed).filter { it.isNotBlank() }
+
         val preferredSite = runCatching { settingsRepository.asmrOneSite.first() }.getOrDefault(200)
         val backupApis = backupApisInOrder(preferredSite, asmr100Api, asmr200Api, asmr300Api)
         for (backup in backupApis) {
-            val from = runCatching {
-                backup.api.search(
-                    keyword = " $normalized",
-                    page = page,
-                    silentIoError = NetworkHeaders.SILENT_IO_ERROR_ON
-                )
-            }.getOrNull()
-            val mapped = mapBackupWorks(from?.works.orEmpty(), normalized)
-            if (mapped.isNotEmpty()) {
-                return AsmrOneSearchResult(
-                    response = SearchResponse(
-                        works = mapped,
-                        pagination = Pagination(totalCount = mapped.size, pageSize = mapped.size, page = page)
-                    ),
-                    trace = AsmrOneSearchTrace(
-                        keyword = normalized,
-                        primarySucceeded = primarySucceeded,
-                        primaryHasWorks = false,
-                        fallbackAttempted = true,
-                        fallbackUsed = true,
-                        fallbackSite = backup.site
+            for (digitsCandidate in digitCandidates) {
+                val from = runCatching {
+                    backup.api.search(
+                        keyword = " $digitsCandidate",
+                        page = page,
+                        silentIoError = NetworkHeaders.SILENT_IO_ERROR_ON
                     )
-                )
+                }.getOrNull()
+                val mapped = mapBackupWorks(from?.works.orEmpty(), rj)
+                if (mapped.isNotEmpty()) {
+                    return AsmrOneSearchResult(
+                        response = SearchResponse(
+                            works = mapped,
+                            pagination = Pagination(totalCount = mapped.size, pageSize = mapped.size, page = page)
+                        ),
+                        trace = AsmrOneSearchTrace(
+                            keyword = normalized,
+                            primarySucceeded = primarySucceeded,
+                            primaryHasWorks = false,
+                            fallbackAttempted = true,
+                            fallbackUsed = true,
+                            fallbackSite = backup.site
+                        )
+                    )
+                }
             }
         }
 
@@ -179,6 +186,9 @@ class AsmrOneCrawler @Inject constructor(
     suspend fun hasWorkWithFallback(sourceId: String): Boolean? {
         val normalized = sourceId.trim().uppercase()
         val rj = RJ_CODE_REGEX.find(normalized)?.value ?: return null
+        val digits = rj.removePrefix("RJ")
+        val digitsTrimmed = digits.trimStart('0').ifBlank { digits }
+        val digitCandidates = linkedSetOf(digits, digitsTrimmed).filter { it.isNotBlank() }
 
         fun contains(resp: SearchResponse): Boolean {
             return resp.works.any { w -> asmrOneWorkMatchesRj(w, rj) }
@@ -200,12 +210,14 @@ class AsmrOneCrawler @Inject constructor(
         val preferredSite = runCatching { settingsRepository.asmrOneSite.first() }.getOrDefault(200)
         val backupApis = backupApisInOrder(preferredSite, asmr100Api, asmr200Api, asmr300Api)
         for (backup in backupApis) {
-            val from = runCatching {
-                backup.api.search(keyword = " $rj", page = 1, silentIoError = NetworkHeaders.SILENT_IO_ERROR_ON)
-            }.getOrNull()
-            if (from != null) anySucceeded = true
-            val mapped = mapBackupWorks(from?.works.orEmpty(), rj)
-            if (mapped.any { it.source_id.trim().uppercase() == rj }) return true
+            for (digitsCandidate in digitCandidates) {
+                val from = runCatching {
+                    backup.api.search(keyword = " $digitsCandidate", page = 1, silentIoError = NetworkHeaders.SILENT_IO_ERROR_ON)
+                }.getOrNull()
+                if (from != null) anySucceeded = true
+                val mapped = mapBackupWorks(from?.works.orEmpty(), rj)
+                if (mapped.any { w -> asmrOneWorkMatchesRj(w, rj) }) return true
+            }
         }
 
         return if (anySucceeded) false else null
@@ -216,41 +228,29 @@ class AsmrOneCrawler @Inject constructor(
         val rj = RJ_CODE_REGEX.find(normalized)?.value ?: return null
         val digits = rj.removePrefix("RJ")
         val digitsTrimmed = digits.trimStart('0').ifBlank { digits }
-        val candidates = linkedSetOf(digits, digitsTrimmed).filter { it.isNotBlank() }
-        if (candidates.isEmpty()) return null
+        val digitCandidates = linkedSetOf(digits, digitsTrimmed).filter { it.isNotBlank() }
+        if (digitCandidates.isEmpty()) return null
 
         val preferredSite = runCatching { settingsRepository.asmrOneSite.first() }.getOrDefault(200)
-
-        suspend fun fetchFromPreferred(workId: String): Pair<WorkDetailsResponse?, Boolean?> {
-            val resp = runCatching {
-                withTimeoutOrNull(timeoutMs) {
-                    when (preferredSite) {
-                        100 -> asmr100Api.getWorkDetails(workId, silentIoError = NetworkHeaders.SILENT_IO_ERROR_ON)
-                        300 -> asmr300Api.getWorkDetails(workId, silentIoError = NetworkHeaders.SILENT_IO_ERROR_ON)
-                        200 -> asmr200Api.getWorkDetails(workId, silentIoError = NetworkHeaders.SILENT_IO_ERROR_ON)
-                        else -> api.getWorkDetails(workId, silentIoError = NetworkHeaders.SILENT_IO_ERROR_ON)
+        val backupApis = backupApisInOrder(preferredSite, asmr100Api, asmr200Api, asmr300Api)
+        var anySucceeded = false
+        for (backup in backupApis) {
+            for (digitsCandidate in digitCandidates) {
+                val from = runCatching {
+                    withTimeoutOrNull(timeoutMs) {
+                        backup.api.search(
+                            keyword = " $digitsCandidate",
+                            page = 1,
+                            silentIoError = NetworkHeaders.SILENT_IO_ERROR_ON
+                        )
                     }
-                }
-            }.getOrElse { e ->
-                if (e is CancellationException && e !is TimeoutCancellationException) throw e
-                if (e is HttpException && e.code() == 404) return@fetchFromPreferred null to false
-                return@fetchFromPreferred null to null
-            }
-            return when {
-                resp == null -> null to null
-                asmrOneWorkMatchesRj(resp, rj) -> resp to true
-                else -> resp to null
+                }.getOrNull()
+                if (from != null) anySucceeded = true
+                val mapped = mapBackupWorks(from?.works.orEmpty(), rj)
+                if (mapped.any { w -> asmrOneWorkMatchesRj(w, rj) }) return true
             }
         }
-
-        var sawDefiniteNotFound = false
-        for (workId in candidates) {
-            val (details, matched) = fetchFromPreferred(workId)
-            if (matched == true) return true
-            if (matched == false) sawDefiniteNotFound = true
-            if (details != null && matched == null) return null
-        }
-        return if (sawDefiniteNotFound) false else null
+        return if (anySucceeded) false else null
     }
 
     suspend fun getDetails(workId: String): WorkDetailsResponse {
