@@ -44,6 +44,8 @@ data class WorkDetailsResponse(
     val source_id: String,
     val original_workno: String? = null,
     val language_editions: List<AsmrOneLanguageEdition>? = null,
+    @SerializedName("other_language_editions_in_db")
+    val other_language_editions_in_db: List<AsmrOneOtherLanguageEditionInDb>? = null,
     val title: String,
     val circle: Circle?,
     val vas: List<Artist>?,
@@ -58,6 +60,15 @@ data class AsmrOneLanguageEdition(
     val lang: String? = null,
     val label: String? = null,
     val workno: String? = null
+)
+
+data class AsmrOneOtherLanguageEditionInDb(
+    val id: Int,
+    val lang: String? = null,
+    val title: String? = null,
+    val source_id: String? = null,
+    val is_original: Boolean? = null,
+    val source_type: String? = null
 )
 
 data class Circle(val name: String)
