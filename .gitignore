@@ -19,6 +19,11 @@ app/.cxx/
 **/.externalNativeBuild/
 **/.kotlin/
 
+*.perfetto-trace
+*.png
+*.xml
+app/src/**/generated/baselineProfiles/
+
 *.apk
 *.aab
 *.dex

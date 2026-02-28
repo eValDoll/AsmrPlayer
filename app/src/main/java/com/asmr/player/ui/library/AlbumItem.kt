@@ -71,6 +71,7 @@ fun AlbumItem(
     emptyCoverUseShimmer: Boolean = false
 ) {
     val colorScheme = AsmrTheme.colorScheme
+    val shape = remember { RoundedCornerShape(16.dp) }
     val data = album.coverThumbPath.ifBlank { album.coverPath }.ifEmpty { album.coverUrl }
     val imageModel = remember(data) {
         val headers = if (data.startsWith("http", ignoreCase = true)) DlsiteAntiHotlink.headersForImageUrl(data) else emptyMap()
@@ -84,7 +85,7 @@ fun AlbumItem(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 4.dp)
-            .clip(RoundedCornerShape(16.dp))
+            .clip(shape)
             .background(colorScheme.surface.copy(alpha = 0.5f))
             .combinedClickable(
                 onClick = onClick,
@@ -102,7 +103,6 @@ fun AlbumItem(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .clip(RoundedCornerShape(16.dp))
                 ) {
                     if (emptyCoverUseShimmer) {
                         AsmrAsyncImage(
@@ -171,24 +171,32 @@ fun AlbumItem(
                         )
                     }
 
-                    val statsText = buildString {
-                        val rv = album.ratingValue
-                        if (rv != null && rv > 0.0) {
-                            append("★")
-                            append(String.format("%.1f", rv))
-                            if (album.ratingCount > 0) append("(${album.ratingCount})")
-                        }
-                        if (album.dlCount > 0) {
-                            if (isNotEmpty()) append(" · ")
-                            append("DL ${album.dlCount}")
-                        }
-                        if (album.priceJpy > 0) {
-                            if (isNotEmpty()) append(" · ")
-                            append("¥${album.priceJpy}")
-                        }
-                        if (album.releaseDate.isNotBlank()) {
-                            if (isNotEmpty()) append(" · ")
-                            append(album.releaseDate)
+                    val statsText = remember(
+                        album.ratingValue,
+                        album.ratingCount,
+                        album.dlCount,
+                        album.priceJpy,
+                        album.releaseDate
+                    ) {
+                        buildString {
+                            val rv = album.ratingValue
+                            if (rv != null && rv > 0.0) {
+                                append("★")
+                                append(String.format("%.1f", rv))
+                                if (album.ratingCount > 0) append("(${album.ratingCount})")
+                            }
+                            if (album.dlCount > 0) {
+                                if (isNotEmpty()) append(" · ")
+                                append("DL ${album.dlCount}")
+                            }
+                            if (album.priceJpy > 0) {
+                                if (isNotEmpty()) append(" · ")
+                                append("¥${album.priceJpy}")
+                            }
+                            if (album.releaseDate.isNotBlank()) {
+                                if (isNotEmpty()) append(" · ")
+                                append(album.releaseDate)
+                            }
                         }
                     }
                     if (statsText.isNotBlank()) {
@@ -202,11 +210,12 @@ fun AlbumItem(
                     }
 
                     if (album.tags.isNotEmpty()) {
+                        val scrollState = rememberScrollState()
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clipToBounds()
-                                .horizontalScroll(rememberScrollState()),
+                                .horizontalScroll(scrollState),
                             horizontalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
                             album.tags.forEach { tag ->
@@ -248,6 +257,7 @@ fun AlbumGridItem(
     emptyCoverUseShimmer: Boolean = false
 ) {
     val colorScheme = AsmrTheme.colorScheme
+    val shape = remember { RoundedCornerShape(20.dp) }
     val data = album.coverThumbPath.ifBlank { album.coverPath }.ifEmpty { album.coverUrl }
     val imageModel = remember(data) {
         val headers = if (data.startsWith("http", ignoreCase = true)) DlsiteAntiHotlink.headersForImageUrl(data) else emptyMap()
@@ -256,7 +266,7 @@ fun AlbumGridItem(
 
     Column(
         modifier = modifier
-            .clip(RoundedCornerShape(20.dp))
+            .clip(shape)
             .background(colorScheme.surface.copy(alpha = 0.3f))
             .combinedClickable(
                 onClick = onClick,
@@ -270,7 +280,7 @@ fun AlbumGridItem(
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
                     placeholderCornerRadius = 20,
-                    modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(20.dp)),
+                    modifier = Modifier.fillMaxSize(),
                     empty = { m -> AsmrShimmerPlaceholder(modifier = m, cornerRadius = 20) },
                 )
             } else {
@@ -279,7 +289,7 @@ fun AlbumGridItem(
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
                     placeholderCornerRadius = 20,
-                    modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(20.dp)),
+                    modifier = Modifier.fillMaxSize(),
                 )
             }
             
@@ -342,16 +352,18 @@ fun AlbumGridItem(
 
             CvChipsFlow(cvText = album.cv)
 
-            val statsText = buildString {
-                val rv = album.ratingValue
-                if (rv != null && rv > 0.0) {
-                    append("★")
-                    append(String.format("%.1f", rv))
-                    if (album.ratingCount > 0) append("(${album.ratingCount})")
-                }
-                if (album.priceJpy > 0) {
-                    if (isNotEmpty()) append(" · ")
-                    append("¥${album.priceJpy}")
+            val statsText = remember(album.ratingValue, album.ratingCount, album.priceJpy) {
+                buildString {
+                    val rv = album.ratingValue
+                    if (rv != null && rv > 0.0) {
+                        append("★")
+                        append(String.format("%.1f", rv))
+                        if (album.ratingCount > 0) append("(${album.ratingCount})")
+                    }
+                    if (album.priceJpy > 0) {
+                        if (isNotEmpty()) append(" · ")
+                        append("¥${album.priceJpy}")
+                    }
                 }
             }
             if (statsText.isNotBlank()) {

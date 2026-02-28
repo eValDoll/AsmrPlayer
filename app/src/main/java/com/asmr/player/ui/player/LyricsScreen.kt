@@ -56,7 +56,11 @@ fun LyricsScreen(
                 contentPadding = PaddingValues(vertical = if (isLandscape) 100.dp else 200.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                itemsIndexed(lyrics) { index, entry ->
+                itemsIndexed(
+                    items = lyrics,
+                    key = { _, entry -> entry.startMs },
+                    contentType = { _, _ -> "lyricLine" }
+                ) { index, entry ->
                     val isActive = index == activeIndex
                     Text(
                         text = entry.text,

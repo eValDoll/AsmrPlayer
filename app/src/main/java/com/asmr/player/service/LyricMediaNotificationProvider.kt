@@ -20,7 +20,12 @@ import com.asmr.player.cache.ImageCacheEntryPoint
 import com.asmr.player.R
 import com.google.common.collect.ImmutableList
 import dagger.hilt.android.EntryPointAccessors
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 
 @UnstableApi
@@ -33,6 +38,17 @@ class LyricMediaNotificationProvider(
         override fun sizeOf(key: String, value: Bitmap): Int = value.byteCount / 1024
     }
     private val cacheManager = EntryPointAccessors.fromApplication(appContext, ImageCacheEntryPoint::class.java).imageCacheManager()
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    @Volatile private var lastRequest: LastRequest? = null
+    @Volatile private var lastArtworkKeyRequested: String? = null
+    @Volatile private var artworkJob: Job? = null
+
+    private data class LastRequest(
+        val mediaSession: MediaSession,
+        val customLayout: ImmutableList<CommandButton>,
+        val actionFactory: MediaNotification.ActionFactory,
+        val callback: MediaNotification.Provider.Callback
+    )
 
     override fun createNotification(
         mediaSession: MediaSession,
@@ -40,6 +56,7 @@ class LyricMediaNotificationProvider(
         actionFactory: MediaNotification.ActionFactory,
         onNotificationChangedCallback: MediaNotification.Provider.Callback
     ): MediaNotification {
+        lastRequest = LastRequest(mediaSession, customLayout, actionFactory, onNotificationChangedCallback)
         val player = mediaSession.player
         val metadata = player.mediaMetadata
         
@@ -49,7 +66,11 @@ class LyricMediaNotificationProvider(
         val contentText = artist
         
         val artworkUri = metadata.artworkUri
-        val artworkBitmap = loadArtworkBitmap(artworkUri)
+        val artworkBitmap = getCachedArtworkBitmap(artworkUri).also {
+            if (it == null) {
+                requestArtworkLoad(artworkUri)
+            }
+        }
 
         val prevAction = actionFactory.createMediaAction(
             mediaSession,
@@ -99,23 +120,51 @@ class LyricMediaNotificationProvider(
         return MediaNotification(1001, builder.build())
     }
 
-    private fun loadArtworkBitmap(uri: Uri?): android.graphics.Bitmap? {
+    private fun getCachedArtworkBitmap(uri: Uri?): android.graphics.Bitmap? {
         if (uri == null) return null
         val key = buildArtworkKey(uri)
         val cached = artworkCache.get(key)
         if (cached != null && !cached.isRecycled) return cached
+        return null
+    }
+
+    private fun requestArtworkLoad(uri: Uri?) {
+        if (uri == null) return
+        val key = buildArtworkKey(uri)
+        if (artworkCache.get(key) != null) return
+        if (lastArtworkKeyRequested == key && artworkJob?.isActive == true) return
+
+        lastArtworkKeyRequested = key
+        artworkJob?.cancel()
+        lastRequest ?: return
         val targetSizePx = targetArtworkSizePx()
-        val bitmap = runCatching {
-            runBlocking {
+
+        artworkJob = scope.launch {
+            val bmp = runCatching {
                 cacheManager.loadImageFromCache(
                     model = uri,
                     size = IntSize(targetSizePx, targetSizePx),
                     cachePolicy = CachePolicy(readMemory = true, writeMemory = false, readDisk = true, writeDisk = false)
                 )?.asAndroidBitmap()
+            }.getOrNull()
+
+            if (bmp == null || bmp.isRecycled) return@launch
+            artworkCache.put(key, bmp)
+
+            withContext(Dispatchers.Main) {
+                val latest = lastRequest ?: return@withContext
+                val currentUri = latest.mediaSession.player.mediaMetadata.artworkUri
+                if (currentUri != uri) return@withContext
+                latest.callback.onNotificationChanged(
+                    createNotification(
+                        latest.mediaSession,
+                        latest.customLayout,
+                        latest.actionFactory,
+                        latest.callback
+                    )
+                )
             }
-        }.getOrNull()
-        if (bitmap != null && !bitmap.isRecycled) artworkCache.put(key, bitmap)
-        return bitmap
+        }
     }
 
     private fun targetArtworkSizePx(): Int {

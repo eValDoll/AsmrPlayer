@@ -130,8 +130,6 @@ import com.asmr.player.ui.theme.rememberDynamicHuePalette
 import com.asmr.player.ui.theme.rememberDynamicHuePaletteFromVideoFrame
 import javax.inject.Inject
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
 
 @AndroidEntryPoint
@@ -145,9 +143,8 @@ class MainActivity : ComponentActivity() {
     @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3WindowSizeClassApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val recentAlbumsPanelExpandedInitial = runBlocking {
-            withTimeoutOrNull(80L) { settingsDataStore.recentAlbumsPanelExpanded.first() }
-        } ?: false
+        val recentAlbumsPanelExpandedInitial = false
+        val startRouteFromIntent = intent.getStringExtra("start_route")
         setContent {
             val windowSizeClass = calculateWindowSizeClass(this)
             val context = LocalContext.current
@@ -376,6 +373,7 @@ class MainActivity : ComponentActivity() {
                         libraryViewModel = libraryViewModel,
                         settingsDataStore = settingsDataStore,
                         recentAlbumsPanelExpandedInitial = recentAlbumsPanelExpandedInitial,
+                        startRouteFromIntent = startRouteFromIntent,
                         onShowQueue = { showQueue = true },
                         visibleMessages = visibleMessages,
                         mode = mode,
@@ -422,6 +420,7 @@ fun MainContainer(
     libraryViewModel: LibraryViewModel,
     settingsDataStore: SettingsDataStore,
     recentAlbumsPanelExpandedInitial: Boolean,
+    startRouteFromIntent: String?,
     onShowQueue: () -> Unit,
     visibleMessages: List<VisibleAppMessage>,
     mode: ThemeMode,
@@ -434,6 +433,9 @@ fun MainContainer(
     val navigator = remember(navController) { AppNavigator(navController) }
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
+    val initialDestination = remember(startRouteFromIntent) {
+        if (startRouteFromIntent == "search") "search" else "library"
+    }
     var blockNavTouches by remember { mutableStateOf(false) }
     var lastRouteForTouchBlock by remember { mutableStateOf(currentRoute) }
     var touchBlockSeq by remember { mutableIntStateOf(0) }
@@ -842,7 +844,7 @@ fun MainContainer(
                         ) {
                             NavHost(
                                 navController = navController,
-                                startDestination = "library",
+                                startDestination = initialDestination,
                                 modifier = Modifier.fillMaxSize()
                             ) {
 
