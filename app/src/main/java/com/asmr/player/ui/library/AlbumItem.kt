@@ -72,6 +72,7 @@ fun AlbumItem(
 ) {
     val colorScheme = AsmrTheme.colorScheme
     val shape = remember { RoundedCornerShape(16.dp) }
+    val coverShape = remember { RoundedCornerShape(topStart = 16.dp, bottomStart = 16.dp, topEnd = 0.dp, bottomEnd = 0.dp) }
     val data = album.coverThumbPath.ifBlank { album.coverPath }.ifEmpty { album.coverUrl }
     val imageModel = remember(data) {
         val headers = if (data.startsWith("http", ignoreCase = true)) DlsiteAntiHotlink.headersForImageUrl(data) else emptyMap()
@@ -109,17 +110,17 @@ fun AlbumItem(
                             model = imageModel,
                             contentDescription = null,
                             contentScale = ContentScale.Crop,
-                            placeholderCornerRadius = 16,
-                            modifier = Modifier.fillMaxSize(),
-                            empty = { m -> AsmrShimmerPlaceholder(modifier = m, cornerRadius = 16) },
+                            placeholderCornerRadius = 0,
+                            modifier = Modifier.fillMaxSize().clip(coverShape),
+                            empty = { m -> AsmrShimmerPlaceholder(modifier = m, cornerRadius = 0) },
                         )
                     } else {
                         AsmrAsyncImage(
                             model = imageModel,
                             contentDescription = null,
                             contentScale = ContentScale.Crop,
-                            placeholderCornerRadius = 16,
-                            modifier = Modifier.fillMaxSize(),
+                            placeholderCornerRadius = 0,
+                            modifier = Modifier.fillMaxSize().clip(coverShape),
                         )
                     }
                 }
@@ -258,6 +259,7 @@ fun AlbumGridItem(
 ) {
     val colorScheme = AsmrTheme.colorScheme
     val shape = remember { RoundedCornerShape(20.dp) }
+    val coverShape = remember { RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp, bottomStart = 0.dp, bottomEnd = 0.dp) }
     val data = album.coverThumbPath.ifBlank { album.coverPath }.ifEmpty { album.coverUrl }
     val imageModel = remember(data) {
         val headers = if (data.startsWith("http", ignoreCase = true)) DlsiteAntiHotlink.headersForImageUrl(data) else emptyMap()
@@ -279,17 +281,17 @@ fun AlbumGridItem(
                     model = imageModel,
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
-                    placeholderCornerRadius = 20,
-                    modifier = Modifier.fillMaxSize(),
-                    empty = { m -> AsmrShimmerPlaceholder(modifier = m, cornerRadius = 20) },
+                    placeholderCornerRadius = 0,
+                    modifier = Modifier.fillMaxSize().clip(coverShape),
+                    empty = { m -> AsmrShimmerPlaceholder(modifier = m, cornerRadius = 0) },
                 )
             } else {
                 AsmrAsyncImage(
                     model = imageModel,
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
-                    placeholderCornerRadius = 20,
-                    modifier = Modifier.fillMaxSize(),
+                    placeholderCornerRadius = 0,
+                    modifier = Modifier.fillMaxSize().clip(coverShape),
                 )
             }
             

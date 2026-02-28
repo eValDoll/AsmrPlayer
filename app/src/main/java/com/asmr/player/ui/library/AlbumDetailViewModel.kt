@@ -67,6 +67,7 @@ import android.os.SystemClock
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import javax.inject.Named
+import com.asmr.player.BuildConfig
 
 @HiltViewModel
 class AlbumDetailViewModel @Inject constructor(
@@ -1477,8 +1478,8 @@ class AlbumDetailViewModel @Inject constructor(
                     val albumId = if (insertedId > 0L) insertedId else (existing?.id ?: 0L)
                     if (albumId <= 0L) return@withTransaction
                     albumIdResult = albumId
-                    coverUrlResult = entity.coverUrl
-                    coverPathResult = entity.coverPath
+                    coverUrlResult = entity.coverUrl.trim().takeIf { it.isNotBlank() && !it.equals("null", ignoreCase = true) }.orEmpty()
+                    coverPathResult = entity.coverPath.trim().takeIf { it.isNotBlank() && !it.equals("null", ignoreCase = true) }.orEmpty()
 
                     val fts = AlbumFtsEntity(
                         albumId = albumId,
@@ -1554,13 +1555,9 @@ class AlbumDetailViewModel @Inject constructor(
             val insertedCount = result.insertedCount
 
             if (result.albumId > 0L) {
-                val ensured = try {
+                try {
                     ensureAlbumCoverSaved(result.albumId, result.coverPath, result.coverUrl)
                 } catch (_: Exception) {
-                    false
-                }
-                if (!ensured && result.coverPath.isBlank() && result.coverUrl.isNotBlank()) {
-                    messageManager.showInfo("封面未能保存到本地（不影响音轨保存）")
                 }
             }
             if (selectedCount <= 0) {
@@ -1600,15 +1597,34 @@ class AlbumDetailViewModel @Inject constructor(
         coverPath: String,
         coverUrl: String
     ): Boolean {
-        val existingPath = coverPath.trim().takeIf { it.isNotBlank() && it != "null" }
-        if (existingPath != null) {
-            val f = File(existingPath)
-            if (f.exists() && f.length() > 0L) return true
+        fun debugLog(msg: String) {
+            if (BuildConfig.DEBUG) Log.d("AlbumDetailViewModel", msg)
         }
-        val url = coverUrl.trim()
-        if (url.isBlank() || isLikelyPlaceholderCover(url)) return false
+        fun fail(reason: String): Boolean {
+            debugLog("ensureAlbumCoverSaved fail albumId=$albumId reason=$reason coverPath=${coverPath.take(160)} coverUrl=${coverUrl.take(160)}")
+            return false
+        }
 
-        val sourceHash = url.hashCode().toString()
+        val existingPathRaw = coverPath.trim().takeIf { it.isNotBlank() && it != "null" }
+        if (existingPathRaw != null && !existingPathRaw.startsWith("content://", ignoreCase = true)) {
+            val f = if (existingPathRaw.startsWith("file://", ignoreCase = true)) {
+                runCatching { File(android.net.Uri.parse(existingPathRaw).path.orEmpty()) }.getOrNull()
+            } else {
+                File(existingPathRaw)
+            }
+            if (f != null && f.exists() && f.length() > 0L) return true
+        }
+
+        val url = coverUrl.trim().takeIf { it.isNotBlank() && it != "null" }?.let { u ->
+            if (u.startsWith("//")) "https:$u" else u
+        }.orEmpty()
+        val canUseNetwork = url.isNotBlank() && !isLikelyPlaceholderCover(url)
+
+        val localCandidate = existingPathRaw
+            ?: url.takeIf { it.startsWith("content://", ignoreCase = true) || it.startsWith("file://", ignoreCase = true) }
+        val sourceKey = (if (canUseNetwork) url else localCandidate).orEmpty()
+        if (sourceKey.isBlank()) return fail("empty_source")
+        val sourceHash = sourceKey.hashCode().toString()
         val coverDir = File(context.filesDir, "album_covers").apply { if (!exists()) mkdirs() }
         val thumbDir = File(context.filesDir, "album_thumbs").apply { if (!exists()) mkdirs() }
         val coverFile = File(coverDir, "a_${albumId}_$sourceHash.jpg")
@@ -1629,12 +1645,90 @@ class AlbumDetailViewModel @Inject constructor(
             return true
         }
 
-        val req = Request.Builder().url(url).get().build()
-        val bytes = imageOkHttpClient.newCall(req).execute().use { resp ->
-            if (!resp.isSuccessful) return false
-            resp.body?.bytes() ?: return false
+        val bitmap = if (canUseNetwork) {
+            val tmpFile = File(coverDir, "a_${albumId}_$sourceHash.tmp")
+            try {
+                val req = Request.Builder()
+                    .url(url)
+                    .header("Accept", "image/*")
+                    .get()
+                    .build()
+                imageOkHttpClient.newCall(req).execute().use { resp ->
+                    val contentType = resp.header("Content-Type").orEmpty()
+                    debugLog("ensureAlbumCoverSaved http albumId=$albumId code=${resp.code} type=$contentType url=${url.take(160)}")
+                    if (!resp.isSuccessful) return fail("http_${resp.code}")
+                    if (contentType.isNotBlank() && !contentType.startsWith("image/", ignoreCase = true)) return fail("not_image_$contentType")
+                    val body = resp.body ?: return fail("empty_body")
+                    body.byteStream().use { input ->
+                        FileOutputStream(tmpFile).use { out ->
+                            val buf = ByteArray(256 * 1024)
+                            while (true) {
+                                val read = input.read(buf)
+                                if (read <= 0) break
+                                out.write(buf, 0, read)
+                            }
+                            out.flush()
+                        }
+                    }
+                }
+                val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                BitmapFactory.decodeFile(tmpFile.absolutePath, bounds)
+                val w = bounds.outWidth
+                val h = bounds.outHeight
+                if (w <= 0 || h <= 0) return fail("decode_bounds_invalid")
+                val maxDim = maxOf(w, h)
+                var sample = 1
+                while (maxDim / sample > 2048) sample *= 2
+                val opts = BitmapFactory.Options().apply {
+                    inSampleSize = sample
+                    inPreferredConfig = Bitmap.Config.RGB_565
+                }
+                BitmapFactory.decodeFile(tmpFile.absolutePath, opts) ?: return fail("decode_failed_sample_$sample")
+            } finally {
+                runCatching { if (tmpFile.exists()) tmpFile.delete() }
+            }
+        } else {
+            val p = localCandidate ?: return fail("empty_local_source")
+            if (p.startsWith("file://", ignoreCase = true)) {
+                val filePath = runCatching { android.net.Uri.parse(p).path.orEmpty() }.getOrNull().orEmpty()
+                if (filePath.isBlank()) return fail("file_uri_no_path")
+                val f = File(filePath)
+                if (!f.exists() || f.length() <= 0L) return fail("file_not_found")
+                val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                BitmapFactory.decodeFile(f.absolutePath, bounds)
+                val w = bounds.outWidth
+                val h = bounds.outHeight
+                if (w <= 0 || h <= 0) return fail("file_decode_bounds_invalid")
+                val maxDim = maxOf(w, h)
+                var sample = 1
+                while (maxDim / sample > 2048) sample *= 2
+                val opts = BitmapFactory.Options().apply {
+                    inSampleSize = sample
+                    inPreferredConfig = Bitmap.Config.RGB_565
+                }
+                BitmapFactory.decodeFile(f.absolutePath, opts) ?: return fail("file_decode_failed_sample_$sample")
+            } else {
+                if (!p.startsWith("content://", ignoreCase = true)) return fail("unsupported_local_scheme")
+                val uri = runCatching { android.net.Uri.parse(p) }.getOrNull() ?: return fail("content_uri_parse_failed")
+                val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                context.contentResolver.openInputStream(uri)?.use { input ->
+                    BitmapFactory.decodeStream(input, null, bounds)
+                } ?: return fail("content_open_failed")
+                val w = bounds.outWidth
+                val h = bounds.outHeight
+                if (w <= 0 || h <= 0) return fail("content_decode_bounds_invalid")
+                val maxDim = maxOf(w, h)
+                var sample = 1
+                while (maxDim / sample > 2048) sample *= 2
+                val opts = BitmapFactory.Options().apply {
+                    inSampleSize = sample
+                    inPreferredConfig = Bitmap.Config.RGB_565
+                }
+                context.contentResolver.openInputStream(uri)?.use { input ->
+                    BitmapFactory.decodeStream(input, null, opts)
+                } ?: return fail("content_decode_failed_sample_$sample")
+            }
         }
-        val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size) ?: return false
 
         FileOutputStream(coverFile).use { out ->
             bitmap.compress(Bitmap.CompressFormat.JPEG, 92, out)
@@ -1644,9 +1738,14 @@ class AlbumDetailViewModel @Inject constructor(
             thumb.compress(Bitmap.CompressFormat.JPEG, 85, out)
         }
 
-        val entity = albumDao.getAlbumById(albumId) ?: return true
-        albumDao.updateAlbum(entity.copy(coverPath = coverFile.absolutePath, coverThumbPath = thumbFile.absolutePath))
-        return true
+        return try {
+            val entity = albumDao.getAlbumById(albumId) ?: return true
+            albumDao.updateAlbum(entity.copy(coverPath = coverFile.absolutePath, coverThumbPath = thumbFile.absolutePath))
+            debugLog("ensureAlbumCoverSaved ok albumId=$albumId cover=${coverFile.length()} thumb=${thumbFile.length()}")
+            true
+        } catch (e: Exception) {
+            fail("db_update_${e.javaClass.simpleName}")
+        }
     }
 
     private fun centerCropSquare(src: Bitmap, size: Int): Bitmap {

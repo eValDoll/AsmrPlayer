@@ -308,17 +308,6 @@ fun SearchScreen(
                         singleLine = true
                     )
 
-                    val shouldShowTopProgress = success?.isAsmrOneChecking == true || success?.isEnriching == true
-                    if (shouldShowTopProgress) {
-                        LinearProgressIndicator(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(2.dp),
-                            color = colorScheme.primary,
-                            trackColor = Color.Transparent
-                        )
-                    }
-
                     if (success != null) {
                         SearchPaginationHeader(
                             page = success.page,

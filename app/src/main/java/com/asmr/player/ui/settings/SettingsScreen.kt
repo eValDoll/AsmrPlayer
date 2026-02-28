@@ -42,13 +42,16 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.asmr.player.BuildConfig
 import com.asmr.player.data.settings.FloatingLyricsSettings
 import com.asmr.player.ui.library.BulkPhase
 import com.asmr.player.ui.library.LibraryViewModel
 import com.asmr.player.ui.theme.AsmrTheme
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
 import com.asmr.player.ui.common.withAddedBottomPadding
+import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -64,6 +67,7 @@ fun SettingsScreen(
     val staticHueArgb by viewModel.staticHueArgb.collectAsState()
     val coverBackgroundEnabled by viewModel.coverBackgroundEnabled.collectAsState()
     val coverBackgroundClarity by viewModel.coverBackgroundClarity.collectAsState()
+    val updateState by viewModel.updateState.collectAsState()
     val scanRoots by libraryViewModel.scanRoots.collectAsState()
     val bulkProgress by libraryViewModel.bulkProgress.collectAsState()
     val isGlobalSyncRunning by libraryViewModel.isGlobalSyncRunning.collectAsState()
@@ -474,6 +478,126 @@ fun SettingsScreen(
                 }
             }
 
+                }
+
+                item(key = "group:about_update") {
+                    SettingsGroup(title = "关于") {
+                        Text(
+                            text = "当前版本：${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+
+                        val busy = updateState is AppUpdateState.Checking || updateState is AppUpdateState.Downloading
+                        FilledTonalButton(
+                            onClick = { viewModel.checkUpdate() },
+                            modifier = Modifier.fillMaxWidth(),
+                            enabled = !busy
+                        ) {
+                            if (updateState is AppUpdateState.Checking) {
+                                CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Text("检查中…")
+                            } else {
+                                Text("检查更新")
+                            }
+                        }
+
+                        when (val s = updateState) {
+                            is AppUpdateState.UpToDate -> {
+                                Text(
+                                    text = "已是最新：${s.latestVersionName}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = colorScheme.textSecondary
+                                )
+                            }
+                            is AppUpdateState.UpdateAvailable -> {
+                                Text(
+                                    text = "发现新版本：${s.release.tagName}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = colorScheme.textSecondary
+                                )
+                                FilledTonalButton(
+                                    onClick = { viewModel.downloadLatestApk() },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    enabled = !busy
+                                ) {
+                                    Text("下载并安装")
+                                }
+                            }
+                            is AppUpdateState.Downloading -> {
+                                val total = s.totalBytes
+                                val downloaded = s.downloadedBytes
+                                val progress = if (total > 0L) (downloaded.toFloat() / total.toFloat()).coerceIn(0f, 1f) else null
+                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Text(
+                                        text = "正在下载：${s.release.apkName}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = colorScheme.textSecondary,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    if (progress != null) {
+                                        LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
+                                    } else {
+                                        LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                                    }
+                                }
+                            }
+                            is AppUpdateState.ReadyToInstall -> {
+                                Text(
+                                    text = "下载完成：${s.release.tagName}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = colorScheme.textSecondary
+                                )
+                                FilledTonalButton(
+                                    onClick = {
+                                        val apkFile = File(s.apkPath)
+                                        if (!apkFile.exists() || apkFile.length() <= 0L) return@FilledTonalButton
+                                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                            val canInstall = context.packageManager.canRequestPackageInstalls()
+                                            if (!canInstall) {
+                                                val intent = Intent(
+                                                    Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                                                    Uri.parse("package:${context.packageName}")
+                                                ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                                context.startActivity(intent)
+                                                return@FilledTonalButton
+                                            }
+                                        }
+                                        val uri = FileProvider.getUriForFile(
+                                            context,
+                                            "${context.packageName}.fileprovider",
+                                            apkFile
+                                        )
+                                        val intent = Intent(Intent.ACTION_VIEW).apply {
+                                            setDataAndType(uri, "application/vnd.android.package-archive")
+                                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                        }
+                                        runCatching { context.startActivity(intent) }
+                                    },
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text("安装更新")
+                                }
+                            }
+                            is AppUpdateState.Failed -> {
+                                Text(
+                                    text = s.message,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.error
+                                )
+                                TextButton(
+                                    onClick = { viewModel.resetUpdateState() },
+                                    modifier = Modifier.align(Alignment.End)
+                                ) {
+                                    Text("关闭")
+                                }
+                            }
+                            else -> {}
+                        }
+                    }
                 }
 
                 item(key = "bottom_spacer") {
