@@ -71,6 +71,7 @@ fun CoverArtworkEdgeBlend(
                 .then(blurModifier),
             contentScale = ContentScale.Crop,
             placeholder = {},
+            loading = {},
         )
 
         Box(modifier = Modifier.fillMaxSize().background(blendColor.copy(alpha = 0.06f)))

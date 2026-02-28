@@ -363,7 +363,7 @@ fun SearchScreen(
                                             items = state.results,
                                             key = { album -> album.rjCode.ifBlank { album.workId }.ifBlank { album.title } }
                                         ) { album ->
-                                            AlbumItem(album = album, onClick = { onAlbumClick(album) })
+                                            AlbumItem(album = album, onClick = { onAlbumClick(album) }, emptyCoverUseShimmer = true)
                                         }
                                     }
                                 } else {
@@ -386,7 +386,8 @@ fun SearchScreen(
                                             val album = state.results[idx]
                                             AlbumGridItem(
                                                 album = album,
-                                                onClick = { onAlbumClick(album) }
+                                                onClick = { onAlbumClick(album) },
+                                                emptyCoverUseShimmer = true
                                             )
                                         }
                                     }

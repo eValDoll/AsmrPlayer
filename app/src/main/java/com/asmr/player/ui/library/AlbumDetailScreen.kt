@@ -91,6 +91,7 @@ import com.asmr.player.ui.common.rememberDominantColor
 import com.asmr.player.ui.common.SubtitleStamp
 import com.asmr.player.ui.common.DiscPlaceholder
 import com.asmr.player.ui.common.AsmrAsyncImage
+import com.asmr.player.ui.common.AsmrShimmerPlaceholder
 import com.asmr.player.ui.common.CvChipsFlow
 import com.asmr.player.ui.theme.AsmrTheme
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
@@ -591,13 +592,24 @@ private fun AlbumHeader(
                     .fillMaxWidth()
                     .height(240.dp)
             ) {
-                AsmrAsyncImage(
-                    model = imageModel,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    placeholderCornerRadius = 0,
-                    modifier = Modifier.fillMaxSize(),
-                )
+                if (canSaveOnline) {
+                    AsmrAsyncImage(
+                        model = imageModel,
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        placeholderCornerRadius = 0,
+                        modifier = Modifier.fillMaxSize(),
+                        empty = { m -> AsmrShimmerPlaceholder(modifier = m, cornerRadius = 0) },
+                    )
+                } else {
+                    AsmrAsyncImage(
+                        model = imageModel,
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        placeholderCornerRadius = 0,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
                 if (onPickLocalCover != null) {
                     IconButton(
                         onClick = onPickLocalCover,

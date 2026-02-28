@@ -68,7 +68,8 @@ fun CoverArtworkBackground(
             contentDescription = null,
             modifier = Modifier.fillMaxSize().then(artworkModifier),
             contentScale = ContentScale.Crop,
-            alpha = alpha
+            alpha = alpha,
+            loading = {},
         )
     }
     

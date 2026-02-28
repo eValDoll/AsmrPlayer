@@ -55,6 +55,7 @@ import com.asmr.player.ui.common.AsmrAsyncImage
  import com.asmr.player.ui.common.CoverContentRow
 import com.asmr.player.ui.common.CvChipsFlow
 import com.asmr.player.ui.common.CvChipsSingleLine
+import com.asmr.player.ui.common.AsmrShimmerPlaceholder
 import com.asmr.player.ui.common.rememberDominantColor
 import com.asmr.player.util.DlsiteAntiHotlink
 
@@ -66,7 +67,8 @@ fun AlbumItem(
     album: Album,
     onClick: () -> Unit,
     onLongClick: (() -> Unit)? = null,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    emptyCoverUseShimmer: Boolean = false
 ) {
     val colorScheme = AsmrTheme.colorScheme
     val data = album.coverThumbPath.ifBlank { album.coverPath }.ifEmpty { album.coverUrl }
@@ -102,13 +104,24 @@ fun AlbumItem(
                         .fillMaxSize()
                         .clip(RoundedCornerShape(16.dp))
                 ) {
-                    AsmrAsyncImage(
-                        model = imageModel,
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        placeholderCornerRadius = 16,
-                        modifier = Modifier.fillMaxSize(),
-                    )
+                    if (emptyCoverUseShimmer) {
+                        AsmrAsyncImage(
+                            model = imageModel,
+                            contentDescription = null,
+                            contentScale = ContentScale.Crop,
+                            placeholderCornerRadius = 16,
+                            modifier = Modifier.fillMaxSize(),
+                            empty = { m -> AsmrShimmerPlaceholder(modifier = m, cornerRadius = 16) },
+                        )
+                    } else {
+                        AsmrAsyncImage(
+                            model = imageModel,
+                            contentDescription = null,
+                            contentScale = ContentScale.Crop,
+                            placeholderCornerRadius = 16,
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    }
                 }
             },
             content = {
@@ -231,7 +244,8 @@ fun AlbumGridItem(
     album: Album,
     onClick: () -> Unit,
     onLongClick: (() -> Unit)? = null,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    emptyCoverUseShimmer: Boolean = false
 ) {
     val colorScheme = AsmrTheme.colorScheme
     val data = album.coverThumbPath.ifBlank { album.coverPath }.ifEmpty { album.coverUrl }
@@ -250,13 +264,24 @@ fun AlbumGridItem(
             )
     ) {
         Box(modifier = Modifier.fillMaxWidth().aspectRatio(1f)) {
-            AsmrAsyncImage(
-                model = imageModel,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                placeholderCornerRadius = 20,
-                modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(20.dp)),
-            )
+            if (emptyCoverUseShimmer) {
+                AsmrAsyncImage(
+                    model = imageModel,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    placeholderCornerRadius = 20,
+                    modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(20.dp)),
+                    empty = { m -> AsmrShimmerPlaceholder(modifier = m, cornerRadius = 20) },
+                )
+            } else {
+                AsmrAsyncImage(
+                    model = imageModel,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    placeholderCornerRadius = 20,
+                    modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(20.dp)),
+                )
+            }
             
             val rj = album.rjCode.ifBlank { album.workId }
             if (rj.isNotBlank()) {

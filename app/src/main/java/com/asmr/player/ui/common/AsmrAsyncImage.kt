@@ -1,7 +1,9 @@
 package com.asmr.player.ui.common
 
-import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
@@ -11,6 +13,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.DefaultAlpha
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.graphics.painter.BitmapPainter
@@ -20,6 +23,7 @@ import com.asmr.player.cache.CachePolicy
 import com.asmr.player.cache.ImageCacheEntryPoint
 import dagger.hilt.android.EntryPointAccessors
 import androidx.compose.ui.platform.LocalContext
+import kotlinx.coroutines.CancellationException
 
 @Composable
 fun AsmrAsyncImage(
@@ -34,10 +38,16 @@ fun AsmrAsyncImage(
     placeholder: @Composable (Modifier) -> Unit = { m ->
         DiscPlaceholder(modifier = m, cornerRadius = placeholderCornerRadius)
     },
+    empty: @Composable (Modifier) -> Unit = placeholder,
+    loading: @Composable (Modifier) -> Unit = { m ->
+        AsmrShimmerPlaceholder(modifier = m, cornerRadius = placeholderCornerRadius)
+    },
+    fadeIn: Boolean = true,
+    fadeInMillis: Int = 1024,
 ) {
     val normalizedModel = remember(model) { normalizeImageModel(model) }
     if (normalizedModel == null) {
-        placeholder(modifier)
+        empty(modifier)
         return
     }
 
@@ -47,34 +57,64 @@ fun AsmrAsyncImage(
     }
     val measuredSize: MutableState<IntSize?> = remember { mutableStateOf(null) }
     val painter: MutableState<Painter?> = remember(normalizedModel) { mutableStateOf(null) }
+    val state: MutableState<AsmrAsyncImageState> =
+        remember(normalizedModel) { mutableStateOf(AsmrAsyncImageState.Loading) }
+    val crossfade = remember(normalizedModel) { Animatable(0f) }
     val sizedModifier = modifier.onSizeChanged { sz ->
         if (sz.width > 0 && sz.height > 0) measuredSize.value = IntSize(sz.width, sz.height)
     }
 
     LaunchedEffect(normalizedModel, measuredSize.value) {
         val sz = measuredSize.value ?: return@LaunchedEffect
-        runCatching {
+        try {
+            state.value = AsmrAsyncImageState.Loading
+            painter.value = null
+            crossfade.snapTo(0f)
             val img = manager.loadImage(model = normalizedModel, size = sz, cachePolicy = CachePolicy.DEFAULT)
             painter.value = BitmapPainter(img)
-        }.onFailure {
+            state.value = AsmrAsyncImageState.Success
+            if (fadeIn) {
+                crossfade.animateTo(1f, tween(durationMillis = fadeInMillis))
+            } else {
+                crossfade.snapTo(1f)
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            state.value = AsmrAsyncImageState.Error
             painter.value = null
         }
     }
 
     val p = painter.value
-    if (p == null) {
+    if (state.value == AsmrAsyncImageState.Error) {
         placeholder(sizedModifier)
         return
     }
-    Image(
-        painter = p,
-        contentDescription = contentDescription,
-        modifier = sizedModifier,
-        contentScale = contentScale,
-        alignment = alignment,
-        alpha = alpha,
-        colorFilter = colorFilter
-    )
+    val progress = crossfade.value.coerceIn(0f, 1f)
+    Box {
+        if (state.value == AsmrAsyncImageState.Loading || (fadeIn && progress < 1f)) {
+            val loadingAlpha = if (state.value == AsmrAsyncImageState.Loading) 1f else (1f - progress)
+            loading(sizedModifier.graphicsLayer(alpha = loadingAlpha))
+        }
+        if (p != null) {
+            Image(
+                painter = p,
+                contentDescription = contentDescription,
+                modifier = sizedModifier,
+                contentScale = contentScale,
+                alignment = alignment,
+                alpha = if (fadeIn) alpha * progress else alpha,
+                colorFilter = colorFilter
+            )
+        }
+    }
+}
+
+private enum class AsmrAsyncImageState {
+    Loading,
+    Success,
+    Error,
 }
 
 private fun normalizeImageModel(model: Any?): Any? {
