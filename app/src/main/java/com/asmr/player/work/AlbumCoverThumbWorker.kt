@@ -36,7 +36,7 @@ class AlbumCoverThumbWorker(
         val sourceHash = source.trim().hashCode().toString()
         val dir = File(applicationContext.filesDir, "album_thumbs")
         if (!dir.exists()) dir.mkdirs()
-        val target = File(dir, "a_${albumId}_$sourceHash.jpg")
+        val target = File(dir, "a_${albumId}_${sourceHash}_v$THUMB_VERSION.jpg")
 
         if (entity.coverThumbPath == target.absolutePath && target.exists() && target.length() > 0L) {
             return Result.success()
@@ -51,7 +51,7 @@ class AlbumCoverThumbWorker(
         val thumb = centerCropSquare(bitmap, THUMB_SIZE_PX)
 
         FileOutputStream(target).use { out ->
-            thumb.compress(Bitmap.CompressFormat.JPEG, 85, out)
+            thumb.compress(Bitmap.CompressFormat.JPEG, 95, out)
         }
 
         val updated = entity.copy(coverThumbPath = target.absolutePath)
@@ -62,11 +62,11 @@ class AlbumCoverThumbWorker(
     private fun centerCropSquare(src: Bitmap, size: Int): Bitmap {
         val w = src.width
         val h = src.height
-        if (w <= 0 || h <= 0) return Bitmap.createBitmap(size, size, Bitmap.Config.RGB_565)
+        if (w <= 0 || h <= 0) return Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
         val side = minOf(w, h)
         val left = (w - side) / 2
         val top = (h - side) / 2
-        val out = Bitmap.createBitmap(size, size, Bitmap.Config.RGB_565)
+        val out = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(out)
         val paint = Paint(Paint.FILTER_BITMAP_FLAG)
         canvas.drawBitmap(
@@ -80,6 +80,7 @@ class AlbumCoverThumbWorker(
 
     companion object {
         const val KEY_ALBUM_ID = "albumId"
-        private const val THUMB_SIZE_PX = 320
+        private const val THUMB_VERSION = 2
+        private const val THUMB_SIZE_PX = 640
     }
 }

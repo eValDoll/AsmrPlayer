@@ -73,7 +73,10 @@ fun AlbumItem(
     val colorScheme = AsmrTheme.colorScheme
     val shape = remember { RoundedCornerShape(16.dp) }
     val coverShape = remember { RoundedCornerShape(topStart = 16.dp, bottomStart = 16.dp, topEnd = 0.dp, bottomEnd = 0.dp) }
-    val data = album.coverThumbPath.ifBlank { album.coverPath }.ifEmpty { album.coverUrl }
+    val data = album.coverThumbPath.takeIf { it.isNotBlank() && it.contains("_v2") }
+        .orEmpty()
+        .ifBlank { album.coverPath }
+        .ifEmpty { album.coverUrl }
     val imageModel = remember(data) {
         val headers = if (data.startsWith("http", ignoreCase = true)) DlsiteAntiHotlink.headersForImageUrl(data) else emptyMap()
         if (headers.isEmpty()) data else CacheImageModel(data = data, headers = headers, keyTag = "dlsite")
@@ -260,7 +263,10 @@ fun AlbumGridItem(
     val colorScheme = AsmrTheme.colorScheme
     val shape = remember { RoundedCornerShape(20.dp) }
     val coverShape = remember { RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp, bottomStart = 0.dp, bottomEnd = 0.dp) }
-    val data = album.coverThumbPath.ifBlank { album.coverPath }.ifEmpty { album.coverUrl }
+    val data = album.coverThumbPath.takeIf { it.isNotBlank() && it.contains("_v2") }
+        .orEmpty()
+        .ifBlank { album.coverPath }
+        .ifEmpty { album.coverUrl }
     val imageModel = remember(data) {
         val headers = if (data.startsWith("http", ignoreCase = true)) DlsiteAntiHotlink.headersForImageUrl(data) else emptyMap()
         if (headers.isEmpty()) data else CacheImageModel(data = data, headers = headers, keyTag = "dlsite")

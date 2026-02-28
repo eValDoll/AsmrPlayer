@@ -3,6 +3,7 @@ package com.asmr.player.ui.common
 import android.content.Context
 import android.content.ContextWrapper
 import android.graphics.PixelFormat
+import android.util.Log
 import android.view.Gravity
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
@@ -12,6 +13,7 @@ import androidx.compose.material3.Shapes
 import androidx.compose.material3.Typography
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -23,6 +25,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
 
 @Composable
 fun NonTouchableAppMessageOverlay(
@@ -70,9 +73,24 @@ fun NonTouchableAppMessageOverlay(
         }
     }
 
-    val layoutParams = remember(activity, startPadding, bottomPadding) {
+    DisposableEffect(activity) {
+        onDispose {
+            runCatching {
+                if (overlayView.parent != null) windowManager.removeViewImmediate(overlayView)
+            }
+        }
+    }
+
+    LaunchedEffect(activity, shouldShow, startPadding, bottomPadding) {
+        if (!shouldShow) {
+            runCatching {
+                if (overlayView.parent != null) windowManager.removeViewImmediate(overlayView)
+            }
+            return@LaunchedEffect
+        }
+
         val density = activity.resources.displayMetrics.density
-        WindowManager.LayoutParams(
+        val layoutParams = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.TYPE_APPLICATION_PANEL,
@@ -81,16 +99,22 @@ fun NonTouchableAppMessageOverlay(
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.BOTTOM or Gravity.START
-            token = activity.window.decorView.windowToken
             x = (startPadding.value * density).toInt()
             y = (bottomPadding.value * density).toInt()
         }
-    }
 
-    DisposableEffect(activity, shouldShow) {
-        if (shouldShow) runCatching { windowManager.addView(overlayView, layoutParams) }
-        onDispose {
-            runCatching { windowManager.removeViewImmediate(overlayView) }
+        var logged = false
+        while (overlayView.parent == null) {
+            layoutParams.token = activity.window.decorView.windowToken
+            try {
+                windowManager.addView(overlayView, layoutParams)
+            } catch (t: Throwable) {
+                if (!logged) {
+                    Log.w("NonTouchableAppMessageOverlay", "addView failed", t)
+                    logged = true
+                }
+                delay(50)
+            }
         }
     }
 }

@@ -57,10 +57,16 @@ fun AsmrShimmerPlaceholder(
                 val h = size.height.coerceAtLeast(1f)
                 val band = w * 0.75f
                 val t = shimmerT.value
+                val edge = 0.12f
+                val fade = when {
+                    t < edge -> (t / edge)
+                    t > (1f - edge) -> ((1f - t) / edge)
+                    else -> 1f
+                }.coerceIn(0f, 1f)
                 val startX = (t * (w + band)) - band
                 val endX = startX + band
                 val brush = Brush.linearGradient(
-                    colors = listOf(baseColor, highlightColor, baseColor),
+                    colors = listOf(baseColor, highlightColor.copy(alpha = highlightColor.alpha * fade), baseColor),
                     start = Offset(startX, 0f),
                     end = Offset(endX, h),
                 )

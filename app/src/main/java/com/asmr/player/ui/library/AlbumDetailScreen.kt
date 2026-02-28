@@ -598,7 +598,7 @@ private fun AlbumHeader(
                     contentScale = ContentScale.Crop,
                     placeholderCornerRadius = 0,
                     modifier = Modifier.fillMaxSize(),
-                    empty = { m -> AsmrShimmerPlaceholder(modifier = m, cornerRadius = 0) },
+                    empty = { m -> DiscPlaceholder(modifier = m, cornerRadius = 0) },
                 )
                 if (onPickLocalCover != null) {
                     IconButton(

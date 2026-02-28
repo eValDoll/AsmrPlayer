@@ -7,6 +7,7 @@ import android.content.pm.ActivityInfo
 import android.content.res.Configuration
 import android.media.AudioManager
 import android.os.SystemClock
+import android.view.LayoutInflater
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
@@ -1291,7 +1292,9 @@ private fun NowPlayingVideoPlayer(
             AndroidView(
                 modifier = Modifier.fillMaxSize(),
                 factory = { context ->
-                    PlayerView(context).also { pv ->
+                    val pv = LayoutInflater.from(context)
+                        .inflate(R.layout.view_now_playing_video_player, null, false) as PlayerView
+                    pv.also {
                         pv.useController = false
                         pv.player = player
                         pv.resizeMode = androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT
