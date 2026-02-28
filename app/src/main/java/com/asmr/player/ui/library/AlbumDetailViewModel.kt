@@ -466,10 +466,35 @@ class AlbumDetailViewModel @Inject constructor(
             val currentSelectedLang = current.model.dlsiteSelectedLang.trim().uppercase().ifBlank { "JPN" }
             if (isFirstLangFetch && currentSelectedLang == "JPN") {
                 _uiState.value = AlbumDetailUiState.Success(model = current.model.copy(dlsiteEditions = merged))
-                val picked = when {
-                    merged.any { it.lang.equals("CHI_HANS", ignoreCase = true) } -> "CHI_HANS"
-                    merged.any { it.lang.equals("CHI_HANT", ignoreCase = true) } -> "CHI_HANT"
-                    else -> "JPN"
+                val hasHansEdition = merged.any { it.lang.equals("CHI_HANS", ignoreCase = true) }
+                val hasHantEdition = merged.any { it.lang.equals("CHI_HANT", ignoreCase = true) }
+                val jpnWorkno = merged.firstOrNull { it.lang.equals("JPN", ignoreCase = true) }
+                    ?.workno
+                    ?.trim()
+                    ?.uppercase()
+                    .orEmpty()
+                    .ifBlank { clean }
+
+                val resolved = resolveAsmrOneWork(jpnWorkno, timeoutMs = 1_200L) ?: resolveAsmrOneWork(clean, timeoutMs = 1_200L)
+                val picked = if (resolved != null) {
+                    val (workId, site) = resolved
+                    val details = withTimeoutOrNull(1_500L) {
+                        if (site != null) asmrOneCrawler.getDetailsFromSite(site, workId) else asmrOneCrawler.getDetails(workId)
+                    }
+                    val other = details?.other_language_editions_in_db.orEmpty()
+                    val hasHans = other.any { it.lang.orEmpty().contains("简体") || it.lang.orEmpty().contains("簡体") }
+                    val hasHant = other.any { it.lang.orEmpty().contains("繁体") || it.lang.orEmpty().contains("繁體") }
+                    when {
+                        hasHansEdition && hasHans -> "CHI_HANS"
+                        hasHantEdition && hasHant -> "CHI_HANT"
+                        else -> "JPN"
+                    }
+                } else {
+                    when {
+                        hasHansEdition -> "CHI_HANS"
+                        hasHantEdition -> "CHI_HANT"
+                        else -> "JPN"
+                    }
                 }
                 if (picked != "JPN") {
                     selectDlsiteLanguage(picked)
@@ -741,20 +766,28 @@ class AlbumDetailViewModel @Inject constructor(
             _uiState.value = AlbumDetailUiState.Success(model = latestBefore.model.copy(isLoadingAsmrOne = true))
             try {
                 val latest = (_uiState.value as? AlbumDetailUiState.Success)?.model ?: return@launch
-                val collected = isAsmrOneCollected(keyRj, timeoutMs = 1_200L)
+                val selectedLang = latest.dlsiteSelectedLang.trim().uppercase().ifBlank { "JPN" }
+                val latestBase = latest.baseRjCode.trim().uppercase()
+                val jpnWorkno = latest.dlsiteEditions.firstOrNull { it.lang.equals("JPN", ignoreCase = true) }
+                    ?.workno
+                    ?.trim()
+                    ?.uppercase()
+                    .orEmpty()
+                val originalRj = jpnWorkno.ifBlank { latestBase.ifBlank { keyRj } }
+
+                val collected = isAsmrOneCollected(originalRj, timeoutMs = 1_200L)
                 if (collected == false) {
-                    val baseKey = latest.baseRjCode.trim().uppercase()
+                    val baseKey = originalRj
                     val preferred = listOf("CHI_HANS", "CHI_HANT", "JPN")
                     val candidates = preferred.mapNotNull { lang ->
-                        val workno = if (lang == "JPN") {
-                            baseKey
-                        } else {
-                            latest.dlsiteEditions.firstOrNull { it.lang.equals(lang, ignoreCase = true) }
-                                ?.workno
-                                ?.trim()
-                                ?.uppercase()
-                                .orEmpty()
-                        }
+                        val workno = latest.dlsiteEditions.firstOrNull { it.lang.equals(lang, ignoreCase = true) }
+                            ?.workno
+                            ?.trim()
+                            ?.uppercase()
+                            .orEmpty()
+                            .ifBlank {
+                                if (lang == "JPN") baseKey else ""
+                            }
                         if (workno.isBlank() || workno.equals(keyRj, ignoreCase = true)) return@mapNotNull null
                         lang to workno
                     }
@@ -784,9 +817,42 @@ class AlbumDetailViewModel @Inject constructor(
                     }
                     return@launch
                 }
-                val latestBase = latest.baseRjCode.trim().uppercase()
-                val fallbackRj = if (latestBase.isNotBlank() && !latestBase.equals(keyRj, ignoreCase = true)) latestBase else keyRj
-                val (workId, site, tree) = fetchAsmrOneWithFallback(primaryRj = keyRj, fallbackRj = fallbackRj)
+
+                val resolvedOriginal = resolveAsmrOneWork(originalRj)
+                    ?: resolveAsmrOneWork(keyRj)
+                    ?: run {
+                        val updated = (_uiState.value as? AlbumDetailUiState.Success)?.model ?: return@launch
+                        if (token != asmrOneLoadToken) return@launch
+                        asmrOneAttemptedRj.remove(keyRj)
+                        if (updated.rjCode.trim().uppercase().equals(keyRj, ignoreCase = true) && updated.isLoadingAsmrOne) {
+                            _uiState.value = AlbumDetailUiState.Success(model = updated.copy(isLoadingAsmrOne = false))
+                        }
+                        return@launch
+                    }
+                val (originalWorkId, site) = resolvedOriginal
+
+                val originalDetails = runCatching {
+                    if (site != null) asmrOneCrawler.getDetailsFromSite(site, originalWorkId) else asmrOneCrawler.getDetails(originalWorkId)
+                }.getOrNull()
+
+                val otherId = if (selectedLang == "JPN") {
+                    null
+                } else {
+                    val other = originalDetails?.other_language_editions_in_db.orEmpty()
+                    other.firstOrNull { it.source_id.orEmpty().trim().equals(keyRj, ignoreCase = true) }?.id
+                        ?: when (selectedLang) {
+                            "CHI_HANS" -> other.firstOrNull { it.lang.orEmpty().contains("简体") }?.id
+                            "CHI_HANT" -> other.firstOrNull { it.lang.orEmpty().contains("繁體") }?.id
+                            "KO_KR" -> other.firstOrNull { it.lang.orEmpty().contains("韩") || it.lang.orEmpty().contains("韓") }?.id
+                            else -> null
+                        }
+                }
+
+                val finalWorkId = otherId?.toString()?.trim().orEmpty().ifBlank { originalWorkId }
+                val tree = getAsmrOneTracksCached(site, finalWorkId).ifEmpty {
+                    if (finalWorkId != originalWorkId) getAsmrOneTracksCached(site, originalWorkId) else emptyList()
+                }
+                val workId = finalWorkId
                 val updated = (_uiState.value as? AlbumDetailUiState.Success)?.model ?: return@launch
                 if (token != asmrOneLoadToken) {
                     asmrOneAttemptedRj.remove(keyRj)
@@ -796,7 +862,7 @@ class AlbumDetailViewModel @Inject constructor(
                     }
                     return@launch
                 }
-                if (workId.isNullOrBlank()) {
+                if (workId.isBlank()) {
                     asmrOneAttemptedRj.remove(keyRj)
                     val updatedKey = updated.rjCode.trim().uppercase()
                     if (updatedKey.equals(keyRj, ignoreCase = true) && updated.isLoadingAsmrOne) {
