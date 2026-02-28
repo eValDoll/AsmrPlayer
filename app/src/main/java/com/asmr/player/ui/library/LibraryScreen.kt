@@ -746,7 +746,7 @@ fun LibraryScreen(
                                             if (a == null) {
                                                 null
                                             } else {
-                                                a.coverThumbPath.takeIf { it.isNotBlank() }
+                                                a.coverThumbPath.takeIf { it.isNotBlank() && it.contains("_v2") }
                                                     ?: a.coverPath.takeIf { it.isNotBlank() }
                                                     ?: a.coverUrl.takeIf { it.isNotBlank() }
                                             }
@@ -1138,7 +1138,8 @@ private fun AlbumGridItem(
     ) {
         Box(modifier = Modifier.fillMaxWidth().aspectRatio(1f)) {
             val coverModel = remember(album.coverThumbPath, album.coverPath, album.coverUrl) {
-                album.coverThumbPath.ifBlank { album.coverPath }.ifBlank { album.coverUrl }.trim().ifBlank { null }
+                val thumb = album.coverThumbPath.trim().takeIf { it.isNotBlank() && it.contains("_v2") }.orEmpty()
+                thumb.ifBlank { album.coverPath }.ifBlank { album.coverUrl }.trim().ifBlank { null }
             }
             AsmrAsyncImage(
                 model = coverModel,
@@ -1311,7 +1312,8 @@ private fun AlbumItem(
                         .fillMaxSize()
                 ) {
                     val coverModel = remember(album.coverThumbPath, album.coverPath, album.coverUrl) {
-                        album.coverThumbPath.ifBlank { album.coverPath }.ifBlank { album.coverUrl }.trim().ifBlank { null }
+                        val thumb = album.coverThumbPath.trim().takeIf { it.isNotBlank() && it.contains("_v2") }.orEmpty()
+                        thumb.ifBlank { album.coverPath }.ifBlank { album.coverUrl }.trim().ifBlank { null }
                     }
                     AsmrAsyncImage(
                         model = coverModel,

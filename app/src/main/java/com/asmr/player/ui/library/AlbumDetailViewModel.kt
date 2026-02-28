@@ -64,10 +64,15 @@ import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Rect
 import android.os.SystemClock
+import androidx.work.ExistingWorkPolicy
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
+import androidx.work.workDataOf
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import javax.inject.Named
 import com.asmr.player.BuildConfig
+import com.asmr.player.work.AlbumCoverThumbWorker
 
 @HiltViewModel
 class AlbumDetailViewModel @Inject constructor(
@@ -432,8 +437,9 @@ class AlbumDetailViewModel @Inject constructor(
             try {
                 withContext(Dispatchers.IO) {
                     val entity = albumDao.getAlbumById(local.id) ?: return@withContext
-                    albumDao.updateAlbum(entity.copy(coverPath = value))
+                    albumDao.updateAlbum(entity.copy(coverPath = value, coverThumbPath = ""))
                 }
+                enqueueAlbumCoverThumbWork(local.id)
                 messageManager.showSuccess("已设置封面")
                 val rj = current.model.rjCode.ifBlank { local.rjCode.ifBlank { local.workId } }
                 loadAlbum(local.id, rj, force = true)
@@ -441,6 +447,16 @@ class AlbumDetailViewModel @Inject constructor(
                 messageManager.showError("设置封面失败：${e.message}")
             }
         }
+    }
+
+    private fun enqueueAlbumCoverThumbWork(albumId: Long) {
+        if (albumId <= 0L) return
+        val request = OneTimeWorkRequestBuilder<AlbumCoverThumbWorker>()
+            .setInputData(workDataOf(AlbumCoverThumbWorker.KEY_ALBUM_ID to albumId))
+            .addTag("album_cover_thumb")
+            .build()
+        WorkManager.getInstance(context)
+            .enqueueUniqueWork("album_cover_thumb_$albumId", ExistingWorkPolicy.REPLACE, request)
     }
 
     private fun defaultDlsiteEditions(rj: String): List<DlsiteLanguageEdition> {
@@ -1628,7 +1644,7 @@ class AlbumDetailViewModel @Inject constructor(
         val coverDir = File(context.filesDir, "album_covers").apply { if (!exists()) mkdirs() }
         val thumbDir = File(context.filesDir, "album_thumbs").apply { if (!exists()) mkdirs() }
         val coverFile = File(coverDir, "a_${albumId}_$sourceHash.jpg")
-        val thumbFile = File(thumbDir, "a_${albumId}_$sourceHash.jpg")
+        val thumbFile = File(thumbDir, "a_${albumId}_${sourceHash}_v2.jpg")
 
         if (coverFile.exists() && coverFile.length() > 0L && thumbFile.exists() && thumbFile.length() > 0L) {
             val entity = try {
@@ -1681,7 +1697,7 @@ class AlbumDetailViewModel @Inject constructor(
                 while (maxDim / sample > 2048) sample *= 2
                 val opts = BitmapFactory.Options().apply {
                     inSampleSize = sample
-                    inPreferredConfig = Bitmap.Config.RGB_565
+                    inPreferredConfig = Bitmap.Config.ARGB_8888
                 }
                 BitmapFactory.decodeFile(tmpFile.absolutePath, opts) ?: return fail("decode_failed_sample_$sample")
             } finally {
@@ -1704,7 +1720,7 @@ class AlbumDetailViewModel @Inject constructor(
                 while (maxDim / sample > 2048) sample *= 2
                 val opts = BitmapFactory.Options().apply {
                     inSampleSize = sample
-                    inPreferredConfig = Bitmap.Config.RGB_565
+                    inPreferredConfig = Bitmap.Config.ARGB_8888
                 }
                 BitmapFactory.decodeFile(f.absolutePath, opts) ?: return fail("file_decode_failed_sample_$sample")
             } else {
@@ -1722,7 +1738,7 @@ class AlbumDetailViewModel @Inject constructor(
                 while (maxDim / sample > 2048) sample *= 2
                 val opts = BitmapFactory.Options().apply {
                     inSampleSize = sample
-                    inPreferredConfig = Bitmap.Config.RGB_565
+                    inPreferredConfig = Bitmap.Config.ARGB_8888
                 }
                 context.contentResolver.openInputStream(uri)?.use { input ->
                     BitmapFactory.decodeStream(input, null, opts)
@@ -1731,11 +1747,11 @@ class AlbumDetailViewModel @Inject constructor(
         }
 
         FileOutputStream(coverFile).use { out ->
-            bitmap.compress(Bitmap.CompressFormat.JPEG, 92, out)
+            bitmap.compress(Bitmap.CompressFormat.JPEG, 95, out)
         }
-        val thumb = centerCropSquare(bitmap, 320)
+        val thumb = centerCropSquare(bitmap, 640)
         FileOutputStream(thumbFile).use { out ->
-            thumb.compress(Bitmap.CompressFormat.JPEG, 85, out)
+            thumb.compress(Bitmap.CompressFormat.JPEG, 95, out)
         }
 
         return try {
@@ -1751,11 +1767,11 @@ class AlbumDetailViewModel @Inject constructor(
     private fun centerCropSquare(src: Bitmap, size: Int): Bitmap {
         val w = src.width
         val h = src.height
-        if (w <= 0 || h <= 0) return Bitmap.createBitmap(size, size, Bitmap.Config.RGB_565)
+        if (w <= 0 || h <= 0) return Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
         val side = minOf(w, h)
         val left = (w - side) / 2
         val top = (h - side) / 2
-        val out = Bitmap.createBitmap(size, size, Bitmap.Config.RGB_565)
+        val out = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(out)
         val paint = Paint(Paint.FILTER_BITMAP_FLAG)
         canvas.drawBitmap(

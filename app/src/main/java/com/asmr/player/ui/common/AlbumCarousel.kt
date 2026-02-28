@@ -65,7 +65,10 @@ fun AlbumCarousel(
         ) {
             Box {
                 AsmrAsyncImage(
-                    model = album.coverThumbPath.ifBlank { album.coverPath }.ifEmpty { album.coverUrl },
+                    model = album.coverThumbPath.takeIf { it.isNotBlank() && it.contains("_v2") }
+                        .orEmpty()
+                        .ifBlank { album.coverPath }
+                        .ifEmpty { album.coverUrl },
                     contentDescription = null,
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Crop,

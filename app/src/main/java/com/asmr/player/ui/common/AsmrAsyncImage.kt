@@ -25,6 +25,7 @@ import com.asmr.player.cache.ImageCacheEntryPoint
 import dagger.hilt.android.EntryPointAccessors
 import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.withTimeoutOrNull
 
 @Composable
 fun AsmrAsyncImage(
@@ -71,7 +72,9 @@ fun AsmrAsyncImage(
             state.value = AsmrAsyncImageState.Loading
             painter.value = null
             crossfade.snapTo(0f)
-            val img = manager.loadImage(model = normalizedModel, size = sz, cachePolicy = CachePolicy.DEFAULT)
+            val img = withTimeoutOrNull(15_000) {
+                manager.loadImage(model = normalizedModel, size = sz, cachePolicy = CachePolicy.DEFAULT)
+            } ?: throw IllegalStateException("Image load timeout")
             painter.value = BitmapPainter(img)
             state.value = AsmrAsyncImageState.Success
             if (fadeIn) {

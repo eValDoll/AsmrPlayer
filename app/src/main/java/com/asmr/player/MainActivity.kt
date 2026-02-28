@@ -262,10 +262,11 @@ class MainActivity : ComponentActivity() {
                 val overflowKey = "__overflow__"
 
                 messageManager.messages.collect { appMessage ->
+                    val now = System.currentTimeMillis()
+                    if ((now - appMessage.createdAtMs) > 10_000L) return@collect
                     val normalized = appMessage.message.trim()
                     if (normalized.isBlank()) return@collect
                     val dedupeKey = "${appMessage.type.name}|$normalized"
-                    val now = System.currentTimeMillis()
                     val lastAt = recentMessageAtMs[dedupeKey]
                     recentMessageAtMs[dedupeKey] = now
                     val displayMs = appMessage.durationMs.coerceIn(1500L, 4500L)
@@ -373,6 +374,7 @@ class MainActivity : ComponentActivity() {
                 var showSplash by rememberSaveable { mutableStateOf(true) }
                 var contentReady by remember { mutableStateOf(false) }
                 Box(modifier = Modifier.fillMaxSize()) {
+                    val visibleMessagesSnapshot = visibleMessages.toList()
                     MainContainer(
                         windowSizeClass = windowSizeClass,
                         playerViewModel = playerViewModel,
@@ -382,7 +384,7 @@ class MainActivity : ComponentActivity() {
                         startRouteFromIntent = startRouteFromIntent,
                         onShowQueue = { showQueue = true },
                         onContentReady = { contentReady = true },
-                        visibleMessages = visibleMessages,
+                        visibleMessages = visibleMessagesSnapshot,
                         mode = mode,
                         globalDynamicHueEnabled = globalDynamicHueEnabled,
                         coverBackgroundEnabled = coverBackgroundEnabled,
