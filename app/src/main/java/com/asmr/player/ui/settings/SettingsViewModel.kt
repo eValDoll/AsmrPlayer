@@ -130,10 +130,10 @@ class SettingsViewModel @Inject constructor(
             try {
                 val dir = context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: context.filesDir
                 val safeTag = release.tagName.replace(Regex("""[\\/:*?"<>|]"""), "_").ifBlank { "latest" }
-                val file = File(dir, "asmrplayer-$safeTag.apk")
+                val file = File(dir, "eara-$safeTag.apk")
                 val req = Request.Builder()
                     .url(release.apkUrl)
-                    .header("User-Agent", "AsmrPlayer-Android")
+                    .header("User-Agent", "Eara-Android")
                     .get()
                     .build()
 

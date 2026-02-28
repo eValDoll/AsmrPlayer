@@ -23,7 +23,7 @@ class AsmrOneLatencyBenchmarkTest {
             val start = System.nanoTime()
             val req = Request.Builder()
                 .url(url)
-                .header("User-Agent", "AsmrPlayer-LatencyTest")
+                .header("User-Agent", "Eara-LatencyTest")
                 .build()
             val ok = runCatching {
                 client.newCall(req).execute().use { resp ->
