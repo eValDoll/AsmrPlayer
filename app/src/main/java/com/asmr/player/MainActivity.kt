@@ -1339,11 +1339,12 @@ fun MainContainer(
                     label = "miniPlayerReservedRight"
                 )
                 val miniWidth = (maxWidth - reservedRight).coerceAtLeast(0.dp)
-                val miniAlignment = if (showRightPanel) Alignment.BottomStart else Alignment.BottomCenter
+                val miniAlignment = Alignment.BottomStart
                 Box(
                     modifier = Modifier
                         .align(miniAlignment)
-                        .width(miniWidth)
+                        .padding(start = 24.dp) // 增加左侧外边距
+                        .width(miniWidth - 24.dp) // 宽度相应减小
                 ) {
                     MiniPlayer(
                         onClick = {

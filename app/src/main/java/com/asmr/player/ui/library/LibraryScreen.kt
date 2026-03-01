@@ -60,7 +60,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
@@ -139,6 +140,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import com.asmr.player.ui.common.CustomSearchBar
+import com.asmr.player.ui.common.ActionButton
 
 @Composable
 private fun LibraryActionItem(
@@ -376,105 +379,7 @@ fun LibraryScreen(
                             }
                         } else {
                             // Main content area
-                            Column(modifier = Modifier.fillMaxSize()) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 16.dp, vertical = 4.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    OutlinedTextField(
-                                        value = searchText,
-                                        onValueChange = {
-                                            searchText = it
-                                            viewModel.setSearchQuery(it)
-                                        },
-                                        modifier = Modifier.weight(1f).heightIn(min = 48.dp),
-                                        singleLine = true,
-                                        leadingIcon = {
-                                            Icon(
-                                                imageVector = Icons.Default.Search,
-                                                contentDescription = null,
-                                                tint = colorScheme.onSurface
-                                            )
-                                        },
-                                        trailingIcon = {
-                                            if (searchText.isNotBlank()) {
-                                                IconButton(
-                                                    onClick = {
-                                                        searchText = ""
-                                                        viewModel.setSearchQuery("")
-                                                    },
-                                                    modifier = Modifier.size(40.dp)
-                                                ) {
-                                                    Icon(
-                                                        imageVector = Icons.Default.Close,
-                                                        contentDescription = null,
-                                                        tint = colorScheme.onSurface
-                                                    )
-                                                }
-                                            }
-                                        },
-                                        placeholder = {
-                                            Text(
-                                                text = "社团 / CV / 标签...",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = colorScheme.onSurface.copy(alpha = 0.6f),
-                                                maxLines = 1
-                                            )
-                                        },
-                                        textStyle = MaterialTheme.typography.bodySmall
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Box {
-                                        IconButton(onClick = { sortMenuExpanded = true }, modifier = Modifier.size(40.dp)) {
-                                            Icon(
-                                                imageVector = Icons.Default.SwapVert,
-                                                contentDescription = null,
-                                                tint = colorScheme.onSurface
-                                            )
-                                        }
-                                        DropdownMenu(
-                                            expanded = sortMenuExpanded,
-                                            onDismissRequest = { sortMenuExpanded = false }
-                                        ) {
-                                            DropdownMenuItem(
-                                                text = { Text("最近播放") },
-                                                onClick = {
-                                                    sortMenuExpanded = false
-                                                    viewModel.setSort(LibrarySort.LastPlayedDesc)
-                                                }
-                                            )
-                                            DropdownMenuItem(
-                                                text = { Text("最近加入") },
-                                                onClick = {
-                                                    sortMenuExpanded = false
-                                                    viewModel.setSort(LibrarySort.AddedDesc)
-                                                }
-                                            )
-                                            DropdownMenuItem(
-                                                text = { Text("标题") },
-                                                onClick = {
-                                                    sortMenuExpanded = false
-                                                    viewModel.setSort(LibrarySort.TitleAsc)
-                                                }
-                                            )
-                                        }
-                                    }
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    IconButton(onClick = { showFilterSheet = true }, modifier = Modifier.size(40.dp)) {
-                                        Icon(
-                                            imageVector = Icons.Default.FilterList,
-                                            contentDescription = null,
-                                            tint = colorScheme.onSurface
-                                        )
-                                    }
-                                    if (rightPanelToggle != null) {
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        rightPanelToggle(Modifier.size(40.dp))
-                                    }
-                                }
-
+                            Box(modifier = Modifier.fillMaxSize()) {
                                 val isTrackListLoading = isTrackList &&
                                     (pagedTrackAlbumHeaders.loadState.refresh is LoadState.Loading) &&
                                     pagedTrackAlbumHeaders.itemCount == 0
@@ -540,7 +445,7 @@ fun LibraryScreen(
                                     LazyColumn(
                                         state = listState,
                                         modifier = Modifier.fillMaxSize(),
-                                        contentPadding = PaddingValues(vertical = 8.dp)
+                                        contentPadding = PaddingValues(top = 80.dp, bottom = 8.dp)
                                             .withAddedBottomPadding(LocalBottomOverlayPadding.current)
                                     ) {
                                         val headerCount = pagedTrackAlbumHeaders.itemCount
@@ -703,7 +608,7 @@ fun LibraryScreen(
                                         columns = StaggeredGridCells.Adaptive(150.dp),
                                         state = gridState,
                                         modifier = Modifier.fillMaxSize(),
-                                        contentPadding = PaddingValues(16.dp)
+                                        contentPadding = PaddingValues(top = 80.dp, start = 16.dp, end = 16.dp, bottom = 16.dp)
                                             .withAddedBottomPadding(LocalBottomOverlayPadding.current),
                                         verticalItemSpacing = 16.dp,
                                         horizontalArrangement = Arrangement.spacedBy(16.dp)
@@ -755,7 +660,7 @@ fun LibraryScreen(
                                     LazyColumn(
                                         state = listState,
                                         modifier = Modifier.fillMaxSize(),
-                                        contentPadding = PaddingValues(vertical = 8.dp)
+                                        contentPadding = PaddingValues(top = 80.dp, bottom = 8.dp)
                                             .withAddedBottomPadding(LocalBottomOverlayPadding.current)
                                     ) {
                                         items(
@@ -774,6 +679,90 @@ fun LibraryScreen(
                                                 }
                                             )
                                         }
+                                    }
+                                }
+
+                                Row(
+                                    modifier = Modifier
+                                        .align(Alignment.TopCenter)
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    CustomSearchBar(
+                                        value = searchText,
+                                        onValueChange = {
+                                            searchText = it
+                                            viewModel.setSearchQuery(it)
+                                        },
+                                        placeholder = "社团 / CV / 标签...",
+                                        modifier = Modifier.weight(1f),
+                                        leadingIcon = {
+                                            Icon(
+                                                imageVector = Icons.Default.Search,
+                                                contentDescription = null,
+                                                tint = colorScheme.onSurfaceVariant
+                                            )
+                                        },
+                                        trailingIcon = if (searchText.isNotBlank()) {
+                                            {
+                                                IconButton(
+                                                    onClick = {
+                                                        searchText = ""
+                                                        viewModel.setSearchQuery("")
+                                                    },
+                                                    modifier = Modifier.size(24.dp)
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.Close,
+                                                        contentDescription = null,
+                                                        tint = colorScheme.onSurfaceVariant
+                                                    )
+                                                }
+                                            }
+                                        } else null
+                                    )
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Box {
+                                        ActionButton(
+                                            icon = Icons.Default.SwapVert,
+                                            onClick = { sortMenuExpanded = true }
+                                        )
+                                        DropdownMenu(
+                                            expanded = sortMenuExpanded,
+                                            onDismissRequest = { sortMenuExpanded = false }
+                                        ) {
+                                            DropdownMenuItem(
+                                                text = { Text("最近播放") },
+                                                onClick = {
+                                                    sortMenuExpanded = false
+                                                    viewModel.setSort(LibrarySort.LastPlayedDesc)
+                                                }
+                                            )
+                                            DropdownMenuItem(
+                                                text = { Text("最近加入") },
+                                                onClick = {
+                                                    sortMenuExpanded = false
+                                                    viewModel.setSort(LibrarySort.AddedDesc)
+                                                }
+                                            )
+                                            DropdownMenuItem(
+                                                text = { Text("标题") },
+                                                onClick = {
+                                                    sortMenuExpanded = false
+                                                    viewModel.setSort(LibrarySort.TitleAsc)
+                                                }
+                                            )
+                                        }
+                                    }
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    ActionButton(
+                                        icon = Icons.Default.FilterList,
+                                        onClick = { showFilterSheet = true }
+                                    )
+                                    if (rightPanelToggle != null) {
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        rightPanelToggle(Modifier.size(50.dp))
                                     }
                                 }
                             }

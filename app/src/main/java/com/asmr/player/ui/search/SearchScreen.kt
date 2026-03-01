@@ -35,6 +35,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.background
 import com.asmr.player.ui.theme.AsmrTheme
+import com.asmr.player.ui.common.CustomSearchBar
+import com.asmr.player.ui.common.ActionButton
 import androidx.compose.foundation.lazy.items as lazyItems
 
 import androidx.compose.runtime.rememberCoroutineScope
@@ -46,6 +48,8 @@ import kotlinx.coroutines.launch
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.material3.pulltorefresh.PullToRefreshContainer
 import kotlin.math.absoluteValue
+import androidx.compose.ui.draw.shadow
+import androidx.compose.foundation.border
 
 private enum class SearchResultViewMode { Grid, List }
 
@@ -158,7 +162,7 @@ fun SearchScreen(
                 modifier = contentModifier,
                 contentAlignment = if (hasRightPanel) Alignment.TopStart else Alignment.TopCenter
             ) {
-                Column(
+                Box(
                     modifier = if (isCompact) {
                         Modifier.fillMaxSize()
                     } else if (hasRightPanel) {
@@ -170,166 +174,7 @@ fun SearchScreen(
                             .fillMaxWidth()
                     }
                 ) {
-                    TextField(
-                        value = keyword,
-                        onValueChange = { keyword = it },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 48.dp)
-                            .padding(horizontal = 16.dp, vertical = 2.dp)
-                            .clip(RoundedCornerShape(16.dp)),
-                        leadingIcon = {
-                            val currentOrder = success?.order ?: SearchSortOption.Trend
-                            val label = if (purchasedOnly) "仅已购" else currentOrder.label
-                            TextButton(
-                                onClick = { scopeMenuExpanded = true },
-                                enabled = success != null && !(success.isPaging),
-                                modifier = Modifier.height(32.dp),
-                                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
-                                colors = ButtonDefaults.textButtonColors(contentColor = colorScheme.primary)
-                            ) {
-                                Text(label, style = MaterialTheme.typography.labelSmall, maxLines = 1)
-                            }
-                            DropdownMenu(
-                                expanded = scopeMenuExpanded,
-                                onDismissRequest = { scopeMenuExpanded = false },
-                                modifier = Modifier.background(colorScheme.surface)
-                            ) {
-                                DropdownMenuItem(
-                                    text = { Text("仅已购", color = colorScheme.textPrimary) },
-                                    onClick = {
-                                        scopeMenuExpanded = false
-                                        purchasedOnly = true
-                                        viewModel.setPurchasedOnly(true)
-                                    }
-                                )
-                                SearchSortOption.values().forEach { option ->
-                                    DropdownMenuItem(
-                                        text = { Text(option.label, color = colorScheme.textPrimary) },
-                                        onClick = {
-                                            scopeMenuExpanded = false
-                                            purchasedOnly = false
-                                            viewModel.setPurchasedOnly(false)
-                                            viewModel.setOrder(option)
-                                        }
-                                    )
-                                }
-                            }
-                        },
-                        placeholder = {
-                            Text(
-                                text = "搜索专辑、社团、CV...",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = colorScheme.textTertiary,
-                                maxLines = 1
-                            )
-                        },
-                        trailingIcon = {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                val languageLabel = when (selectedLocale.trim()) {
-                                    "zh_CN" -> "简中"
-                                    "zh_TW" -> "繁中"
-                                    else -> "日语"
-                                }
-                                Box {
-                                    TextButton(
-                                        onClick = { languageMenuExpanded = true },
-                                        enabled = success != null && !(success.isPaging),
-                                        modifier = Modifier.height(32.dp),
-                                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
-                                        colors = ButtonDefaults.textButtonColors(contentColor = colorScheme.primary)
-                                    ) {
-                                        Text(languageLabel, style = MaterialTheme.typography.labelSmall, maxLines = 1)
-                                    }
-                                    DropdownMenu(
-                                        expanded = languageMenuExpanded,
-                                        onDismissRequest = { languageMenuExpanded = false },
-                                        modifier = Modifier.background(colorScheme.surface)
-                                    ) {
-                                        DropdownMenuItem(
-                                            text = { Text("日语", color = colorScheme.textPrimary) },
-                                            onClick = {
-                                                languageMenuExpanded = false
-                                                purchasedOnly = false
-                                                selectedLocale = "ja_JP"
-                                                viewModel.setPurchasedOnly(false)
-                                                viewModel.setLocale("ja_JP")
-                                            }
-                                        )
-                                        DropdownMenuItem(
-                                            text = { Text("简中", color = colorScheme.textPrimary) },
-                                            onClick = {
-                                                languageMenuExpanded = false
-                                                purchasedOnly = false
-                                                selectedLocale = "zh_CN"
-                                                viewModel.setPurchasedOnly(false)
-                                                viewModel.setLocale("zh_CN")
-                                            }
-                                        )
-                                        DropdownMenuItem(
-                                            text = { Text("繁中", color = colorScheme.textPrimary) },
-                                            onClick = {
-                                                languageMenuExpanded = false
-                                                purchasedOnly = false
-                                                selectedLocale = "zh_TW"
-                                                viewModel.setPurchasedOnly(false)
-                                                viewModel.setLocale("zh_TW")
-                                            }
-                                        )
-                                    }
-                                }
-                                IconButton(
-                                    onClick = {
-                                        viewModel.search(keyword)
-                                        scope.launch {
-                                            listState.scrollToItem(0)
-                                            gridState.scrollToItem(0)
-                                        }
-                                    },
-                                    modifier = Modifier.size(40.dp)
-                                ) {
-                                    Icon(Icons.Default.Search, contentDescription = null, tint = colorScheme.primary)
-                                }
-                                if (rightPanelToggle != null) {
-                                    rightPanelToggle(Modifier.size(40.dp))
-                                }
-                            }
-                        },
-                        textStyle = MaterialTheme.typography.bodySmall,
-                        colors = TextFieldDefaults.colors(
-                            focusedContainerColor = colorScheme.surface.copy(alpha = 0.5f),
-                            unfocusedContainerColor = colorScheme.surface.copy(alpha = 0.3f),
-                            disabledContainerColor = colorScheme.surface.copy(alpha = 0.1f),
-                            focusedIndicatorColor = Color.Transparent,
-                            unfocusedIndicatorColor = Color.Transparent,
-                            focusedTextColor = colorScheme.textPrimary,
-                            unfocusedTextColor = colorScheme.textSecondary
-                        ),
-                        singleLine = true
-                    )
-
-                    if (success != null) {
-                        SearchPaginationHeader(
-                            page = success.page,
-                            canGoPrev = success.canGoPrev,
-                            canGoNext = success.canGoNext,
-                            isPaging = success.isPaging,
-                            onPrev = {
-                                scope.launch {
-                                    listState.scrollToItem(0)
-                                    gridState.scrollToItem(0)
-                                }
-                                viewModel.prevPage()
-                            },
-                            onNext = {
-                                scope.launch {
-                                    listState.scrollToItem(0)
-                                    gridState.scrollToItem(0)
-                                }
-                                viewModel.nextPage()
-                            }
-                        )
-                    }
+                    val topPadding = if (success != null) 120.dp else 80.dp
 
                     Box(
                         modifier = Modifier
@@ -341,7 +186,8 @@ fun SearchScreen(
                             is SearchUiState.Loading -> Column(
                                 modifier = Modifier
                                     .fillMaxSize()
-                                    .verticalScroll(rememberScrollState()),
+                                    .verticalScroll(rememberScrollState())
+                                    .padding(top = topPadding),
                                 horizontalAlignment = Alignment.CenterHorizontally,
                                 verticalArrangement = Arrangement.Center
                             ) {
@@ -353,7 +199,7 @@ fun SearchScreen(
                                     LazyColumn(
                                         state = listState,
                                         modifier = Modifier.fillMaxSize(),
-                                        contentPadding = PaddingValues(vertical = 8.dp)
+                                        contentPadding = PaddingValues(top = topPadding, bottom = 8.dp)
                                             .withAddedBottomPadding(LocalBottomOverlayPadding.current)
                                     ) {
                                         lazyItems(
@@ -369,7 +215,7 @@ fun SearchScreen(
                                         columns = StaggeredGridCells.Adaptive(150.dp),
                                         state = gridState,
                                         modifier = Modifier.fillMaxSize(),
-                                        contentPadding = PaddingValues(16.dp)
+                                        contentPadding = PaddingValues(top = topPadding, start = 16.dp, end = 16.dp, bottom = 16.dp)
                                             .withAddedBottomPadding(LocalBottomOverlayPadding.current),
                                         horizontalArrangement = Arrangement.spacedBy(16.dp),
                                         verticalItemSpacing = 16.dp
@@ -396,7 +242,8 @@ fun SearchScreen(
                             is SearchUiState.Error -> Column(
                                 modifier = Modifier
                                     .fillMaxSize()
-                                    .verticalScroll(rememberScrollState()),
+                                    .verticalScroll(rememberScrollState())
+                                    .padding(top = topPadding),
                                 horizontalAlignment = Alignment.CenterHorizontally,
                                 verticalArrangement = Arrangement.Center
                             ) {
@@ -412,8 +259,163 @@ fun SearchScreen(
 
                         PullToRefreshContainer(
                             state = pullToRefreshState,
-                            modifier = Modifier.align(Alignment.TopCenter)
+                            modifier = Modifier
+                                .align(Alignment.TopCenter)
+                                .padding(top = topPadding)
+                                .then(if (pullToRefreshState.progress > 0 || pullToRefreshState.isRefreshing) Modifier else Modifier.size(0.dp))
                         )
+                    }
+
+                    Column(modifier = Modifier.align(Alignment.TopCenter)) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            CustomSearchBar(
+                                value = keyword,
+                                onValueChange = { keyword = it },
+                                placeholder = "搜索专辑、社团、CV...",
+                                modifier = Modifier.weight(1f),
+                                leadingIcon = {
+                                val currentOrder = success?.order ?: SearchSortOption.Trend
+                                val label = if (purchasedOnly) "仅已购" else currentOrder.label
+                                Box {
+                                    TextButton(
+                                        onClick = { scopeMenuExpanded = true },
+                                        enabled = success != null && !(success.isPaging),
+                                        modifier = Modifier.height(32.dp),
+                                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
+                                        colors = ButtonDefaults.textButtonColors(contentColor = colorScheme.primary)
+                                    ) {
+                                        Text(label, style = MaterialTheme.typography.labelSmall, maxLines = 1)
+                                    }
+                                    DropdownMenu(
+                                        expanded = scopeMenuExpanded,
+                                        onDismissRequest = { scopeMenuExpanded = false },
+                                        modifier = Modifier.background(colorScheme.surface)
+                                    ) {
+                                        DropdownMenuItem(
+                                            text = { Text("仅已购", color = colorScheme.textPrimary) },
+                                            onClick = {
+                                                scopeMenuExpanded = false
+                                                purchasedOnly = true
+                                                viewModel.setPurchasedOnly(true)
+                                            }
+                                        )
+                                        SearchSortOption.values().forEach { option ->
+                                            DropdownMenuItem(
+                                                text = { Text(option.label, color = colorScheme.textPrimary) },
+                                                onClick = {
+                                                    scopeMenuExpanded = false
+                                                    purchasedOnly = false
+                                                    viewModel.setPurchasedOnly(false)
+                                                    viewModel.setOrder(option)
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
+                            },
+                            trailingIcon = {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    val languageLabel = when (selectedLocale.trim()) {
+                                        "zh_CN" -> "简中"
+                                        "zh_TW" -> "繁中"
+                                        else -> "日语"
+                                    }
+                                    Box {
+                                        TextButton(
+                                            onClick = { languageMenuExpanded = true },
+                                            enabled = success != null && !(success.isPaging),
+                                            modifier = Modifier.height(32.dp),
+                                            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
+                                            colors = ButtonDefaults.textButtonColors(contentColor = colorScheme.primary)
+                                        ) {
+                                            Text(languageLabel, style = MaterialTheme.typography.labelSmall, maxLines = 1)
+                                        }
+                                        DropdownMenu(
+                                            expanded = languageMenuExpanded,
+                                            onDismissRequest = { languageMenuExpanded = false },
+                                            modifier = Modifier.background(colorScheme.surface)
+                                        ) {
+                                            DropdownMenuItem(
+                                                text = { Text("日语", color = colorScheme.textPrimary) },
+                                                onClick = {
+                                                    languageMenuExpanded = false
+                                                    purchasedOnly = false
+                                                    selectedLocale = "ja_JP"
+                                                    viewModel.setPurchasedOnly(false)
+                                                    viewModel.setLocale("ja_JP")
+                                                }
+                                            )
+                                            DropdownMenuItem(
+                                                text = { Text("简中", color = colorScheme.textPrimary) },
+                                                onClick = {
+                                                    languageMenuExpanded = false
+                                                    purchasedOnly = false
+                                                    selectedLocale = "zh_CN"
+                                                    viewModel.setPurchasedOnly(false)
+                                                    viewModel.setLocale("zh_CN")
+                                                }
+                                            )
+                                            DropdownMenuItem(
+                                                text = { Text("繁中", color = colorScheme.textPrimary) },
+                                                onClick = {
+                                                    languageMenuExpanded = false
+                                                    purchasedOnly = false
+                                                    selectedLocale = "zh_TW"
+                                                    viewModel.setPurchasedOnly(false)
+                                                    viewModel.setLocale("zh_TW")
+                                                }
+                                            )
+                                        }
+                                    }
+                                    IconButton(
+                                        onClick = {
+                                            viewModel.search(keyword)
+                                            scope.launch {
+                                                listState.scrollToItem(0)
+                                                gridState.scrollToItem(0)
+                                            }
+                                        },
+                                        modifier = Modifier.size(32.dp)
+                                    ) {
+                                        Icon(Icons.Default.Search, contentDescription = null, tint = colorScheme.primary)
+                                    }
+                                }
+                            }
+                        )
+
+                        if (rightPanelToggle != null) {
+                            Spacer(modifier = Modifier.width(8.dp))
+                            rightPanelToggle(Modifier.size(50.dp))
+                        }
+                    }
+
+                    if (success != null) {
+                            SearchPaginationHeader(
+                                page = success.page,
+                                canGoPrev = success.canGoPrev,
+                                canGoNext = success.canGoNext,
+                                isPaging = success.isPaging,
+                                onPrev = {
+                                    scope.launch {
+                                        listState.scrollToItem(0)
+                                        gridState.scrollToItem(0)
+                                    }
+                                    viewModel.prevPage()
+                                },
+                                onNext = {
+                                    scope.launch {
+                                        listState.scrollToItem(0)
+                                        gridState.scrollToItem(0)
+                                    }
+                                    viewModel.nextPage()
+                                }
+                            )
+                        }
                     }
                 }
             }
@@ -431,6 +433,8 @@ private fun SearchPaginationHeader(
     onNext: () -> Unit
 ) {
     val colorScheme = AsmrTheme.colorScheme
+    val isDark = colorScheme.isDark
+    
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -439,8 +443,23 @@ private fun SearchPaginationHeader(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .shadow(
+                    elevation = if (isDark) 12.dp else 8.dp,
+                    shape = RoundedCornerShape(14.dp),
+                    spotColor = if (isDark) Color.Black.copy(alpha = 0.8f) else Color.Black.copy(alpha = 0.25f),
+                    ambientColor = if (isDark) Color.Black.copy(alpha = 0.8f) else Color.Black.copy(alpha = 0.25f)
+                )
+                .then(
+                    if (isDark) {
+                        Modifier.border(
+                            width = 1.dp,
+                            color = Color.White.copy(alpha = 0.2f),
+                            shape = RoundedCornerShape(14.dp)
+                        )
+                    } else Modifier
+                )
                 .clip(RoundedCornerShape(14.dp))
-                .background(colorScheme.surface.copy(alpha = 0.35f))
+                .background(if (isDark) colorScheme.surface.copy(alpha = 0.3f) else Color.White)
                 .padding(horizontal = 8.dp, vertical = 2.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -452,7 +471,7 @@ private fun SearchPaginationHeader(
                 Icon(
                     Icons.AutoMirrored.Filled.ArrowBack, 
                     contentDescription = null,
-                    tint = if (canGoPrev && !isPaging) colorScheme.primary else colorScheme.textTertiary
+                    tint = if (canGoPrev && !isPaging) colorScheme.primary else (if (isDark) colorScheme.textTertiary else Color.Gray)
                 )
             }
             Spacer(modifier = Modifier.weight(1f))
@@ -460,7 +479,7 @@ private fun SearchPaginationHeader(
                 Text(
                     text = "第 $page 页", 
                     style = MaterialTheme.typography.bodySmall,
-                    color = colorScheme.textPrimary
+                    color = if (isDark) colorScheme.textPrimary else Color.Black
                 )
             }
             Spacer(modifier = Modifier.weight(1f))
@@ -472,7 +491,7 @@ private fun SearchPaginationHeader(
                 Icon(
                     Icons.AutoMirrored.Filled.ArrowForward, 
                     contentDescription = null,
-                    tint = if (canGoNext && !isPaging) colorScheme.primary else colorScheme.textTertiary
+                    tint = if (canGoNext && !isPaging) colorScheme.primary else (if (isDark) colorScheme.textTertiary else Color.Gray)
                 )
             }
         }

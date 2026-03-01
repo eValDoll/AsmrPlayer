@@ -38,6 +38,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 
+import com.asmr.player.ui.common.ActionButton
+
 @Composable
 fun LandscapeRightPanelHost(
     windowSizeClass: WindowSizeClass,
@@ -87,19 +89,12 @@ fun LandscapeRightPanelHost(
         val panelVisibilityState = remember { MutableTransitionState(expanded) }
         panelVisibilityState.targetState = expanded
         val keepPanelSpace = panelVisibilityState.currentState || panelVisibilityState.targetState
-        val toggle: @Composable (modifier: Modifier) -> Unit = { modifier ->
-            IconButton(onClick = { setExpanded(!expanded) }, modifier = modifier) {
-                Icon(
-                    imageVector = if (expanded) {
-                        Icons.AutoMirrored.Filled.KeyboardArrowRight
-                    } else {
-                        Icons.AutoMirrored.Filled.KeyboardArrowLeft
-                    },
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.padding(4.dp)
-                )
-            }
+        val toggle: @Composable (Modifier) -> Unit = { modifier ->
+            ActionButton(
+                icon = if (expanded) Icons.AutoMirrored.Filled.KeyboardArrowRight else Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+                onClick = { setExpanded(!expanded) },
+                modifier = modifier
+            )
         }
 
         Box(modifier = Modifier.fillMaxSize()) {

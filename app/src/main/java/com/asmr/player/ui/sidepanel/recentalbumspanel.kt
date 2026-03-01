@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -47,6 +48,10 @@ import com.asmr.player.ui.common.AsmrAsyncImage
 import com.asmr.player.ui.player.PlayerViewModel
 import com.asmr.player.ui.theme.AsmrTheme
 import androidx.compose.runtime.remember
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Color
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.AnimationVector1D
@@ -198,11 +203,11 @@ internal fun RecentAlbumsList(
         val count = target.size
         val targetIds = target.map { it.album.id }.toSet()
         val featuredId = target.firstOrNull()?.album?.id
-        val featuredWeight = 1.6f
+        val featuredWeight = 2.5f
         val normalWeight = 1f
         val totalWeight = if (count == 1) 1f else featuredWeight + (count - 1) * normalWeight
         val availableHeight = maxHeight - spacing * (count - 1)
-        val maxItem = 120.dp
+        val maxItem = 60.dp
         val featuredMax = 160.dp
 
         val targetOrderIds = remember(target) { target.map { it.album.id } }
@@ -393,23 +398,72 @@ private fun RecentAlbumRow(
     ) {
         val contentPadH = if (featured) 18.dp else 14.dp
         val contentPadV = if (featured) 14.dp else 10.dp
+        val coverModel = albumThumb(item.album)
 
-        AsmrAsyncImage(
-            model = albumThumb(item.album),
-            contentDescription = item.album.title,
-            modifier = Modifier
-                .fillMaxSize()
-                .then(blurModifier),
-            alpha = 1f,
-            placeholderCornerRadius = 16,
-            contentScale = ContentScale.Crop
-        )
+        if (featured) {
+            // 1. 底层清晰图
+            AsmrAsyncImage(
+                model = coverModel,
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop,
+                placeholderCornerRadius = 16
+            )
 
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color.Black.copy(alpha = if (featured) 0.36f else 0.42f))
-        )
+            // 2. 顶层模糊图（带渐变遮罩，只在底部显示模糊）
+            AsmrAsyncImage(
+                model = coverModel,
+                contentDescription = null,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .then(blurModifier)
+                    .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+                    .drawWithContent {
+                        drawContent()
+                        drawRect(
+                            brush = Brush.verticalGradient(
+                                0f to Color.Transparent,
+                                0.6f to Color.Transparent,
+                                1f to Color.Black
+                            ),
+                            blendMode = BlendMode.DstIn
+                        )
+                    },
+                contentScale = ContentScale.Crop,
+                placeholderCornerRadius = 16
+            )
+
+            // 3. 渐变变暗遮罩（底部更暗以突出文字）
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        brush = Brush.verticalGradient(
+                            colors = listOf(
+                                Color.Black.copy(alpha = 0.1f),
+                                Color.Black.copy(alpha = 0.6f)
+                            )
+                        )
+                    )
+            )
+        } else {
+            // 非首个item：整体模糊 + 遮罩
+            AsmrAsyncImage(
+                model = coverModel,
+                contentDescription = null,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .then(blurModifier),
+                contentScale = ContentScale.Crop,
+                placeholderCornerRadius = 16
+            )
+
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.6f))
+            )
+        }
 
         Box(
             modifier = Modifier
@@ -445,11 +499,16 @@ private fun RecentAlbumRow(
                 )
             }
             Spacer(modifier = Modifier.size(if (featured) 12.dp else 10.dp))
-            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight(),
+                verticalArrangement = if (featured) Arrangement.Bottom else Arrangement.Center
+            ) {
                 Text(
                     text = item.album.title,
                     color = textColor,
-                    style = (if (featured) MaterialTheme.typography.bodyLarge else MaterialTheme.typography.labelMedium)
+                    style = (if (featured) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.labelSmall)
                         .copy(fontWeight = FontWeight.SemiBold),
                     maxLines = if (featured) 2 else 1,
                     overflow = TextOverflow.Ellipsis
@@ -460,7 +519,7 @@ private fun RecentAlbumRow(
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.End
+                        horizontalArrangement = Arrangement.Start
                     ) {
                         Text(
                             text = "上次听到",
