@@ -59,7 +59,7 @@ Eara 是一款面向 ASMR 内容的 Android 播放器：既拥有顺滑的本地
 
 ## 下载体验
 
-- 从 **GitHub Releases** 下载（tag `v*`，最新为 `v0.2.1`）
+- 从 **GitHub Releases** 下载（tag `v*`，最新：`v0.2.1`）
 - 或在本地自行构建 Debug：
 
 ```bash
@@ -74,6 +74,37 @@ Eara 是一款面向 ASMR 内容的 Android 播放器：既拥有顺滑的本地
 - 片段与循环：在“正在播放”页开启“切片模式”，标记片段并进行 AB 循环/拖拽微调
 - DLsite 已购：从侧边/设置进入“DLsite 登录”，登录后可在详情页使用已购播放/下载
 - 下载管理：在“下载”页查看任务进度与状态，支持后台进行
+
+## 本地编译与安装（含 Profile）
+
+### 环境要求
+- Android Studio（建议使用稳定版）
+- JDK 17（Android Gradle Plugin 8.x 需要）
+- Android SDK：`compileSdk/targetSdk = 34`，`minSdk = 24`
+
+### 命令行构建与安装
+
+```bash
+./gradlew :app:installDebug
+./gradlew :app:assembleRelease
+```
+
+### Baseline/Startup Profile
+- 已包含：
+  - Baseline Profile: [app/src/main/baseline-prof.txt](../app/src/main/baseline-prof.txt)
+  - Startup Profile: [app/src/main/startup-prof.txt](../app/src/main/startup-prof.txt)
+- 重新采集（可选，需连接设备/模拟器）：
+
+```bash
+./gradlew :app:assembleBenchmark
+./gradlew :baselineprofile:connectedBenchmarkAndroidTest
+./gradlew :app:assembleRelease
+```
+
+Profile 采集完成后将在后续 Release 构建中生效，用于优化启动与滚动性能。
+
+### 构建产物位置
+- 默认：`<repo>/.build_asmr_player_android/`
 
 ## 权限说明（简要）
 
