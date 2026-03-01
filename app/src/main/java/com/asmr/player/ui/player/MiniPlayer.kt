@@ -96,8 +96,8 @@ fun MiniPlayer(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 12.dp)
-            .height(72.dp) // 高度从 84dp 减小到 72dp
+            .padding(top = 12.dp, bottom = 14.dp)
+            .height(72.dp)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
@@ -105,8 +105,8 @@ fun MiniPlayer(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = 36.dp, end = 16.dp)
-                .height(56.dp) // 高度从 64dp 减小到 56dp
+                .padding(horizontal = 32.dp)
+                .height(56.dp)
                 .clip(RoundedCornerShape(16.dp))
                 .hazeChild(
                     state = hazeState,
@@ -121,7 +121,7 @@ fun MiniPlayer(
                 Row(
                     modifier = Modifier
                         .weight(1f)
-                        .padding(start = 36.dp, end = 8.dp), // 增加左侧间距
+                        .padding(start = 48.dp, end = 16.dp), // 增加左侧间距
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {

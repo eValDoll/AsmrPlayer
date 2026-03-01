@@ -8,6 +8,7 @@ import com.asmr.player.BuildConfig
 import com.asmr.player.data.remote.crawler.AsmrOneCrawler
 import com.asmr.player.data.remote.dlsite.DlsitePlayLibraryClient
 import com.asmr.player.data.remote.scraper.DLSiteScraper
+import com.asmr.player.data.settings.SettingsRepository
 import com.asmr.player.domain.model.Album
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
@@ -17,6 +18,9 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.yield
@@ -33,7 +37,8 @@ import javax.inject.Inject
 class SearchViewModel @Inject constructor(
     private val dlsiteScraper: DLSiteScraper,
     private val dlsitePlayLibraryClient: DlsitePlayLibraryClient,
-    private val asmrOneCrawler: AsmrOneCrawler
+    private val asmrOneCrawler: AsmrOneCrawler,
+    private val settingsRepository: SettingsRepository
 ) : ViewModel() {
     private val pageSize = 30
     private var currentOrder: SearchSortOption = SearchSortOption.Trend
@@ -47,13 +52,15 @@ class SearchViewModel @Inject constructor(
     private val _uiState = MutableStateFlow<SearchUiState>(SearchUiState.Idle)
     val uiState = _uiState.asStateFlow()
 
-    private val _viewMode = MutableStateFlow(1) // 0: List, 1: Grid
-    val viewMode = _viewMode.asStateFlow()
+    val viewMode: StateFlow<Int> = settingsRepository.searchViewMode
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 1)
 
     private var currentLocale: String? = "ja_JP"
 
     fun setViewMode(mode: Int) {
-        _viewMode.value = mode
+        viewModelScope.launch {
+            settingsRepository.setSearchViewMode(mode)
+        }
     }
 
     fun stopBackgroundLoading() {
