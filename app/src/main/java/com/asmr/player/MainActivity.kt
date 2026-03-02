@@ -733,7 +733,21 @@ fun MainContainer(
                         topBar = {
                             if (currentRoute != "now_playing" && currentRoute != "lyrics") {
                                 Column {
+                                    val compactTopBar =
+                                        currentRoute == "library" ||
+                                            currentRoute == "search" ||
+                                            currentRoute == "playlists" ||
+                                            currentRoute == "playlist/{playlistId}/{playlistName}" ||
+                                            currentRoute == "playlist_system/{type}" ||
+                                            currentRoute == "groups" ||
+                                            currentRoute == "group/{groupId}/{groupName}" ||
+                                            currentRoute == "settings" ||
+                                            currentRoute == "downloads" ||
+                                            currentRoute == "dlsite_login" ||
+                                            currentRoute?.startsWith("album_detail") == true
+                                    Spacer(modifier = Modifier.windowInsetsTopHeight(WindowInsets.statusBars))
                                     CenterAlignedTopAppBar(
+                                        modifier = Modifier.height(if (compactTopBar) 48.dp else 64.dp),
                                         title = {
                                             val entry = navBackStackEntry
                                             val groupName = if (currentRoute == "group/{groupId}/{groupName}") {
@@ -746,30 +760,37 @@ fun MainContainer(
                                                 entry?.arguments?.getString("type").orEmpty()
                                             } else ""
                                             val appName = stringResource(R.string.app_name)
-                                            Text(
-                                                when {
-                                                    currentRoute == "library" -> "本地库"
-                                                    currentRoute == "search" -> "在线搜索"
-                                                    currentRoute == "playlists" -> "我的列表"
-                                                    currentRoute == "playlist/{playlistId}/{playlistName}" ->
-                                                        playlistName.ifBlank { "我的列表" }
-                                                    currentRoute == "playlist_system/{type}" -> when (systemPlaylistType) {
-                                                        "favorites" -> "我的收藏"
-                                                        else -> "我的收藏"
+                                            Box(modifier = Modifier.fillMaxHeight(), contentAlignment = Alignment.Center) {
+                                                Text(
+                                                    when {
+                                                        currentRoute == "library" -> "本地库"
+                                                        currentRoute == "search" -> "在线搜索"
+                                                        currentRoute == "playlists" -> "我的列表"
+                                                        currentRoute == "playlist/{playlistId}/{playlistName}" ->
+                                                            playlistName.ifBlank { "我的列表" }
+                                                        currentRoute == "playlist_system/{type}" -> when (systemPlaylistType) {
+                                                            "favorites" -> "我的收藏"
+                                                            else -> "我的收藏"
+                                                        }
+                                                        currentRoute == "groups" -> "我的分组"
+                                                        currentRoute == "group/{groupId}/{groupName}" ->
+                                                            groupName.ifBlank { "我的分组" }
+                                                        currentRoute == "settings" -> "设置"
+                                                        currentRoute == "downloads" -> "下载管理"
+                                                        currentRoute == "dlsite_login" -> "DLsite 登录"
+                                                        currentRoute?.startsWith("playlist_picker") == true -> "添加到我的列表"
+                                                        currentRoute?.startsWith("album_detail") == true -> "专辑详情"
+                                                        else -> appName
+                                                    },
+                                                    style = if (compactTopBar) {
+                                                        MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold)
+                                                    } else {
+                                                        MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
                                                     }
-                                                    currentRoute == "groups" -> "我的分组"
-                                                    currentRoute == "group/{groupId}/{groupName}" ->
-                                                        groupName.ifBlank { "我的分组" }
-                                                    currentRoute == "settings" -> "设置"
-                                                    currentRoute == "downloads" -> "下载管理"
-                                                    currentRoute == "dlsite_login" -> "DLsite 登录"
-                                                    currentRoute?.startsWith("playlist_picker") == true -> "添加到我的列表"
-                                                    currentRoute?.startsWith("album_detail") == true -> "专辑详情"
-                                                    else -> appName
-                                                },
-                                                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
-                                            )
+                                                )
+                                            }
                                         },
+                                        windowInsets = WindowInsets(0, 0, 0, 0),
                                         colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
                                             containerColor = Color.Transparent,
                                             titleContentColor = topBarContentColor,
