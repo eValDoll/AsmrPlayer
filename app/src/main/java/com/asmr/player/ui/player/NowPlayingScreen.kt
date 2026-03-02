@@ -98,6 +98,7 @@ fun NowPlayingScreen(
     onBack: () -> Unit,
     onOpenLyrics: () -> Unit,
     onShowQueue: () -> Unit,
+    onShowSleepTimer: () -> Unit,
     onOpenPlaylistPicker: (mediaId: String, uri: String, title: String, artist: String, artworkUri: String) -> Unit,
     viewModel: PlayerViewModel,
     coverBackgroundEnabled: Boolean,
@@ -247,13 +248,23 @@ fun NowPlayingScreen(
                             overflow = TextOverflow.Ellipsis
                         )
                     }
-                    IconButton(onClick = onShowQueue) {
-                        Icon(
-                            Icons.Default.PlaylistPlay,
-                            contentDescription = null,
-                            tint = colorScheme.onSurface,
-                            modifier = Modifier.size(32.dp)
-                        )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(onClick = onShowSleepTimer) {
+                            Icon(
+                                Icons.Default.Timer,
+                                contentDescription = null,
+                                tint = colorScheme.onSurface,
+                                modifier = Modifier.size(28.dp)
+                            )
+                        }
+                        IconButton(onClick = onShowQueue) {
+                            Icon(
+                                Icons.Default.PlaylistPlay,
+                                contentDescription = null,
+                                tint = colorScheme.onSurface,
+                                modifier = Modifier.size(32.dp)
+                            )
+                        }
                     }
                 }
 
@@ -441,13 +452,23 @@ fun NowPlayingScreen(
                             overflow = TextOverflow.Ellipsis
                         )
                     }
-                    IconButton(onClick = onShowQueue) {
-                        Icon(
-                            Icons.Default.PlaylistPlay,
-                            contentDescription = null,
-                            tint = colorScheme.onSurface,
-                            modifier = Modifier.size(24.dp)
-                        )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(onClick = onShowSleepTimer) {
+                            Icon(
+                                Icons.Default.Timer,
+                                contentDescription = null,
+                                tint = colorScheme.onSurface,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+                        IconButton(onClick = onShowQueue) {
+                            Icon(
+                                Icons.Default.PlaylistPlay,
+                                contentDescription = null,
+                                tint = colorScheme.onSurface,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
                     }
                 }
 
@@ -649,13 +670,23 @@ fun NowPlayingScreen(
                             maxLines = 1,
                             textAlign = TextAlign.Center
                         )
-                        IconButton(onClick = onShowQueue) {
-                            Icon(
-                                Icons.Default.PlaylistPlay,
-                                contentDescription = null,
-                                tint = colorScheme.onSurface,
-                                modifier = Modifier.size(28.dp)
-                            )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            IconButton(onClick = onShowSleepTimer) {
+                                Icon(
+                                    Icons.Default.Timer,
+                                    contentDescription = null,
+                                    tint = colorScheme.onSurface,
+                                    modifier = Modifier.size(26.dp)
+                                )
+                            }
+                            IconButton(onClick = onShowQueue) {
+                                Icon(
+                                    Icons.Default.PlaylistPlay,
+                                    contentDescription = null,
+                                    tint = colorScheme.onSurface,
+                                    modifier = Modifier.size(28.dp)
+                                )
+                            }
                         }
                     }
 

@@ -118,6 +118,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import com.asmr.player.ui.player.QueueSheetContent
+import com.asmr.player.ui.player.SleepTimerSheetContent
 
 import com.asmr.player.data.local.datastore.SettingsDataStore
 import com.asmr.player.util.MessageManager
@@ -249,6 +250,7 @@ class MainActivity : ComponentActivity() {
             } else baseStaticHue
 
             var showQueue by remember { mutableStateOf(false) }
+            var showSleepTimer by remember { mutableStateOf(false) }
 
             val visibleMessages = remember { mutableStateListOf<VisibleAppMessage>() }
             val recentMessageAtMs = remember { linkedMapOf<String, Long>() }
@@ -383,6 +385,7 @@ class MainActivity : ComponentActivity() {
                         recentAlbumsPanelExpandedInitial = recentAlbumsPanelExpandedInitial,
                         startRouteFromIntent = startRouteFromIntent,
                         onShowQueue = { showQueue = true },
+                        onShowSleepTimer = { showSleepTimer = true },
                         onContentReady = { contentReady = true },
                         visibleMessages = visibleMessagesSnapshot,
                         mode = mode,
@@ -422,6 +425,21 @@ class MainActivity : ComponentActivity() {
                             }
                         }
                     }
+                    if (showSleepTimer) {
+                        val screenHeight = androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp.dp
+                        val sheetHeight = screenHeight * 3 / 4
+                        val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+                        ModalBottomSheet(
+                            onDismissRequest = { showSleepTimer = false },
+                            sheetState = sheetState,
+                            modifier = Modifier.height(sheetHeight)
+                        ) {
+                            SleepTimerSheetContent(
+                                viewModel = playerViewModel,
+                                onDismiss = { showSleepTimer = false }
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -439,6 +457,7 @@ fun MainContainer(
     recentAlbumsPanelExpandedInitial: Boolean,
     startRouteFromIntent: String?,
     onShowQueue: () -> Unit,
+    onShowSleepTimer: () -> Unit,
     onContentReady: () -> Unit,
     visibleMessages: List<VisibleAppMessage>,
     mode: ThemeMode,
@@ -1092,6 +1111,7 @@ fun MainContainer(
                             onBack = { navController.popBackStack() },
                             onOpenLyrics = { navController.navigateSingleTop("lyrics") },
                             onShowQueue = onShowQueue,
+                            onShowSleepTimer = onShowSleepTimer,
                             onOpenPlaylistPicker = { mediaId, uri, title, artist, artworkUri ->
                                 navController.navigateSingleTop(
                                     "playlist_picker" +
@@ -1112,6 +1132,7 @@ fun MainContainer(
                             onBack = { navController.popBackStack() },
                             onOpenLyrics = { navController.navigateSingleTop("lyrics") },
                             onShowQueue = onShowQueue,
+                            onShowSleepTimer = onShowSleepTimer,
                             onOpenPlaylistPicker = { mediaId, uri, title, artist, artworkUri ->
                                 navController.navigateSingleTop(
                                     "playlist_picker" +

@@ -50,6 +50,9 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.onEach
 import com.asmr.player.domain.model.Slice
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @HiltViewModel
 @OptIn(FlowPreview::class)
@@ -85,6 +88,12 @@ class PlayerViewModel @Inject constructor(
     val floatingLyricsEnabled: StateFlow<Boolean> = settingsRepository.floatingLyricsEnabled
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
+    val sleepTimerEndAtMs: StateFlow<Long> = settingsRepository.sleepTimerEndAtMs
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0L)
+
+    val sleepTimerLastDurationMin: StateFlow<Int> = settingsRepository.sleepTimerLastDurationMin
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 30)
+
     private val _sessionEqualizer = MutableStateFlow<EqualizerSettings?>(null)
     val sessionEqualizer: StateFlow<EqualizerSettings> = combine(
         settingsRepository.equalizerSettings,
@@ -95,6 +104,30 @@ class PlayerViewModel @Inject constructor(
 
     val customPresets: StateFlow<List<AsmrPreset>> = settingsRepository.customEqualizerPresets
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    fun setSleepTimerMinutes(minutes: Int) {
+        if (minutes <= 0) {
+            cancelSleepTimer()
+            return
+        }
+        val endAtMs = System.currentTimeMillis() + minutes.toLong() * 60_000L
+        val endAtText = formatSleepTimerEndTime(endAtMs)
+        viewModelScope.launch {
+            settingsRepository.setSleepTimerLastDurationMin(minutes)
+            settingsRepository.setSleepTimerEndAtMs(endAtMs)
+            messageManager.showSuccess("设置成功，预计${endAtText}暂停播放")
+        }
+    }
+
+    fun cancelSleepTimer() {
+        viewModelScope.launch {
+            settingsRepository.clearSleepTimer()
+        }
+    }
+
+    private fun formatSleepTimerEndTime(endAtMs: Long): String {
+        return SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(endAtMs))
+    }
 
     private val tempStartMs = MutableStateFlow<Long?>(null)
     private val selectedSliceId = MutableStateFlow<Long?>(null)
