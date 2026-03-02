@@ -15,6 +15,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.ViewList
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.ViewModule
+import androidx.compose.material.icons.filled.WifiOff
 import androidx.compose.material3.*
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.windowsizeclass.WindowSizeClass
@@ -81,13 +82,20 @@ fun SearchScreen(
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) {
-        if (uiState is SearchUiState.Idle) {
-            viewModel.setPurchasedOnly(purchasedOnly)
-            viewModel.search(keyword)
-        }
+        viewModel.bootstrap(keyword, purchasedOnly, selectedLocale)
     }
 
     val success = uiState as? SearchUiState.Success
+    var syncedFromState by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(success) {
+        if (syncedFromState) return@LaunchedEffect
+        val s = success ?: return@LaunchedEffect
+        keyword = s.keyword
+        purchasedOnly = s.purchasedOnly
+        val loc = s.locale
+        if (!loc.isNullOrBlank()) selectedLocale = loc
+        syncedFromState = true
+    }
     
     // 屏幕尺寸判断
     val isCompact = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact
@@ -95,6 +103,7 @@ fun SearchScreen(
     val pullToRefreshState = rememberPullToRefreshState()
     val latestKeyword by rememberUpdatedState(keyword)
     val latestPurchasedOnly by rememberUpdatedState(purchasedOnly)
+    val latestLocale by rememberUpdatedState(selectedLocale)
     LaunchedEffect(pullToRefreshState.isRefreshing) {
         if (pullToRefreshState.isRefreshing) {
             val state = uiState
@@ -106,6 +115,7 @@ fun SearchScreen(
                 }
             } else {
                 viewModel.setPurchasedOnly(latestPurchasedOnly)
+                viewModel.setLocale(latestLocale)
                 viewModel.search(latestKeyword)
             }
         }
@@ -247,7 +257,24 @@ fun SearchScreen(
                                 horizontalAlignment = Alignment.CenterHorizontally,
                                 verticalArrangement = Arrangement.Center
                             ) {
-                                Text(text = state.message, color = colorScheme.danger)
+                                Icon(
+                                    imageVector = Icons.Filled.WifiOff,
+                                    contentDescription = null,
+                                    tint = colorScheme.textSecondary.copy(alpha = 0.6f),
+                                    modifier = Modifier.size(92.dp)
+                                )
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Text(text = "网络错误", color = colorScheme.textSecondary)
+                                Spacer(modifier = Modifier.height(16.dp))
+                                FilledTonalButton(
+                                    onClick = { viewModel.retry() },
+                                    colors = ButtonDefaults.filledTonalButtonColors(
+                                        containerColor = colorScheme.primaryContainer,
+                                        contentColor = colorScheme.onPrimaryContainer
+                                    )
+                                ) {
+                                    Text("刷新")
+                                }
                             }
 
                             else -> Column(

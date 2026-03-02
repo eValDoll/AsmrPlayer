@@ -67,7 +67,7 @@ object NetworkModule {
                         401 -> messageManager.showError("认证已过期，请重新登录")
                         403 -> messageManager.showError("访问被拒绝")
                         404 -> {} // 忽略 404
-                        500, 502, 503, 504 -> messageManager.showError("服务器异常 (${response.code})")
+                        500, 502, 503, 504 -> messageManager.showError("服务器开小差了，请稍后重试")
                         else -> {}
                     }
                 }
