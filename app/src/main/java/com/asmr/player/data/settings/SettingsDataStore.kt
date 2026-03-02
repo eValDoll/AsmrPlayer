@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 
@@ -43,4 +44,7 @@ object SettingsKeys {
     val FX_ORBIT_ENABLED = booleanPreferencesKey("fx_orbit_enabled")
     val FX_ORBIT_SPEED = floatPreferencesKey("fx_orbit_speed") // 0-50
     val FX_ORBIT_DISTANCE = floatPreferencesKey("fx_orbit_distance") // 0-10
+
+    val SLEEP_TIMER_END_AT_MS = longPreferencesKey("sleep_timer_end_at_ms")
+    val SLEEP_TIMER_LAST_DURATION_MIN = intPreferencesKey("sleep_timer_last_duration_min")
 }

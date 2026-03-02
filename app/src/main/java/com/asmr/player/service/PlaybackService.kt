@@ -93,6 +93,7 @@ class PlaybackService : MediaSessionService() {
     private val sessionSettings = MutableStateFlow<EqualizerSettings?>(null)
     private var orbitJob: Job? = null
     private var effectApplyJob: Job? = null
+    private var sleepTimerJob: Job? = null
     @Volatile private var manualBalance: Float = 0f
     @Volatile private var manualGain: Float = 1f
     @Volatile private var orbitEnabled: Boolean = false
@@ -363,6 +364,27 @@ class PlaybackService : MediaSessionService() {
         serviceScope.launch {
             settingsRepository.floatingLyricsSettings.collect { settings ->
                 overlay?.applySettings(settings)
+            }
+        }
+        serviceScope.launch {
+            settingsRepository.sleepTimerEndAtMs.collect { endAtMs ->
+                sleepTimerJob?.cancel()
+                sleepTimerJob = null
+
+                if (endAtMs <= 0L) return@collect
+                val delayMs = endAtMs - System.currentTimeMillis()
+                if (delayMs <= 0L) {
+                    settingsRepository.clearSleepTimer()
+                    return@collect
+                }
+
+                sleepTimerJob = serviceScope.launch {
+                    delay(delayMs)
+                    withContext(Dispatchers.Main.immediate) {
+                        exoPlayer.pause()
+                    }
+                    settingsRepository.clearSleepTimer()
+                }
             }
         }
         serviceScope.launch(Dispatchers.Default) {
@@ -790,6 +812,7 @@ class PlaybackService : MediaSessionService() {
         statsJob?.cancel()
         effectApplyJob?.cancel()
         orbitJob?.cancel()
+        sleepTimerJob?.cancel()
         spectrumAnalyzer.stop()
         equalizer?.release()
         virtualizer?.release()

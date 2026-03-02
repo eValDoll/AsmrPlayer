@@ -78,6 +78,30 @@ class SettingsRepository @Inject constructor(
         EqualizerPresets.decodeCustomPresets(prefs[SettingsKeys.CUSTOM_EQ_PRESETS])
     }
 
+    val sleepTimerEndAtMs: Flow<Long> = context.settingsDataStore.data.map { prefs ->
+        prefs[SettingsKeys.SLEEP_TIMER_END_AT_MS] ?: 0L
+    }
+
+    val sleepTimerLastDurationMin: Flow<Int> = context.settingsDataStore.data.map { prefs ->
+        prefs[SettingsKeys.SLEEP_TIMER_LAST_DURATION_MIN] ?: 30
+    }
+
+    suspend fun setSleepTimerEndAtMs(endAtMs: Long) {
+        withContext(Dispatchers.IO) {
+            context.settingsDataStore.edit { it[SettingsKeys.SLEEP_TIMER_END_AT_MS] = endAtMs }
+        }
+    }
+
+    suspend fun clearSleepTimer() {
+        setSleepTimerEndAtMs(0L)
+    }
+
+    suspend fun setSleepTimerLastDurationMin(minutes: Int) {
+        withContext(Dispatchers.IO) {
+            context.settingsDataStore.edit { it[SettingsKeys.SLEEP_TIMER_LAST_DURATION_MIN] = minutes }
+        }
+    }
+
     suspend fun setFloatingLyricsEnabled(enabled: Boolean) {
         withContext(Dispatchers.IO) {
             context.settingsDataStore.edit { it[SettingsKeys.FLOATING_LYRICS_ENABLED] = enabled }
