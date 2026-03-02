@@ -6,8 +6,19 @@ import android.provider.DocumentsContract
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
@@ -31,17 +42,20 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -86,7 +100,8 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 
 import androidx.compose.ui.draw.clip
-import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.zIndex
 import com.asmr.player.ui.common.rememberDominantColor
 import com.asmr.player.ui.common.SubtitleStamp
 import com.asmr.player.ui.common.DiscPlaceholder
@@ -254,37 +269,107 @@ fun AlbumDetailScreen(
                         )
                     }
                     
-                    ScrollableTabRow(
-                        selectedTabIndex = selectedTab,
-                        containerColor = Color.Transparent,
-                        contentColor = colorScheme.textPrimary,
-                        indicator = { tabPositions ->
-                            TabRowDefaults.SecondaryIndicator(
-                                Modifier.tabIndicatorOffset(tabPositions[selectedTab]),
-                                color = colorScheme.primary
-                            )
-                        },
-                        divider = {},
-                        edgePadding = 16.dp
+                    val tabTitles = remember { listOf("本地", "DL", "DL Play") }
+                    val tabDockOffset = 10.dp
+                    val tabLift = 6.dp
+                    val tabContainerShape = RoundedCornerShape(18.dp)
+                    val tabItemShape = RoundedCornerShape(14.dp)
+                    val tabBarIsDark = colorScheme.isDark
+                    BoxWithConstraints(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 10.dp)
+                            .zIndex(1f)
                     ) {
-                        listOf("本地", "DL", "DL Play").forEachIndexed { index, title ->
-                            Tab(
-                                selected = selectedTab == index,
-                                onClick = {
-                                    selectedTab = index
-                                    userSelectedTab = true
-                                },
-                                text = { 
-                                    Text(
-                                        title,
-                                        style = MaterialTheme.typography.titleSmall.copy(
-                                            fontWeight = if (selectedTab == index) FontWeight.Bold else FontWeight.Normal
+                        val count = tabTitles.size
+                        val segmentGap = 4.dp
+                        val segmentPadding = 4.dp
+                        val segmentHeight = 36.dp
+                        val segmentTopPadding = tabDockOffset - tabLift
+                        val innerWidth = maxWidth - segmentPadding * 2
+                        val itemWidth = (innerWidth - segmentGap * (count - 1)) / count
+                        val density = LocalDensity.current
+                        val highlightX by animateDpAsState(
+                            targetValue = segmentPadding + (itemWidth + segmentGap) * selectedTab,
+                            animationSpec = spring(
+                                dampingRatio = Spring.DampingRatioNoBouncy,
+                                stiffness = Spring.StiffnessMediumLow
+                            ),
+                            label = "albumDetailTabHighlightX"
+                        )
+                        Surface(
+                            modifier = Modifier.matchParentSize(),
+                            color = if (tabBarIsDark) {
+                                colorScheme.surface.copy(alpha = 0.28f)
+                            } else {
+                                colorScheme.surface.copy(alpha = 0.86f)
+                            },
+                            contentColor = colorScheme.textPrimary,
+                            shape = tabContainerShape,
+                            tonalElevation = 0.dp,
+                            shadowElevation = 0.dp
+                        ) { }
+                        Box(modifier = Modifier.fillMaxWidth().padding(top = segmentTopPadding)) {
+                            Surface(
+                                modifier = Modifier
+                                    .offset {
+                                        val px = with(density) { highlightX.roundToPx() }
+                                        IntOffset(px, 0)
+                                    }
+                                    .width(itemWidth)
+                                    .height(segmentHeight)
+                                    .zIndex(0f)
+                                    .border(
+                                        width = 1.dp,
+                                        color = if (tabBarIsDark) {
+                                            Color.White.copy(alpha = 0.18f)
+                                        } else {
+                                            Color.Black.copy(alpha = 0.10f)
+                                        },
+                                        shape = tabItemShape
+                                    ),
+                                color = colorScheme.surface,
+                                contentColor = colorScheme.textPrimary,
+                                shape = tabItemShape,
+                                tonalElevation = 0.dp,
+                                shadowElevation = 10.dp
+                            ) { }
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(4.dp)
+                                    .zIndex(1f),
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                tabTitles.forEachIndexed { index, title ->
+                                    val selected = selectedTab == index
+                                    Box(
+                                        modifier = Modifier
+                                            .width(itemWidth)
+                                            .height(segmentHeight)
+                                            .clip(tabItemShape)
+                                            .clickable(
+                                                indication = null,
+                                                interactionSource = remember { MutableInteractionSource() }
+                                            ) {
+                                                selectedTab = index
+                                                userSelectedTab = true
+                                            }
+                                            .padding(horizontal = 10.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            title,
+                                            modifier = Modifier.offset(y = (-3).dp),
+                                            color = if (selected) colorScheme.textPrimary else colorScheme.textSecondary,
+                                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = if (selected) FontWeight.ExtraBold else FontWeight.Medium),
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
                                         )
-                                    ) 
-                                },
-                                selectedContentColor = colorScheme.primary,
-                                unselectedContentColor = colorScheme.textSecondary
-                            )
+                                    }
+                                }
+                            }
                         }
                     }
 
@@ -298,148 +383,172 @@ fun AlbumDetailScreen(
                         }
                     }
 
-                    when (selectedTab) {
-                        0 -> {
-                            val local = model.localAlbum
-                            if (local != null) {
-                                val localTreeStateKey = remember(albumId, rjCode, local.id) {
-                                    val rjNorm = rjCode?.trim().orEmpty().uppercase()
-                                    when {
-                                        albumId != null && albumId > 0 -> "localTree:id:$albumId"
-                                        rjNorm.isNotBlank() -> "localTree:rj:$rjNorm"
-                                        else -> "localTree:localId:${local.id}"
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .zIndex(0f),
+                        color = colorScheme.surface,
+                        shape = RectangleShape,
+                        tonalElevation = 0.dp,
+                        shadowElevation = 0.dp
+                    ) {
+                        Box(modifier = Modifier.fillMaxSize().padding(top = tabDockOffset)) {
+                            AnimatedContent(
+                                targetState = selectedTab,
+                                transitionSpec = {
+                                    if (targetState > initialState) {
+                                        (slideInHorizontally { it } + fadeIn()).togetherWith(slideOutHorizontally { -it } + fadeOut())
+                                    } else {
+                                        (slideInHorizontally { -it } + fadeIn()).togetherWith(slideOutHorizontally { it } + fadeOut())
                                     }
-                                }
-                                AlbumLocalTab(
-                                    stateKey = localTreeStateKey,
-                                    initialExpanded = viewModel.getTreeExpanded(localTreeStateKey),
-                                    wasInitialized = viewModel.isTreeInitialized(localTreeStateKey),
-                                    onPersistTreeState = { expanded ->
-                                        viewModel.persistTreeState(localTreeStateKey, expanded)
-                                    },
-                                    initialScroll = viewModel.getListScrollPosition("scroll:$localTreeStateKey"),
-                                    onPersistScroll = { index, offset ->
-                                        viewModel.persistListScrollPosition("scroll:$localTreeStateKey", index, offset)
-                                    },
-                                    album = local,
-                                    header = headerContent,
-                                    onPlayTracks = onPlayTracks,
-                                    onPlayMediaItems = onPlayMediaItems,
-                                    onPlayVideo = onPlayVideo,
-                                    onAddToQueue = { track ->
-                                        onAddToQueue(local, track)
-                                    },
-                                    onAddToPlaylist = { track ->
-                                        val target = PlaylistAddTarget.fromTrack(local, track)
-                                        onOpenPlaylistPicker(
-                                            target.mediaId,
-                                            target.uri,
-                                            target.title,
-                                            target.artist,
-                                            target.artworkUri
-                                        )
-                                    },
-                                    onManageTrackTags = { track ->
-                                        tagManageTrack = track
-                                    },
-                                    onRemoveTrack = { track ->
-                                        if (track.id > 0L) libraryViewModel.removeTrackFromAlbum(track.id)
-                                    },
-                                    onSetCoverFromImage = { pathOrUri ->
-                                        viewModel.setLocalCoverPath(pathOrUri)
-                                    },
-                                    onPreviewFile = { localPreviewFile = it }
-                                )
-                            } else {
-                                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                    Text("未下载到本地")
+                                },
+                                label = "albumDetailTabContent"
+                            ) { tab ->
+                                when (tab) {
+                                    0 -> {
+                                        val local = model.localAlbum
+                                        if (local != null) {
+                                            val localTreeStateKey = remember(albumId, rjCode, local.id) {
+                                                val rjNorm = rjCode?.trim().orEmpty().uppercase()
+                                                when {
+                                                    albumId != null && albumId > 0 -> "localTree:id:$albumId"
+                                                    rjNorm.isNotBlank() -> "localTree:rj:$rjNorm"
+                                                    else -> "localTree:localId:${local.id}"
+                                                }
+                                            }
+                                            AlbumLocalTab(
+                                                stateKey = localTreeStateKey,
+                                                initialExpanded = viewModel.getTreeExpanded(localTreeStateKey),
+                                                wasInitialized = viewModel.isTreeInitialized(localTreeStateKey),
+                                                onPersistTreeState = { expanded ->
+                                                    viewModel.persistTreeState(localTreeStateKey, expanded)
+                                                },
+                                                initialScroll = viewModel.getListScrollPosition("scroll:$localTreeStateKey"),
+                                                onPersistScroll = { index, offset ->
+                                                    viewModel.persistListScrollPosition("scroll:$localTreeStateKey", index, offset)
+                                                },
+                                                album = local,
+                                                header = headerContent,
+                                                onPlayTracks = onPlayTracks,
+                                                onPlayMediaItems = onPlayMediaItems,
+                                                onPlayVideo = onPlayVideo,
+                                                onAddToQueue = { track ->
+                                                    onAddToQueue(local, track)
+                                                },
+                                                onAddToPlaylist = { track ->
+                                                    val target = PlaylistAddTarget.fromTrack(local, track)
+                                                    onOpenPlaylistPicker(
+                                                        target.mediaId,
+                                                        target.uri,
+                                                        target.title,
+                                                        target.artist,
+                                                        target.artworkUri
+                                                    )
+                                                },
+                                                onManageTrackTags = { track ->
+                                                    tagManageTrack = track
+                                                },
+                                                onRemoveTrack = { track ->
+                                                    if (track.id > 0L) libraryViewModel.removeTrackFromAlbum(track.id)
+                                                },
+                                                onSetCoverFromImage = { pathOrUri ->
+                                                    viewModel.setLocalCoverPath(pathOrUri)
+                                                },
+                                                onPreviewFile = { localPreviewFile = it }
+                                            )
+                                        } else {
+                                            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                                Text("未下载到本地")
+                                            }
+                                        }
+                                    }
+                                    1 -> AlbumDlsiteInfoTab(
+                                        album = album,
+                                        header = headerContent,
+                                        dlsiteInfo = model.dlsiteInfo,
+                                        galleryUrls = model.dlsiteGalleryUrls,
+                                        trialTracks = model.dlsiteTrialTracks,
+                                        isLoading = model.isLoadingDlsite,
+                                        asmrOneTree = asmrOneTree,
+                                        isLoadingAsmrOne = model.isLoadingAsmrOne,
+                                        isLoadingTrial = model.isLoadingDlsiteTrial,
+                                        onRefreshAsmrOne = { viewModel.refreshAsmrOneSection() },
+                                        onRefreshTrial = { viewModel.refreshDlsiteTrialSection() },
+                                        onPlayTracks = onPlayTracks,
+                                        onAddToQueue = { track ->
+                                            onAddToQueue(album, track)
+                                        },
+                                        onDownloadOne = { relPath ->
+                                            viewModel.downloadAsmrOneSelected(setOf(relPath))
+                                        },
+                                        onAddToPlaylistOne = { relPath ->
+                                            val target = PlaylistAddTarget.fromAsmrOne(album, asmrOneTree, relPath) ?: return@AlbumDlsiteInfoTab
+                                            onOpenPlaylistPicker(
+                                                target.mediaId,
+                                                target.uri,
+                                                target.title,
+                                                target.artist,
+                                                target.artworkUri
+                                            )
+                                        },
+                                        onAddToPlaylist = { track ->
+                                            val target = PlaylistAddTarget.fromTrack(album, track)
+                                            onOpenPlaylistPicker(
+                                                target.mediaId,
+                                                target.uri,
+                                                target.title,
+                                                target.artist,
+                                                target.artworkUri
+                                            )
+                                        },
+                                        onPreviewFile = { onlinePreviewFile = it },
+                                        treeStateKey = "tree:asmrOne:${model.rjCode.trim().uppercase()}",
+                                        treeInitialExpanded = viewModel.getTreeExpanded("tree:asmrOne:${model.rjCode.trim().uppercase()}"),
+                                        treeWasInitialized = viewModel.isTreeInitialized("tree:asmrOne:${model.rjCode.trim().uppercase()}"),
+                                        onPersistTreeState = { expanded ->
+                                            val rj = model.rjCode.trim().uppercase()
+                                            viewModel.persistTreeState("tree:asmrOne:$rj", expanded)
+                                        },
+                                        initialScroll = viewModel.getListScrollPosition("scroll:tree:asmrOne:${model.rjCode.trim().uppercase()}"),
+                                        onPersistScroll = { index, offset ->
+                                            viewModel.persistListScrollPosition("scroll:tree:asmrOne:${model.rjCode.trim().uppercase()}", index, offset)
+                                        },
+                                        dlsiteRecommendations = model.dlsiteRecommendations,
+                                        onOpenAlbumByRj = onOpenAlbumByRj
+                                    )
+                                    else -> AlbumDlsitePlayTreeTab(
+                                        header = headerContent,
+                                        album = album,
+                                        rjCode = model.rjCode,
+                                        tree = model.dlsitePlayTree,
+                                        isLoading = model.isLoadingDlsitePlay,
+                                        onOpenLogin = onOpenDlsiteLogin,
+                                        onEnsureLoaded = { viewModel.ensureDlsitePlayLoaded() },
+                                        onPlayTracks = onPlayTracks,
+                                        onPlayMediaItems = onPlayMediaItems,
+                                        onPlayVideo = onPlayVideo,
+                                        onAddToQueue = { track ->
+                                            onAddToQueue(album, track)
+                                        },
+                                        onDownloadOne = { relPath ->
+                                            viewModel.downloadDlsitePlaySelected(setOf(relPath))
+                                        },
+                                        onPreviewFile = { onlinePreviewFile = it },
+                                        treeStateKey = "tree:dlsitePlay:${model.baseRjCode.ifBlank { model.rjCode }.trim().uppercase()}",
+                                        treeInitialExpanded = viewModel.getTreeExpanded("tree:dlsitePlay:${model.baseRjCode.ifBlank { model.rjCode }.trim().uppercase()}"),
+                                        treeWasInitialized = viewModel.isTreeInitialized("tree:dlsitePlay:${model.baseRjCode.ifBlank { model.rjCode }.trim().uppercase()}"),
+                                        onPersistTreeState = { expanded ->
+                                            val rj = model.baseRjCode.ifBlank { model.rjCode }.trim().uppercase()
+                                            viewModel.persistTreeState("tree:dlsitePlay:$rj", expanded)
+                                        },
+                                        initialScroll = viewModel.getListScrollPosition("scroll:tree:dlsitePlay:${model.baseRjCode.ifBlank { model.rjCode }.trim().uppercase()}"),
+                                        onPersistScroll = { index, offset ->
+                                            viewModel.persistListScrollPosition("scroll:tree:dlsitePlay:${model.baseRjCode.ifBlank { model.rjCode }.trim().uppercase()}", index, offset)
+                                        },
+                                    )
                                 }
                             }
                         }
-                        1 -> AlbumDlsiteInfoTab(
-                            album = album,
-                            header = headerContent,
-                            dlsiteInfo = model.dlsiteInfo,
-                            galleryUrls = model.dlsiteGalleryUrls,
-                            trialTracks = model.dlsiteTrialTracks,
-                            isLoading = model.isLoadingDlsite,
-                            asmrOneTree = asmrOneTree,
-                            isLoadingAsmrOne = model.isLoadingAsmrOne,
-                            isLoadingTrial = model.isLoadingDlsiteTrial,
-                            onRefreshAsmrOne = { viewModel.refreshAsmrOneSection() },
-                            onRefreshTrial = { viewModel.refreshDlsiteTrialSection() },
-                            onPlayTracks = onPlayTracks,
-                            onAddToQueue = { track ->
-                                onAddToQueue(album, track)
-                            },
-                            onDownloadOne = { relPath ->
-                                viewModel.downloadAsmrOneSelected(setOf(relPath))
-                            },
-                            onAddToPlaylistOne = { relPath ->
-                                val target = PlaylistAddTarget.fromAsmrOne(album, asmrOneTree, relPath) ?: return@AlbumDlsiteInfoTab
-                                onOpenPlaylistPicker(
-                                    target.mediaId,
-                                    target.uri,
-                                    target.title,
-                                    target.artist,
-                                    target.artworkUri
-                                )
-                            },
-                            onAddToPlaylist = { track ->
-                                val target = PlaylistAddTarget.fromTrack(album, track)
-                                onOpenPlaylistPicker(
-                                    target.mediaId,
-                                    target.uri,
-                                    target.title,
-                                    target.artist,
-                                    target.artworkUri
-                                )
-                            },
-                            onPreviewFile = { onlinePreviewFile = it },
-                            treeStateKey = "tree:asmrOne:${model.rjCode.trim().uppercase()}",
-                            treeInitialExpanded = viewModel.getTreeExpanded("tree:asmrOne:${model.rjCode.trim().uppercase()}"),
-                            treeWasInitialized = viewModel.isTreeInitialized("tree:asmrOne:${model.rjCode.trim().uppercase()}"),
-                            onPersistTreeState = { expanded ->
-                                val rj = model.rjCode.trim().uppercase()
-                                viewModel.persistTreeState("tree:asmrOne:$rj", expanded)
-                            },
-                            initialScroll = viewModel.getListScrollPosition("scroll:tree:asmrOne:${model.rjCode.trim().uppercase()}"),
-                            onPersistScroll = { index, offset ->
-                                viewModel.persistListScrollPosition("scroll:tree:asmrOne:${model.rjCode.trim().uppercase()}", index, offset)
-                            },
-                            dlsiteRecommendations = model.dlsiteRecommendations,
-                            onOpenAlbumByRj = onOpenAlbumByRj
-                        )
-                        2 -> AlbumDlsitePlayTreeTab(
-                            header = headerContent,
-                            album = album,
-                            rjCode = model.rjCode,
-                            tree = model.dlsitePlayTree,
-                            isLoading = model.isLoadingDlsitePlay,
-                            onOpenLogin = onOpenDlsiteLogin,
-                            onEnsureLoaded = { viewModel.ensureDlsitePlayLoaded() },
-                            onPlayTracks = onPlayTracks,
-                            onPlayMediaItems = onPlayMediaItems,
-                            onPlayVideo = onPlayVideo,
-                            onAddToQueue = { track ->
-                                onAddToQueue(album, track)
-                            },
-                            onDownloadOne = { relPath ->
-                                viewModel.downloadDlsitePlaySelected(setOf(relPath))
-                            },
-                            onPreviewFile = { onlinePreviewFile = it },
-                            treeStateKey = "tree:dlsitePlay:${model.baseRjCode.ifBlank { model.rjCode }.trim().uppercase()}",
-                            treeInitialExpanded = viewModel.getTreeExpanded("tree:dlsitePlay:${model.baseRjCode.ifBlank { model.rjCode }.trim().uppercase()}"),
-                            treeWasInitialized = viewModel.isTreeInitialized("tree:dlsitePlay:${model.baseRjCode.ifBlank { model.rjCode }.trim().uppercase()}"),
-                            onPersistTreeState = { expanded ->
-                                val rj = model.baseRjCode.ifBlank { model.rjCode }.trim().uppercase()
-                                viewModel.persistTreeState("tree:dlsitePlay:$rj", expanded)
-                            },
-                            initialScroll = viewModel.getListScrollPosition("scroll:tree:dlsitePlay:${model.baseRjCode.ifBlank { model.rjCode }.trim().uppercase()}"),
-                            onPersistScroll = { index, offset ->
-                                viewModel.persistListScrollPosition("scroll:tree:dlsitePlay:${model.baseRjCode.ifBlank { model.rjCode }.trim().uppercase()}", index, offset)
-                            },
-                        )
                     }
                 }
 
