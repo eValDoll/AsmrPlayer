@@ -1,19 +1,20 @@
 plugins {
     id("com.android.application")
-    id("org.jetbrains.kotlin.android")
     id("com.google.dagger.hilt.android")
     id("com.google.devtools.ksp")
     id("androidx.baselineprofile")
+    id("org.jetbrains.kotlin.plugin.compose")
 }
 
 android {
     namespace = "com.asmr.player"
-    compileSdk = 34
+    compileSdk = 36
+    buildToolsVersion = "36.1.0"
 
     defaultConfig {
         applicationId = "com.asmr.player"
         minSdk = 24
-        targetSdk = 34
+        targetSdk = 36
         versionCode = 201
         versionName = "0.2.1"
 
@@ -40,16 +41,11 @@ android {
         sourceCompatibility = JavaVersion.VERSION_1_8
         targetCompatibility = JavaVersion.VERSION_1_8
     }
-    kotlinOptions {
-        jvmTarget = "1.8"
-    }
     buildFeatures {
         compose = true
         buildConfig = true
     }
-    composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.8"
-    }
+    // composeOptions removed as it's no longer needed with the Compose Compiler Gradle plugin
     testOptions {
         unitTests.all {
             it.systemProperty("asmr.latency", (project.findProperty("asmr.latency") as? String).orEmpty())
@@ -62,21 +58,26 @@ android {
     }
 }
 
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_1_8)
+    }
+}
+
 dependencies {
-    val compose_version = "1.6.1"
     val media3_version = "1.2.1"
-    val room_version = "2.6.1"
-    val hilt_version = "2.49"
+    val room_version = "2.8.4"
+    val hilt_version = "2.59.2"
     val paging_version = "3.2.1"
     val haze_version = "0.7.0"
 
-    implementation("androidx.core:core-ktx:1.12.0")
+    implementation("androidx.core:core-ktx:1.17.0")
     implementation("androidx.lifecycle:lifecycle-runtime:2.7.0")
     implementation("androidx.lifecycle:lifecycle-viewmodel:2.7.0")
     implementation("androidx.savedstate:savedstate:1.2.1")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")
-    implementation("androidx.activity:activity-compose:1.8.2")
-    implementation(platform("androidx.compose:compose-bom:2024.02.00"))
+    implementation("androidx.activity:activity-compose:1.12.4")
+    implementation(platform("androidx.compose:compose-bom:2026.02.01"))
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")
@@ -86,6 +87,7 @@ dependencies {
     implementation("androidx.navigation:navigation-compose:2.7.7")
     implementation("com.google.android.material:material:1.11.0")
     implementation("dev.chrisbanes.haze:haze-jetpack-compose:$haze_version")
+    implementation("io.github.kyant0:backdrop:1.0.6")
 
     // Media3 ExoPlayer
     implementation("androidx.media3:media3-exoplayer:$media3_version")
@@ -101,7 +103,7 @@ dependencies {
 
     // Hilt
     implementation("com.google.dagger:hilt-android:$hilt_version")
-    ksp("com.google.dagger:hilt-android-compiler:$hilt_version")
+    ksp("com.google.dagger:hilt-compiler:$hilt_version")
     implementation("androidx.hilt:hilt-navigation-compose:1.1.0")
 
     // Retrofit & OkHttp
@@ -135,7 +137,7 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.1.5")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.5.1")
-    androidTestImplementation(platform("androidx.compose:compose-bom:2024.02.00"))
+    androidTestImplementation(platform("androidx.compose:compose-bom:2026.02.01"))
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")

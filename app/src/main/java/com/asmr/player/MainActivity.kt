@@ -82,8 +82,9 @@ import com.asmr.player.ui.nav.AppNavigator
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
 import com.asmr.player.ui.player.MiniPlayerOverlayHeight
 import com.asmr.player.ui.splash.EaraSplashOverlay
-import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.haze
+import com.kyant.liquidglass.LiquidGlassBackdrop
+import com.kyant.backdrop.backdrops.layerBackdrop
+import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 import java.net.URLDecoder
@@ -699,7 +700,6 @@ fun MainContainer(
             }
         }
     ) {
-        val hazeState = remember { HazeState() }
         val miniPlayerVisible = playback.currentMediaItem != null && currentRoute != "now_playing" && currentRoute != "lyrics"
         val rightPanelExpandedFromStore by settingsDataStore.recentAlbumsPanelExpanded.collectAsState(initial = recentAlbumsPanelExpandedInitial)
         val rightPanelExpandedState = remember(settingsDataStore, scope, recentAlbumsPanelExpandedInitial) {
@@ -710,219 +710,225 @@ fun MainContainer(
         LaunchedEffect(rightPanelExpandedFromStore) {
             rightPanelExpandedState.updateFromStore(rightPanelExpandedFromStore)
         }
+        val miniPlayerBackdrop = rememberLayerBackdrop()
         CompositionLocalProvider(
             LocalBottomOverlayPadding provides (if (miniPlayerVisible) MiniPlayerOverlayHeight else 0.dp),
             LocalRightPanelExpandedState provides rightPanelExpandedState
         ) {
-            Box(modifier = Modifier.fillMaxSize()) {
-                Box(modifier = Modifier.fillMaxSize().haze(hazeState)) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(colorScheme.background.copy(alpha = 0.88f))
-                    )
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(colorScheme.primarySoft.copy(alpha = 0.16f))
-                    )
-
-                    Scaffold(
-                        containerColor = Color.Transparent,
-                        contentColor = colorScheme.onBackground,
-                        topBar = {
-                            if (currentRoute != "now_playing" && currentRoute != "lyrics") {
-                                Column {
-                                    val compactTopBar =
-                                        currentRoute == "library" ||
-                                            currentRoute == "search" ||
-                                            currentRoute == "playlists" ||
-                                            currentRoute == "playlist/{playlistId}/{playlistName}" ||
-                                            currentRoute == "playlist_system/{type}" ||
-                                            currentRoute == "groups" ||
-                                            currentRoute == "group/{groupId}/{groupName}" ||
-                                            currentRoute == "settings" ||
-                                            currentRoute == "downloads" ||
-                                            currentRoute == "dlsite_login" ||
-                                            currentRoute?.startsWith("album_detail") == true
-                                    Spacer(modifier = Modifier.windowInsetsTopHeight(WindowInsets.statusBars))
-                                    CenterAlignedTopAppBar(
-                                        modifier = Modifier.height(if (compactTopBar) 48.dp else 64.dp),
-                                        title = {
-                                            val entry = navBackStackEntry
-                                            val groupName = if (currentRoute == "group/{groupId}/{groupName}") {
-                                                decodeRouteArg(entry?.arguments?.getString("groupName").orEmpty())
-                                            } else ""
-                                            val playlistName = if (currentRoute == "playlist/{playlistId}/{playlistName}") {
-                                                decodeRouteArg(entry?.arguments?.getString("playlistName").orEmpty())
-                                            } else ""
-                                            val systemPlaylistType = if (currentRoute == "playlist_system/{type}") {
-                                                entry?.arguments?.getString("type").orEmpty()
-                                            } else ""
-                                            val appName = stringResource(R.string.app_name)
-                                            Box(modifier = Modifier.fillMaxHeight(), contentAlignment = Alignment.Center) {
-                                                Text(
-                                                    when {
-                                                        currentRoute == "library" -> "本地库"
-                                                        currentRoute == "search" -> "在线搜索"
-                                                        currentRoute == "playlists" -> "我的列表"
-                                                        currentRoute == "playlist/{playlistId}/{playlistName}" ->
-                                                            playlistName.ifBlank { "我的列表" }
-                                                        currentRoute == "playlist_system/{type}" -> when (systemPlaylistType) {
-                                                            "favorites" -> "我的收藏"
-                                                            else -> "我的收藏"
-                                                        }
-                                                        currentRoute == "groups" -> "我的分组"
-                                                        currentRoute == "group/{groupId}/{groupName}" ->
-                                                            groupName.ifBlank { "我的分组" }
-                                                        currentRoute == "settings" -> "设置"
-                                                        currentRoute == "downloads" -> "下载管理"
-                                                        currentRoute == "dlsite_login" -> "DLsite 登录"
-                                                        currentRoute?.startsWith("playlist_picker") == true -> "添加到我的列表"
-                                                        currentRoute?.startsWith("album_detail") == true -> "专辑详情"
-                                                        else -> appName
-                                                    },
-                                                    style = if (compactTopBar) {
-                                                        MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold)
-                                                    } else {
-                                                        MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
+            LiquidGlassBackdrop(
+                modifier = Modifier.fillMaxSize(),
+                background = {
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(colorScheme.background.copy(alpha = 0.88f))
+                        )
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(colorScheme.primarySoft.copy(alpha = 0.16f))
+                        )
+                    }
+                }
+            ) {
+                Scaffold(
+                    containerColor = Color.Transparent,
+                    contentColor = colorScheme.onBackground,
+                    topBar = {
+                        if (currentRoute != "now_playing" && currentRoute != "lyrics") {
+                            Column {
+                                val compactTopBar =
+                                    currentRoute == "library" ||
+                                        currentRoute == "search" ||
+                                        currentRoute == "playlists" ||
+                                        currentRoute == "playlist/{playlistId}/{playlistName}" ||
+                                        currentRoute == "playlist_system/{type}" ||
+                                        currentRoute == "groups" ||
+                                        currentRoute == "group/{groupId}/{groupName}" ||
+                                        currentRoute == "settings" ||
+                                        currentRoute == "downloads" ||
+                                        currentRoute == "dlsite_login" ||
+                                        currentRoute?.startsWith("album_detail") == true
+                                Spacer(modifier = Modifier.windowInsetsTopHeight(WindowInsets.statusBars))
+                                CenterAlignedTopAppBar(
+                                    modifier = Modifier.height(if (compactTopBar) 48.dp else 64.dp),
+                                    title = {
+                                        val entry = navBackStackEntry
+                                        val groupName = if (currentRoute == "group/{groupId}/{groupName}") {
+                                            decodeRouteArg(entry?.arguments?.getString("groupName").orEmpty())
+                                        } else ""
+                                        val playlistName = if (currentRoute == "playlist/{playlistId}/{playlistName}") {
+                                            decodeRouteArg(entry?.arguments?.getString("playlistName").orEmpty())
+                                        } else ""
+                                        val systemPlaylistType = if (currentRoute == "playlist_system/{type}") {
+                                            entry?.arguments?.getString("type").orEmpty()
+                                        } else ""
+                                        val appName = stringResource(R.string.app_name)
+                                        Box(modifier = Modifier.fillMaxHeight(), contentAlignment = Alignment.Center) {
+                                            Text(
+                                                when {
+                                                    currentRoute == "library" -> "本地库"
+                                                    currentRoute == "search" -> "在线搜索"
+                                                    currentRoute == "playlists" -> "我的列表"
+                                                    currentRoute == "playlist/{playlistId}/{playlistName}" ->
+                                                        playlistName.ifBlank { "我的列表" }
+                                                    currentRoute == "playlist_system/{type}" -> when (systemPlaylistType) {
+                                                        "favorites" -> "我的收藏"
+                                                        else -> "我的收藏"
                                                     }
-                                                )
-                                            }
-                                        },
-                                        windowInsets = WindowInsets(0, 0, 0, 0),
-                                        colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                                            containerColor = Color.Transparent,
-                                            titleContentColor = topBarContentColor,
-                                            navigationIconContentColor = topBarContentColor,
-                                            actionIconContentColor = topBarContentColor
-                                        ),
-                                        navigationIcon = {
-                                            if (currentRoute?.startsWith("playlist_picker") == true) {
-                                                IconButton(onClick = { navController.popBackStack() }) {
-                                                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
+                                                    currentRoute == "groups" -> "我的分组"
+                                                    currentRoute == "group/{groupId}/{groupName}" ->
+                                                        groupName.ifBlank { "我的分组" }
+                                                    currentRoute == "settings" -> "设置"
+                                                    currentRoute == "downloads" -> "下载管理"
+                                                    currentRoute == "dlsite_login" -> "DLsite 登录"
+                                                    currentRoute?.startsWith("playlist_picker") == true -> "添加到我的列表"
+                                                    currentRoute?.startsWith("album_detail") == true -> "专辑详情"
+                                                    else -> appName
+                                                },
+                                                style = if (compactTopBar) {
+                                                    MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold)
+                                                } else {
+                                                    MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
                                                 }
-                                            } else {
-                                                IconButton(onClick = { scope.launch { drawerState.open() } }) {
-                                                    Icon(Icons.Default.Menu, contentDescription = null)
-                                                }
-                                            }
-                                        },
-                                        actions = {
-                                            val entry = navBackStackEntry
-                                            if (currentRoute == "library") {
-                                                val viewMode by libraryViewModel.libraryViewMode.collectAsState()
-                                                if (viewMode != null) {
-                                                    var viewMenuExpanded by remember { mutableStateOf(false) }
-                                                    Box {
-                                                        val normalized = (viewMode ?: 0).coerceIn(0, 2)
-                                                        val icon = when (normalized) {
-                                                            1 -> Icons.Default.GridView
-                                                            2 -> Icons.Default.Audiotrack
-                                                            else -> Icons.Default.ViewList
-                                                        }
-                                                        IconButton(onClick = { viewMenuExpanded = true }) {
-                                                            Icon(imageVector = icon, contentDescription = "切换视图")
-                                                        }
-                                                        DropdownMenu(
-                                                            expanded = viewMenuExpanded,
-                                                            onDismissRequest = { viewMenuExpanded = false }
-                                                        ) {
-                                                            DropdownMenuItem(
-                                                                text = { Text("专辑列表") },
-                                                                onClick = {
-                                                                    viewMenuExpanded = false
-                                                                    libraryViewModel.setLibraryViewMode(0)
-                                                                }
-                                                            )
-                                                            DropdownMenuItem(
-                                                                text = { Text("专辑卡片") },
-                                                                onClick = {
-                                                                    viewMenuExpanded = false
-                                                                    libraryViewModel.setLibraryViewMode(1)
-                                                                }
-                                                            )
-                                                            DropdownMenuItem(
-                                                                text = { Text("音轨列表") },
-                                                                onClick = {
-                                                                    viewMenuExpanded = false
-                                                                    libraryViewModel.setLibraryViewMode(2)
-                                                                }
-                                                            )
-                                                        }
-                                                    }
-                                                }
-                                            } else if (entry != null && currentRoute == "search") {
-                                                val searchViewModel: SearchViewModel = hiltViewModel(entry)
-                                                val viewMode by searchViewModel.viewMode.collectAsState()
-                                                IconButton(onClick = { searchViewModel.setViewMode(if (viewMode == 1) 0 else 1) }) {
-                                                    Icon(
-                                                        imageVector = if (viewMode == 1) Icons.Default.ViewList else Icons.Default.ViewModule,
-                                                        contentDescription = null
-                                                    )
-                                                }
-                                            } else if (entry != null && currentRoute == "downloads") {
-                                                val downloadsViewModel: DownloadsViewModel = hiltViewModel(entry)
-                                                TextButton(
-                                                    onClick = { downloadsViewModel.cancelAll() },
-                                                    colors = ButtonDefaults.textButtonColors(contentColor = topBarContentColor)
-                                                ) { Text("全部暂停") }
-                                            } else if (entry != null && (
-                                                currentRoute?.startsWith("album_detail/{albumId}") == true ||
-                                                    currentRoute?.startsWith("album_detail/") == true
-                                                )
-                                            ) {
-                                                val albumDetailViewModel: AlbumDetailViewModel = hiltViewModel(entry)
-                                                val detailState by albumDetailViewModel.uiState.collectAsState()
-                                                val showManualBind = (detailState as? AlbumDetailUiState.Success)?.model?.let { m ->
-                                                    val local = m.localAlbum
-                                                    local != null && local.id > 0L
-                                                } == true
-                                                if (showManualBind) {
-                                                    IconButton(
-                                                        onClick = {
-                                                            val currentRj = (detailState as? AlbumDetailUiState.Success)?.model?.let { m ->
-                                                                val local = m.localAlbum
-                                                                m.rjCode.trim()
-                                                                    .ifBlank { local?.rjCode?.trim().orEmpty() }
-                                                                    .ifBlank { local?.workId?.trim().orEmpty() }
-                                                            }.orEmpty()
-                                                            manualRjInput = currentRj
-                                                            showManualRjDialog = true
-                                                        }
-                                                    ) {
-                                                        Icon(Icons.Default.Edit, contentDescription = "手动输入RJ号")
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    )
-
-                                    val p = bulkProgress
-                                    if (currentRoute == "library" && p?.phase == BulkPhase.ScanningLocal) {
-                                        if (p.total > 0) {
-                                            LinearProgressIndicator(
-                                                progress = { p.fraction },
-                                                modifier = Modifier.fillMaxWidth()
                                             )
-                                        } else {
-                                            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                                         }
+                                    },
+                                    windowInsets = WindowInsets(0, 0, 0, 0),
+                                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                                        containerColor = Color.Transparent,
+                                        titleContentColor = topBarContentColor,
+                                        navigationIconContentColor = topBarContentColor,
+                                        actionIconContentColor = topBarContentColor
+                                    ),
+                                    navigationIcon = {
+                                        if (currentRoute?.startsWith("playlist_picker") == true) {
+                                            IconButton(onClick = { navController.popBackStack() }) {
+                                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
+                                            }
+                                        } else {
+                                            IconButton(onClick = { scope.launch { drawerState.open() } }) {
+                                                Icon(Icons.Default.Menu, contentDescription = null)
+                                            }
+                                        }
+                                    },
+                                    actions = {
+                                        val entry = navBackStackEntry
+                                        if (currentRoute == "library") {
+                                            val viewMode by libraryViewModel.libraryViewMode.collectAsState()
+                                            if (viewMode != null) {
+                                                var viewMenuExpanded by remember { mutableStateOf(false) }
+                                                Box {
+                                                    val normalized = (viewMode ?: 0).coerceIn(0, 2)
+                                                    val icon = when (normalized) {
+                                                        1 -> Icons.Default.GridView
+                                                        2 -> Icons.Default.Audiotrack
+                                                        else -> Icons.Default.ViewList
+                                                    }
+                                                    IconButton(onClick = { viewMenuExpanded = true }) {
+                                                        Icon(imageVector = icon, contentDescription = "切换视图")
+                                                    }
+                                                    DropdownMenu(
+                                                        expanded = viewMenuExpanded,
+                                                        onDismissRequest = { viewMenuExpanded = false }
+                                                    ) {
+                                                        DropdownMenuItem(
+                                                            text = { Text("专辑列表") },
+                                                            onClick = {
+                                                                viewMenuExpanded = false
+                                                                libraryViewModel.setLibraryViewMode(0)
+                                                            }
+                                                        )
+                                                        DropdownMenuItem(
+                                                            text = { Text("专辑卡片") },
+                                                            onClick = {
+                                                                viewMenuExpanded = false
+                                                                libraryViewModel.setLibraryViewMode(1)
+                                                            }
+                                                        )
+                                                        DropdownMenuItem(
+                                                            text = { Text("音轨列表") },
+                                                            onClick = {
+                                                                viewMenuExpanded = false
+                                                                libraryViewModel.setLibraryViewMode(2)
+                                                            }
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        } else if (entry != null && currentRoute == "search") {
+                                            val searchViewModel: SearchViewModel = hiltViewModel(entry)
+                                            val viewMode by searchViewModel.viewMode.collectAsState()
+                                            IconButton(onClick = { searchViewModel.setViewMode(if (viewMode == 1) 0 else 1) }) {
+                                                Icon(
+                                                    imageVector = if (viewMode == 1) Icons.Default.ViewList else Icons.Default.ViewModule,
+                                                    contentDescription = null
+                                                )
+                                            }
+                                        } else if (entry != null && currentRoute == "downloads") {
+                                            val downloadsViewModel: DownloadsViewModel = hiltViewModel(entry)
+                                            TextButton(
+                                                onClick = { downloadsViewModel.cancelAll() },
+                                                colors = ButtonDefaults.textButtonColors(contentColor = topBarContentColor)
+                                            ) { Text("全部暂停") }
+                                        } else if (entry != null && (
+                                            currentRoute?.startsWith("album_detail/{albumId}") == true ||
+                                                currentRoute?.startsWith("album_detail/") == true
+                                            )
+                                        ) {
+                                            val albumDetailViewModel: AlbumDetailViewModel = hiltViewModel(entry)
+                                            val detailState by albumDetailViewModel.uiState.collectAsState()
+                                            val showManualBind = (detailState as? AlbumDetailUiState.Success)?.model?.let { m ->
+                                                val local = m.localAlbum
+                                                local != null && local.id > 0L
+                                            } == true
+                                            if (showManualBind) {
+                                                IconButton(
+                                                    onClick = {
+                                                        val currentRj = (detailState as? AlbumDetailUiState.Success)?.model?.let { m ->
+                                                            val local = m.localAlbum
+                                                            m.rjCode.trim()
+                                                                .ifBlank { local?.rjCode?.trim().orEmpty() }
+                                                                .ifBlank { local?.workId?.trim().orEmpty() }
+                                                        }.orEmpty()
+                                                        manualRjInput = currentRj
+                                                        showManualRjDialog = true
+                                                    }
+                                                ) {
+                                                    Icon(Icons.Default.Edit, contentDescription = "手动输入RJ号")
+                                                }
+                                            }
+                                        }
+                                    }
+                                )
+
+                                val p = bulkProgress
+                                if (currentRoute == "library" && p?.phase == BulkPhase.ScanningLocal) {
+                                    if (p.total > 0) {
+                                        LinearProgressIndicator(
+                                            progress = { p.fraction },
+                                            modifier = Modifier.fillMaxWidth()
+                                        )
+                                    } else {
+                                        LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                                     }
                                 }
                             }
                         }
-                    ) { padding ->
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(top = padding.calculateTopPadding())
+                    }
+                ) { padding ->
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(top = padding.calculateTopPadding())
+                            .layerBackdrop(miniPlayerBackdrop)
+                    ) {
+                        NavHost(
+                            navController = navController,
+                            startDestination = initialDestination,
+                            modifier = Modifier.fillMaxSize()
                         ) {
-                            NavHost(
-                                navController = navController,
-                                startDestination = initialDestination,
-                                modifier = Modifier.fillMaxSize()
-                            ) {
 
                                 composable("library") {
                     LibraryScreen(
@@ -1353,59 +1359,58 @@ fun MainContainer(
                 )
             }
 
+            if (miniPlayerVisible) {
+                BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                    val isCompactWidth = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact
+                    val canUseRightPanel = !isCompactWidth &&
+                        !isPhone &&
+                        isLandscape &&
+                        (currentRoute == "library" || currentRoute == "search")
+                    val rightPanelExpanded = rightPanelExpandedState.value
+                    val rightPanelWidth = (maxWidth - 560.dp).coerceAtMost(420.dp)
+                    val showRightPanel = canUseRightPanel && rightPanelWidth >= 300.dp
+                    val reservedRightTarget = if (!showRightPanel) {
+                        0.dp
+                    } else if (rightPanelExpanded) {
+                        rightPanelWidth + 12.dp
+                    } else {
+                        36.dp + 12.dp
+                    }
+                    val reservedRight by animateDpAsState(
+                        targetValue = reservedRightTarget,
+                        animationSpec = tween(durationMillis = if (rightPanelExpanded) 220 else 180),
+                        label = "miniPlayerReservedRight"
+                    )
+                    val miniWidth = (maxWidth - reservedRight).coerceAtLeast(0.dp)
+                    val miniAlignment = Alignment.BottomStart
+                    Box(
+                        modifier = Modifier
+                            .align(miniAlignment)
+                            .padding(start = 24.dp)
+                            .width(miniWidth - 24.dp)
+                    ) {
+                        MiniPlayer(
+                            onClick = {
+                                if (currentRoute != "now_playing") {
+                                    navController.navigateSingleTop("now_playing")
+                                }
+                            },
+                            onOpenQueue = onShowQueue,
+                            backdrop = miniPlayerBackdrop
+                        )
+                    }
+                }
+            }
+
             NonTouchableAppMessageOverlay(messages = visibleMessages)
         }
 
         }
-
-        if (miniPlayerVisible) {
-            BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-                val isCompactWidth = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact
-                val canUseRightPanel = !isCompactWidth &&
-                    !isPhone &&
-                    isLandscape &&
-                    (currentRoute == "library" || currentRoute == "search")
-                val rightPanelExpanded = rightPanelExpandedState.value
-                val rightPanelWidth = (maxWidth - 560.dp).coerceAtMost(420.dp)
-                val showRightPanel = canUseRightPanel && rightPanelWidth >= 300.dp
-                val reservedRightTarget = if (!showRightPanel) {
-                    0.dp
-                } else if (rightPanelExpanded) {
-                    rightPanelWidth + 12.dp
-                } else {
-                    36.dp + 12.dp
-                }
-                val reservedRight by animateDpAsState(
-                    targetValue = reservedRightTarget,
-                    animationSpec = tween(durationMillis = if (rightPanelExpanded) 220 else 180),
-                    label = "miniPlayerReservedRight"
-                )
-                val miniWidth = (maxWidth - reservedRight).coerceAtLeast(0.dp)
-                val miniAlignment = Alignment.BottomStart
-                Box(
-                    modifier = Modifier
-                        .align(miniAlignment)
-                        .padding(start = 24.dp) // 增加左侧外边距
-                        .width(miniWidth - 24.dp) // 宽度相应减小
-                ) {
-                    MiniPlayer(
-                        onClick = {
-                            if (currentRoute != "now_playing") {
-                                navController.navigateSingleTop("now_playing")
-                            }
-                        },
-                        onOpenQueue = onShowQueue,
-                        hazeState = hazeState
-                    )
-                }
-            }
         }
-    }
+}
 }
 
-}
 
-}
 
 @Stable
 private class PersistedBooleanState(

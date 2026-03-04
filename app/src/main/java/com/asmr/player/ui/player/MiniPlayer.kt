@@ -48,9 +48,8 @@ import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.graphicsLayer
 import kotlinx.coroutines.delay
-import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.HazeStyle
-import dev.chrisbanes.haze.hazeChild
+import com.kyant.liquidglass.LiquidGlass
+import com.kyant.backdrop.Backdrop
 
 val MiniPlayerOverlayHeight = 96.dp
 
@@ -59,7 +58,7 @@ val MiniPlayerOverlayHeight = 96.dp
 fun MiniPlayer(
     onClick: () -> Unit,
     onOpenQueue: () -> Unit,
-    hazeState: HazeState,
+    backdrop: Backdrop? = null,
     viewModel: PlayerViewModel = hiltViewModel()
 ) {
     val playback by viewModel.playback.collectAsState()
@@ -102,20 +101,14 @@ fun MiniPlayer(
         contentAlignment = Alignment.Center
     ) {
         // 主卡片部分
-        Box(
+        LiquidGlass(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 32.dp)
-                .height(56.dp)
-                .clip(RoundedCornerShape(16.dp))
-                .hazeChild(
-                    state = hazeState,
-                    style = HazeStyle(
-                        blurRadius = 24.dp,
-                        tint = colorScheme.surface.copy(alpha = 0.18f)
-                    )
-                )
-                .background(Color.Transparent)
+                .height(56.dp),
+            shape = RoundedCornerShape(16.dp),
+            borderWidth = 1.dp,
+            backdrop = backdrop
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
                 Row(

@@ -1,5 +1,6 @@
 package com.asmr.player.ui.library
 
+import com.kyant.liquidglass.LiquidGlass
 import android.content.Intent
 import android.net.Uri
 import android.provider.DocumentsContract
@@ -310,7 +311,7 @@ fun AlbumDetailScreen(
                             shadowElevation = 0.dp
                         ) { }
                         Box(modifier = Modifier.fillMaxWidth().padding(top = segmentTopPadding)) {
-                            Surface(
+                            Box(
                                 modifier = Modifier
                                     .offset {
                                         val px = with(density) { highlightX.roundToPx() }
@@ -319,21 +320,31 @@ fun AlbumDetailScreen(
                                     .width(itemWidth)
                                     .height(segmentHeight)
                                     .zIndex(0f)
-                                    .border(
-                                        width = 1.dp,
+                                    .shadow(
+                                        elevation = 10.dp,
+                                        shape = tabItemShape,
+                                        clip = false
+                                    )
+                                    .background(
                                         color = if (tabBarIsDark) {
-                                            Color.White.copy(alpha = 0.18f)
+                                            colorScheme.surface.copy(alpha = 0.75f)
                                         } else {
-                                            Color.Black.copy(alpha = 0.10f)
+                                            colorScheme.surface.copy(alpha = 0.95f)
                                         },
                                         shape = tabItemShape
-                                    ),
-                                color = colorScheme.surface,
-                                contentColor = colorScheme.textPrimary,
-                                shape = tabItemShape,
-                                tonalElevation = 0.dp,
-                                shadowElevation = 10.dp
-                            ) { }
+                                    )
+                                    .then(
+                                        if (tabBarIsDark) {
+                                            Modifier.border(
+                                                width = 1.dp,
+                                                color = Color.White.copy(alpha = 0.18f),
+                                                shape = tabItemShape
+                                            )
+                                        } else {
+                                            Modifier
+                                        }
+                                    )
+                            )
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -363,7 +374,11 @@ fun AlbumDetailScreen(
                                             title,
                                             modifier = Modifier.offset(y = (-3).dp),
                                             color = if (selected) colorScheme.textPrimary else colorScheme.textSecondary,
-                                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = if (selected) FontWeight.ExtraBold else FontWeight.Medium),
+                                            style = if (selected) {
+                                                MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.ExtraBold)
+                                            } else {
+                                                MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Medium)
+                                            },
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis
                                         )
