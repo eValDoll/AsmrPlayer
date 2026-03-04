@@ -410,14 +410,14 @@ class MainActivity : ComponentActivity() {
                         ModalBottomSheet(
                             onDismissRequest = { showQueue = false },
                             sheetState = sheetState,
-                            modifier = Modifier.height(sheetHeight)
+                            containerColor = MaterialTheme.colorScheme.background,
+                            contentColor = MaterialTheme.colorScheme.onBackground
                         ) {
-                            if (globalDynamicHueEnabled) {
-                                QueueSheetContent(
-                                    viewModel = playerViewModel,
-                                    onDismiss = { showQueue = false }
-                                )
-                            } else {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(max = sheetHeight)
+                            ) {
                                 QueueSheetContent(
                                     viewModel = playerViewModel,
                                     onDismiss = { showQueue = false }
@@ -432,12 +432,19 @@ class MainActivity : ComponentActivity() {
                         ModalBottomSheet(
                             onDismissRequest = { showSleepTimer = false },
                             sheetState = sheetState,
-                            modifier = Modifier.height(sheetHeight)
+                            containerColor = MaterialTheme.colorScheme.background,
+                            contentColor = MaterialTheme.colorScheme.onBackground
                         ) {
-                            SleepTimerSheetContent(
-                                viewModel = playerViewModel,
-                                onDismiss = { showSleepTimer = false }
-                            )
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(max = sheetHeight)
+                            ) {
+                                SleepTimerSheetContent(
+                                    viewModel = playerViewModel,
+                                    onDismiss = { showSleepTimer = false }
+                                )
+                            }
                         }
                     }
                 }
