@@ -10,6 +10,32 @@ android {
     namespace = "com.asmr.player"
     compileSdk = 34
 
+    val earaReleaseStoreFile =
+        System.getenv("EARA_RELEASE_STORE_FILE")
+            ?: (project.findProperty("EARA_RELEASE_STORE_FILE") as? String)
+            ?: "eara-release.jks"
+    val earaReleaseStorePassword =
+        System.getenv("EARA_RELEASE_STORE_PASSWORD")
+            ?: (project.findProperty("EARA_RELEASE_STORE_PASSWORD") as? String)
+            ?: ""
+    val earaReleaseKeyAlias =
+        System.getenv("EARA_RELEASE_KEY_ALIAS")
+            ?: (project.findProperty("EARA_RELEASE_KEY_ALIAS") as? String)
+            ?: ""
+    val earaReleaseKeyPassword =
+        System.getenv("EARA_RELEASE_KEY_PASSWORD")
+            ?: (project.findProperty("EARA_RELEASE_KEY_PASSWORD") as? String)
+            ?: ""
+
+    signingConfigs {
+        create("earaRelease") {
+            storeFile = rootProject.file(earaReleaseStoreFile)
+            storePassword = earaReleaseStorePassword
+            keyAlias = earaReleaseKeyAlias
+            keyPassword = earaReleaseKeyPassword
+        }
+    }
+
     defaultConfig {
         applicationId = "com.asmr.player"
         minSdk = 24
@@ -27,13 +53,13 @@ android {
         release {
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("earaRelease")
         }
         create("benchmark") {
             initWith(getByName("release"))
             matchingFallbacks += listOf("release")
             isDebuggable = false
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("earaRelease")
         }
     }
     compileOptions {

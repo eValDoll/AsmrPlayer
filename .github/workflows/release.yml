@@ -24,8 +24,16 @@ jobs:
         run: |
           sed -i 's/\r$//' gradlew
           chmod +x gradlew
+      - name: Prepare release signing keystore
+        run: |
+          echo "${{ secrets.EARA_RELEASE_JKS_BASE64 }}" | base64 -d > eara-release.jks
       - name: Build release APK
         run: ./gradlew :app:assembleRelease
+        env:
+          EARA_RELEASE_STORE_FILE: eara-release.jks
+          EARA_RELEASE_STORE_PASSWORD: ${{ secrets.EARA_RELEASE_STORE_PASSWORD }}
+          EARA_RELEASE_KEY_ALIAS: ${{ secrets.EARA_RELEASE_KEY_ALIAS }}
+          EARA_RELEASE_KEY_PASSWORD: ${{ secrets.EARA_RELEASE_KEY_PASSWORD }}
       - name: Prepare release artifact
         run: |
           mkdir -p dist
