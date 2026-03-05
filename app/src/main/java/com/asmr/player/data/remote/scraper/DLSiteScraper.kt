@@ -105,38 +105,7 @@ class DLSiteScraper @Inject constructor(
     }
 
     private fun parseRecommendHtml(doc: Document): List<DlsiteRecommendedWork> {
-        fun sanitizeTitle(s: String): String = s.trim().replace(Regex("\\s+"), " ")
-
-        val out = ArrayList<DlsiteRecommendedWork>()
-        val anchors = doc.select("a[href*=/product_id/RJ], a[href*=product_id/RJ], a.work_thumb, a[id^=_link_RJ]")
-        anchors.forEach { a ->
-            val href = a.absUrl("href").ifBlank { a.attr("href") }
-            val rj = Regex("""RJ\d+""", RegexOption.IGNORE_CASE).find(href)?.value?.uppercase().orEmpty()
-            if (rj.isBlank()) return@forEach
-
-            val container = a.closest("li, .work, .n_worklist_item, .recommend, .recommend_item") ?: a.parent()
-            val img = container?.selectFirst("img") ?: a.selectFirst("img")
-            val coverRaw = when {
-                img == null -> ""
-                img.hasAttr("data-src") && img.attr("data-src").isNotBlank() -> img.attr("data-src")
-                img.hasAttr("data-original") && img.attr("data-original").isNotBlank() -> img.attr("data-original")
-                else -> img.attr("src")
-            }
-            val cover = normalizeUrl(coverRaw, doc.baseUri())
-            val title = sanitizeTitle(
-                container?.selectFirst(".work_name, .work_name a, .work_name span")?.text().orEmpty()
-                    .ifBlank { img?.attr("alt").orEmpty() }
-                    .ifBlank { a.attr("title") }
-                    .ifBlank { a.text() }
-            ).ifBlank { rj }
-            val ribbon = container?.selectFirst(".recommend_ribbon .ribbon, .recommend_ribbon span, .work_discount, .ribbon")
-                ?.text()
-                ?.trim()
-                ?.ifBlank { null }
-
-            out.add(DlsiteRecommendedWork(rjCode = rj, title = title, coverUrl = cover, ribbon = ribbon))
-        }
-        return out.distinctBy { it.rjCode }
+        return DlsiteRecommendHtmlParser.parse(doc)
     }
 
     suspend fun getRecommendationsDetailV2(workId: String, locale: String? = null): DlsiteRecommendations =
@@ -620,13 +589,7 @@ class DLSiteScraper @Inject constructor(
                 if (rj.isBlank()) return@forEach
                 val img = a.selectFirst("img")
                 val title = sanitizeTitle(img?.attr("alt").orEmpty().ifBlank { a.attr("title") }.ifBlank { a.text() })
-                val coverRaw = when {
-                    img == null -> ""
-                    img.hasAttr("data-src") && img.attr("data-src").isNotBlank() -> img.attr("data-src")
-                    img.hasAttr("data-original") && img.attr("data-original").isNotBlank() -> img.attr("data-original")
-                    else -> img.attr("src")
-                }
-                val cover = normalizeUrl(coverRaw, baseUrl)
+                val cover = DlsiteRecommendHtmlParser.extractCoverUrl(a, baseUrl)
                 val ribbon = a.selectFirst(".recommend_ribbon .ribbon, .recommend_ribbon span, .ribbon")?.text()?.trim()?.ifBlank { null }
                 out.add(
                     DlsiteRecommendedWork(
