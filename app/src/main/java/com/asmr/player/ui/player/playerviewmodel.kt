@@ -203,8 +203,10 @@ class PlayerViewModel @Inject constructor(
                         putBoolean("channelEnabled", settings.channelEnabled)
                         putInt("channelMode", settings.channelMode)
                         putBoolean("volumeThresholdEnabled", settings.volumeThresholdEnabled)
+                        putInt("volumeThresholdMode", settings.volumeThresholdMode)
                         putFloat("volumeThresholdMinDb", settings.volumeThresholdMinDb)
                         putFloat("volumeThresholdMaxDb", settings.volumeThresholdMaxDb)
+                        putFloat("volumeLoudnessTargetDb", settings.volumeLoudnessTargetDb)
                     }
                     playerConnection.sendCustomCommand("UPDATE_SESSION_EQ", bundle)
                 }

@@ -272,8 +272,10 @@ class PlaybackService : MediaSessionService() {
                             val orbitAzimuthDeg = if (args.containsKey("orbitAzimuthDeg")) args.getFloat("orbitAzimuthDeg") else prev.orbitAzimuthDeg
                             val channelEnabled = if (args.containsKey("channelEnabled")) args.getBoolean("channelEnabled") else prev.channelEnabled
                             val vtEnabled = if (args.containsKey("volumeThresholdEnabled")) args.getBoolean("volumeThresholdEnabled") else prev.volumeThresholdEnabled
+                            val vtMode = if (args.containsKey("volumeThresholdMode")) args.getInt("volumeThresholdMode") else prev.volumeThresholdMode
                             val vtMinDb = if (args.containsKey("volumeThresholdMinDb")) args.getFloat("volumeThresholdMinDb") else prev.volumeThresholdMinDb
                             val vtMaxDb = if (args.containsKey("volumeThresholdMaxDb")) args.getFloat("volumeThresholdMaxDb") else prev.volumeThresholdMaxDb
+                            val loudnessTargetDb = if (args.containsKey("volumeLoudnessTargetDb")) args.getFloat("volumeLoudnessTargetDb") else prev.volumeLoudnessTargetDb
                             sessionSettings.value = prev.copy(
                                 enabled = enabled,
                                 bandLevels = levels,
@@ -292,8 +294,10 @@ class PlaybackService : MediaSessionService() {
                                 channelEnabled = channelEnabled,
                                 channelMode = channelMode,
                                 volumeThresholdEnabled = vtEnabled,
+                                volumeThresholdMode = vtMode,
                                 volumeThresholdMinDb = vtMinDb,
-                                volumeThresholdMaxDb = vtMaxDb
+                                volumeThresholdMaxDb = vtMaxDb,
+                                volumeLoudnessTargetDb = loudnessTargetDb
                             )
                             return com.google.common.util.concurrent.Futures.immediateFuture(
                                 androidx.media3.session.SessionResult(androidx.media3.session.SessionResult.RESULT_SUCCESS, android.os.Bundle.EMPTY)
@@ -645,7 +649,9 @@ class PlaybackService : MediaSessionService() {
                 balanceAudioProcessor.setBalance(if (stereoEnabled && !panActive) settings.balance else 0f)
                 channelModeAudioProcessor.setMode(if (stereoEnabled) settings.channelMode else 0)
                 volumeThresholdAudioProcessor.setEnabled(settings.volumeThresholdEnabled)
+                volumeThresholdAudioProcessor.setMode(settings.volumeThresholdMode)
                 volumeThresholdAudioProcessor.setThresholds(settings.volumeThresholdMinDb, settings.volumeThresholdMaxDb)
+                volumeThresholdAudioProcessor.setLoudnessTargetDb(settings.volumeLoudnessTargetDb)
                 stereoOrbitAudioProcessor.setEnabled(settings.stereoEnabled)
                 stereoOrbitAudioProcessor.setAutoOrbitEnabled(settings.orbitEnabled)
                 stereoOrbitAudioProcessor.setOrbitSpeedDegPerSec(settings.orbitSpeed)

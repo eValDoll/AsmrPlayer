@@ -29,8 +29,10 @@ data class EqualizerSettings(
     val orbitAzimuthDeg: Float = 0f,
     val channelMode: Int = 0,
     val volumeThresholdEnabled: Boolean = false,
+    val volumeThresholdMode: Int = 1,
     val volumeThresholdMinDb: Float = -24f,
     val volumeThresholdMaxDb: Float = -6f,
+    val volumeLoudnessTargetDb: Float = -18f,
     val speedPitchEnabled: Boolean = true,
     val speedPitchExpanded: Boolean = true,
     val equalizerExpanded: Boolean = true
@@ -57,8 +59,10 @@ class AudioEffectController @Inject constructor(
         val channelEnabled = prefs[SettingsKeys.FX_CHANNEL_ENABLED] ?: (bal != 0f || channelMode != 0)
         val channelExpanded = prefs[SettingsKeys.UI_FX_CHANNEL_EXPANDED] ?: true
         val vtEnabled = prefs[SettingsKeys.FX_VOLUME_THRESHOLD_ENABLED] ?: false
+        val vtMode = prefs[SettingsKeys.FX_VOLUME_THRESHOLD_MODE] ?: 1
         val vtMinDb = prefs[SettingsKeys.FX_VOLUME_THRESHOLD_MIN_DB] ?: -24f
         val vtMaxDb = prefs[SettingsKeys.FX_VOLUME_THRESHOLD_MAX_DB] ?: -6f
+        val loudnessTargetDb = prefs[SettingsKeys.FX_VOLUME_LOUDNESS_TARGET_DB] ?: -18f
         val volumeThresholdExpanded = prefs[SettingsKeys.UI_FX_VOLUME_THRESHOLD_EXPANDED] ?: true
         val stereoEnabled = prefs[SettingsKeys.FX_STEREO_ENABLED] ?: false
         val stereoExpanded = prefs[SettingsKeys.UI_FX_STEREO_EXPANDED] ?: true
@@ -87,8 +91,10 @@ class AudioEffectController @Inject constructor(
             orbitAzimuthDeg = orbitAzimuthDeg,
             channelMode = channelMode,
             volumeThresholdEnabled = vtEnabled,
+            volumeThresholdMode = vtMode,
             volumeThresholdMinDb = vtMinDb,
             volumeThresholdMaxDb = vtMaxDb,
+            volumeLoudnessTargetDb = loudnessTargetDb,
             speedPitchEnabled = speedPitchEnabled,
             speedPitchExpanded = speedPitchExpanded,
             equalizerExpanded = equalizerExpanded
