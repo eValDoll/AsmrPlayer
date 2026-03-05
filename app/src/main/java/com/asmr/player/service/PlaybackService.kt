@@ -3,8 +3,6 @@ package com.asmr.player.service
 import android.app.PendingIntent
 import android.content.Intent
 import android.media.audiofx.Equalizer
-import android.media.audiofx.EnvironmentalReverb
-import android.media.audiofx.Virtualizer
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.media.AudioManager
@@ -38,12 +36,14 @@ import com.asmr.player.data.settings.EqualizerSettings
 import com.asmr.player.data.repository.StatisticsRepository
 import com.asmr.player.playback.AsmrRenderersFactory
 import com.asmr.player.playback.BalanceAudioProcessor
+import com.asmr.player.playback.ChannelModeAudioProcessor
 import com.asmr.player.playback.FadingPlayer
-import com.asmr.player.playback.GainAudioProcessor
 import com.asmr.player.playback.StereoFftAnalyzer
+import com.asmr.player.playback.StereoOrbitAudioProcessor
 import com.asmr.player.playback.StereoPcmRingBuffer
 import com.asmr.player.playback.StereoSpectrumBus
 import com.asmr.player.playback.StereoSpectrumTapAudioProcessor
+import com.asmr.player.playback.VolumeThresholdAudioProcessor
 import com.asmr.player.playback.VolumeFader
 import com.asmr.player.util.EmbeddedMediaExtractor
 import com.asmr.player.util.SubtitleEntry
@@ -71,10 +71,10 @@ class PlaybackService : MediaSessionService() {
     private var mediaSession: MediaSession? = null
     private lateinit var exoPlayer: ExoPlayer
     private var equalizer: Equalizer? = null
-    private var virtualizer: Virtualizer? = null
-    private var reverb: EnvironmentalReverb? = null
     private val balanceAudioProcessor = BalanceAudioProcessor()
-    private val gainAudioProcessor = GainAudioProcessor()
+    private val stereoOrbitAudioProcessor = StereoOrbitAudioProcessor()
+    private val channelModeAudioProcessor = ChannelModeAudioProcessor()
+    private val volumeThresholdAudioProcessor = VolumeThresholdAudioProcessor()
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val volumeFader = VolumeFader(serviceScope)
     private val spectrumPcmBuffer = StereoPcmRingBuffer(frameSize = 1024, slotCount = 8)
@@ -91,14 +91,8 @@ class PlaybackService : MediaSessionService() {
     
     // Temporary settings for current session
     private val sessionSettings = MutableStateFlow<EqualizerSettings?>(null)
-    private var orbitJob: Job? = null
     private var effectApplyJob: Job? = null
     private var sleepTimerJob: Job? = null
-    @Volatile private var manualBalance: Float = 0f
-    @Volatile private var manualGain: Float = 1f
-    @Volatile private var orbitEnabled: Boolean = false
-    @Volatile private var orbitSpeed: Float = 25f
-    @Volatile private var orbitDistance: Float = 5f
     @Volatile private var currentAudioSessionId: Int = 0
     @Volatile private var lastEffectiveSettings: EqualizerSettings = EqualizerSettings()
     
@@ -194,7 +188,16 @@ class PlaybackService : MediaSessionService() {
         }
 
         exoPlayer = ExoPlayer.Builder(this)
-            .setRenderersFactory(AsmrRenderersFactory(this, gainAudioProcessor, balanceAudioProcessor, spectrumTapAudioProcessor))
+            .setRenderersFactory(
+                AsmrRenderersFactory(
+                    this,
+                    balanceAudioProcessor,
+                    stereoOrbitAudioProcessor,
+                    channelModeAudioProcessor,
+                    volumeThresholdAudioProcessor,
+                    spectrumTapAudioProcessor
+                )
+            )
             .setMediaSourceFactory(DefaultMediaSourceFactory(dataSourceFactory))
             .setAudioAttributes(
                 AudioAttributes.Builder()
@@ -261,9 +264,16 @@ class PlaybackService : MediaSessionService() {
                             val reverbEnabled = if (args.containsKey("reverbEnabled")) args.getBoolean("reverbEnabled") else prev.reverbEnabled
                             val reverbPreset = args.getString("reverbPreset") ?: prev.reverbPreset
                             val reverbWet = if (args.containsKey("reverbWet")) args.getInt("reverbWet") else prev.reverbWet
+                            val stereoEnabled = if (args.containsKey("stereoEnabled")) args.getBoolean("stereoEnabled") else prev.stereoEnabled
                             val orbitEnabled = if (args.containsKey("orbitEnabled")) args.getBoolean("orbitEnabled") else prev.orbitEnabled
                             val orbitSpeed = if (args.containsKey("orbitSpeed")) args.getFloat("orbitSpeed") else prev.orbitSpeed
                             val orbitDistance = if (args.containsKey("orbitDistance")) args.getFloat("orbitDistance") else prev.orbitDistance
+                            val channelMode = if (args.containsKey("channelMode")) args.getInt("channelMode") else prev.channelMode
+                            val orbitAzimuthDeg = if (args.containsKey("orbitAzimuthDeg")) args.getFloat("orbitAzimuthDeg") else prev.orbitAzimuthDeg
+                            val channelEnabled = if (args.containsKey("channelEnabled")) args.getBoolean("channelEnabled") else prev.channelEnabled
+                            val vtEnabled = if (args.containsKey("volumeThresholdEnabled")) args.getBoolean("volumeThresholdEnabled") else prev.volumeThresholdEnabled
+                            val vtMinDb = if (args.containsKey("volumeThresholdMinDb")) args.getFloat("volumeThresholdMinDb") else prev.volumeThresholdMinDb
+                            val vtMaxDb = if (args.containsKey("volumeThresholdMaxDb")) args.getFloat("volumeThresholdMaxDb") else prev.volumeThresholdMaxDb
                             sessionSettings.value = prev.copy(
                                 enabled = enabled,
                                 bandLevels = levels,
@@ -274,9 +284,16 @@ class PlaybackService : MediaSessionService() {
                                 reverbEnabled = reverbEnabled,
                                 reverbPreset = reverbPreset,
                                 reverbWet = reverbWet,
+                                stereoEnabled = stereoEnabled,
                                 orbitEnabled = orbitEnabled,
                                 orbitSpeed = orbitSpeed,
-                                orbitDistance = orbitDistance
+                                orbitDistance = orbitDistance,
+                                orbitAzimuthDeg = orbitAzimuthDeg,
+                                channelEnabled = channelEnabled,
+                                channelMode = channelMode,
+                                volumeThresholdEnabled = vtEnabled,
+                                volumeThresholdMinDb = vtMinDb,
+                                volumeThresholdMaxDb = vtMaxDb
                             )
                             return com.google.common.util.concurrent.Futures.immediateFuture(
                                 androidx.media3.session.SessionResult(androidx.media3.session.SessionResult.RESULT_SUCCESS, android.os.Bundle.EMPTY)
@@ -610,14 +627,6 @@ class PlaybackService : MediaSessionService() {
             equalizer = Equalizer(0, audioSessionId).apply {
                 enabled = true
             }
-            virtualizer?.release()
-            virtualizer = Virtualizer(0, audioSessionId).apply {
-                enabled = true
-            }
-            reverb?.release()
-            reverb = EnvironmentalReverb(0, audioSessionId).apply {
-                enabled = true
-            }
             applyEffectsToCurrentSession(lastEffectiveSettings)
         } catch (e: Exception) {
             Log.e("PlaybackService", "setupEqualizer failed (sessionId=$audioSessionId)", e)
@@ -631,163 +640,30 @@ class PlaybackService : MediaSessionService() {
                 session ?: global
             }.collect { settings ->
                 lastEffectiveSettings = settings
-                manualBalance = settings.balance
-                manualGain = settings.originalGain.coerceIn(0f, 2f)
-                orbitEnabled = settings.orbitEnabled
-                orbitSpeed = settings.orbitSpeed
-                orbitDistance = settings.orbitDistance
-
-                if (!orbitEnabled) {
-                    balanceAudioProcessor.setBalance(manualBalance)
-                    gainAudioProcessor.setGain(manualGain)
-                }
+                val stereoEnabled = settings.stereoEnabled
+                val panActive = stereoEnabled && (settings.orbitEnabled || settings.orbitAzimuthDeg != 0f)
+                balanceAudioProcessor.setBalance(if (stereoEnabled && !panActive) settings.balance else 0f)
+                channelModeAudioProcessor.setMode(if (stereoEnabled) settings.channelMode else 0)
+                volumeThresholdAudioProcessor.setEnabled(settings.volumeThresholdEnabled)
+                volumeThresholdAudioProcessor.setThresholds(settings.volumeThresholdMinDb, settings.volumeThresholdMaxDb)
+                stereoOrbitAudioProcessor.setEnabled(settings.stereoEnabled)
+                stereoOrbitAudioProcessor.setAutoOrbitEnabled(settings.orbitEnabled)
+                stereoOrbitAudioProcessor.setOrbitSpeedDegPerSec(settings.orbitSpeed)
+                stereoOrbitAudioProcessor.setDistance(settings.orbitDistance)
+                stereoOrbitAudioProcessor.setAzimuthDeg(settings.orbitAzimuthDeg)
 
                 applyEffectsToCurrentSession(settings)
-            }
-        }
-
-        orbitJob?.cancel()
-        orbitJob = serviceScope.launch {
-            var phase = 0f
-            val twoPi = (Math.PI * 2.0).toFloat()
-            while (isActive) {
-                val enabled = orbitEnabled
-                if (!enabled) {
-                    balanceAudioProcessor.setBalance(manualBalance)
-                    gainAudioProcessor.setGain(manualGain)
-                    delay(50)
-                    continue
-                }
-                val speed = orbitSpeed.coerceIn(0f, 50f)
-                val distance = orbitDistance.coerceIn(0f, 10f)
-                val panAmount = (distance / 10f).coerceIn(0f, 0.9f)
-                val angularVel = (speed / 25f) * (twoPi / 4f)
-                phase += angularVel * 0.033f
-                if (phase > twoPi) phase -= twoPi
-                val orbitOffset = kotlin.math.sin(phase) * panAmount
-                val finalBalance = (manualBalance + orbitOffset).coerceIn(-1f, 1f)
-                val attenuation = 1f / (1f + distance * 0.12f)
-                balanceAudioProcessor.setBalance(finalBalance)
-                gainAudioProcessor.setGain(manualGain * attenuation)
-                delay(33)
             }
         }
     }
 
     private fun applyEffectsToCurrentSession(settings: EqualizerSettings) {
         val eq = equalizer
-        val virt = virtualizer
-        if (eq != null && virt != null) {
+        if (eq != null) {
             runCatching {
                 audioEffectController.applyTo(eq, settings)
-                if (settings.enabled) {
-                    virt.enabled = true
-                    virt.setStrength(settings.virtualizerStrength.toShort())
-                } else {
-                    virt.enabled = false
-                }
             }.onFailure { e ->
                 Log.w("PlaybackService", "apply equalizer failed (sessionId=$currentAudioSessionId)", e)
-            }
-        }
-
-        val rev = reverb
-        if (rev != null) {
-            runCatching { applyReverb(rev, settings) }.onFailure { e ->
-                Log.w("PlaybackService", "apply reverb failed (sessionId=$currentAudioSessionId)", e)
-            }
-        }
-    }
-
-    private fun applyReverb(reverb: EnvironmentalReverb, settings: EqualizerSettings) {
-        val enabled = settings.reverbEnabled && settings.reverbPreset != "无"
-        if (reverb.enabled != enabled) reverb.enabled = enabled
-        if (!enabled) return
-        val wet = settings.reverbWet.coerceIn(0, 100)
-        val wetMb = (-9000 + wet * 90).coerceIn(-9000, 0)
-        val roomMb = (wetMb - 1200).coerceIn(-9000, 0)
-        reverb.reverbLevel = wetMb.toShort()
-        reverb.roomLevel = roomMb.toShort()
-        when (settings.reverbPreset) {
-            "电话" -> {
-                reverb.decayTime = 260
-                reverb.decayHFRatio = 300
-                reverb.roomHFLevel = (-7000).toShort()
-                reverb.reflectionsLevel = (roomMb - 800).toShort()
-                reverb.reflectionsDelay = 5
-                reverb.reverbDelay = 12
-                reverb.diffusion = 250
-                reverb.density = 200
-            }
-            "教堂" -> {
-                reverb.decayTime = 5200
-                reverb.decayHFRatio = 850
-                reverb.roomHFLevel = (-2500).toShort()
-                reverb.reflectionsLevel = (roomMb - 600).toShort()
-                reverb.reflectionsDelay = 18
-                reverb.reverbDelay = 35
-                reverb.diffusion = 1000
-                reverb.density = 1000
-            }
-            "大厅" -> {
-                reverb.decayTime = 2600
-                reverb.decayHFRatio = 700
-                reverb.roomHFLevel = (-3200).toShort()
-                reverb.reflectionsLevel = (roomMb - 700).toShort()
-                reverb.reflectionsDelay = 12
-                reverb.reverbDelay = 26
-                reverb.diffusion = 900
-                reverb.density = 900
-            }
-            "电影院" -> {
-                reverb.decayTime = 1200
-                reverb.decayHFRatio = 600
-                reverb.roomHFLevel = (-4200).toShort()
-                reverb.reflectionsLevel = (roomMb - 900).toShort()
-                reverb.reflectionsDelay = 10
-                reverb.reverbDelay = 20
-                reverb.diffusion = 700
-                reverb.density = 800
-            }
-            "餐厅" -> {
-                reverb.decayTime = 850
-                reverb.decayHFRatio = 550
-                reverb.roomHFLevel = (-4800).toShort()
-                reverb.reflectionsLevel = (roomMb - 1000).toShort()
-                reverb.reflectionsDelay = 8
-                reverb.reverbDelay = 16
-                reverb.diffusion = 600
-                reverb.density = 650
-            }
-            "卫生间" -> {
-                reverb.decayTime = 1600
-                reverb.decayHFRatio = 900
-                reverb.roomHFLevel = (-600).toShort()
-                reverb.reflectionsLevel = (roomMb - 500).toShort()
-                reverb.reflectionsDelay = 6
-                reverb.reverbDelay = 14
-                reverb.diffusion = 800
-                reverb.density = 850
-            }
-            "室内" -> {
-                reverb.decayTime = 520
-                reverb.decayHFRatio = 500
-                reverb.roomHFLevel = (-5200).toShort()
-                reverb.reflectionsLevel = (roomMb - 1100).toShort()
-                reverb.reflectionsDelay = 6
-                reverb.reverbDelay = 14
-                reverb.diffusion = 450
-                reverb.density = 500
-            }
-            "反馈弹簧" -> {
-                reverb.decayTime = 1400
-                reverb.decayHFRatio = 1000
-                reverb.roomHFLevel = (-900).toShort()
-                reverb.reflectionsLevel = (roomMb - 300).toShort()
-                reverb.reflectionsDelay = 3
-                reverb.reverbDelay = 8
-                reverb.diffusion = 1000
-                reverb.density = 900
             }
         }
     }
@@ -811,12 +687,9 @@ class PlaybackService : MediaSessionService() {
         overlay?.hide()
         statsJob?.cancel()
         effectApplyJob?.cancel()
-        orbitJob?.cancel()
         sleepTimerJob?.cancel()
         spectrumAnalyzer.stop()
         equalizer?.release()
-        virtualizer?.release()
-        reverb?.release()
         mediaSession?.run {
             player.release()
             release()

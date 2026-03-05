@@ -980,20 +980,24 @@ fun NowPlayingScreen(
                 containerColor = colorScheme.surface,
                 contentColor = colorScheme.onSurface
             ) {
-                EqualizerPanel(
-                    settings = eqSettings,
-                    customPresets = customPresets,
-                    onSettingsChanged = { viewModel.updateSessionEqualizer(it) },
-                    onSavePreset = { name -> viewModel.saveCustomPreset(name, eqSettings) },
-                    onDeletePreset = { viewModel.deleteCustomPreset(it) },
-                    playbackSpeed = playback.playbackSpeed,
-                    playbackPitch = playback.playbackPitch,
-                    onPlaybackSpeedChanged = { viewModel.setPlaybackParameters(it, playback.playbackPitch) },
-                    onPlaybackPitchChanged = { viewModel.setPlaybackParameters(playback.playbackSpeed, it) },
-                    modifier = Modifier
-                        .verticalScroll(rememberScrollState())
-                        .padding(bottom = 32.dp)
-                )
+                val scrollState = rememberScrollState()
+                Box(modifier = Modifier.fillMaxHeight()) {
+                    EqualizerPanel(
+                        settings = eqSettings,
+                        customPresets = customPresets,
+                        onSettingsChanged = { viewModel.updateSessionEqualizer(it) },
+                        onSavePreset = { name -> viewModel.saveCustomPreset(name, eqSettings) },
+                        onDeletePreset = { viewModel.deleteCustomPreset(it) },
+                        playbackSpeed = playback.playbackSpeed,
+                        playbackPitch = playback.playbackPitch,
+                        onPlaybackSpeedChanged = { viewModel.setPlaybackParameters(it, playback.playbackPitch) },
+                        onPlaybackPitchChanged = { viewModel.setPlaybackParameters(playback.playbackSpeed, it) },
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .verticalScroll(scrollState)
+                            .padding(bottom = 32.dp)
+                    )
+                }
             }
         }
     }

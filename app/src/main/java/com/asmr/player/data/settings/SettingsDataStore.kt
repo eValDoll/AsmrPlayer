@@ -44,6 +44,22 @@ object SettingsKeys {
     val FX_ORBIT_ENABLED = booleanPreferencesKey("fx_orbit_enabled")
     val FX_ORBIT_SPEED = floatPreferencesKey("fx_orbit_speed") // 0-50
     val FX_ORBIT_DISTANCE = floatPreferencesKey("fx_orbit_distance") // 0-10
+    val FX_ORBIT_AZIMUTH_DEG = floatPreferencesKey("fx_orbit_azimuth_deg") // 0-360
+
+    val FX_CHANNEL_ENABLED = booleanPreferencesKey("fx_channel_enabled")
+    val FX_CHANNEL_MODE = intPreferencesKey("fx_channel_mode")
+    val FX_VOLUME_THRESHOLD_ENABLED = booleanPreferencesKey("fx_volume_threshold_enabled")
+    val FX_VOLUME_THRESHOLD_MIN_DB = floatPreferencesKey("fx_volume_threshold_min_db")
+    val FX_VOLUME_THRESHOLD_MAX_DB = floatPreferencesKey("fx_volume_threshold_max_db")
+
+    val FX_STEREO_ENABLED = booleanPreferencesKey("fx_stereo_enabled")
+
+    val UI_FX_CHANNEL_EXPANDED = booleanPreferencesKey("ui_fx_channel_expanded")
+    val UI_FX_VOLUME_THRESHOLD_EXPANDED = booleanPreferencesKey("ui_fx_volume_threshold_expanded")
+    val UI_FX_SPEED_PITCH_ENABLED = booleanPreferencesKey("ui_fx_speed_pitch_enabled")
+    val UI_FX_SPEED_PITCH_EXPANDED = booleanPreferencesKey("ui_fx_speed_pitch_expanded")
+    val UI_FX_STEREO_EXPANDED = booleanPreferencesKey("ui_fx_stereo_expanded")
+    val UI_FX_EQUALIZER_EXPANDED = booleanPreferencesKey("ui_fx_equalizer_expanded")
 
     val SLEEP_TIMER_END_AT_MS = longPreferencesKey("sleep_timer_end_at_ms")
     val SLEEP_TIMER_LAST_DURATION_MIN = intPreferencesKey("sleep_timer_last_duration_min")

@@ -58,19 +58,45 @@ class SettingsRepository @Inject constructor(
         val orbitEnabled = prefs[SettingsKeys.FX_ORBIT_ENABLED] ?: false
         val orbitSpeed = prefs[SettingsKeys.FX_ORBIT_SPEED] ?: 25f
         val orbitDistance = prefs[SettingsKeys.FX_ORBIT_DISTANCE] ?: 5f
+        val channelMode = prefs[SettingsKeys.FX_CHANNEL_MODE] ?: 0
+        val channelEnabled = prefs[SettingsKeys.FX_CHANNEL_ENABLED] ?: (bal != 0f || channelMode != 0)
+        val channelExpanded = prefs[SettingsKeys.UI_FX_CHANNEL_EXPANDED] ?: true
+        val vtEnabled = prefs[SettingsKeys.FX_VOLUME_THRESHOLD_ENABLED] ?: false
+        val vtMinDb = prefs[SettingsKeys.FX_VOLUME_THRESHOLD_MIN_DB] ?: -24f
+        val vtMaxDb = prefs[SettingsKeys.FX_VOLUME_THRESHOLD_MAX_DB] ?: -6f
+        val volumeThresholdExpanded = prefs[SettingsKeys.UI_FX_VOLUME_THRESHOLD_EXPANDED] ?: true
+        val stereoEnabled = prefs[SettingsKeys.FX_STEREO_ENABLED] ?: false
+        val stereoExpanded = prefs[SettingsKeys.UI_FX_STEREO_EXPANDED] ?: true
+        val orbitAzimuthDeg = prefs[SettingsKeys.FX_ORBIT_AZIMUTH_DEG] ?: 0f
+        val speedPitchEnabled = prefs[SettingsKeys.UI_FX_SPEED_PITCH_ENABLED] ?: true
+        val speedPitchExpanded = prefs[SettingsKeys.UI_FX_SPEED_PITCH_EXPANDED] ?: true
+        val equalizerExpanded = prefs[SettingsKeys.UI_FX_EQUALIZER_EXPANDED] ?: true
         EqualizerSettings(
             enabled = enabled,
             bandLevels = levels,
             virtualizerStrength = virt,
+            channelEnabled = channelEnabled,
+            channelExpanded = channelExpanded,
             balance = bal,
             presetName = preset,
             originalGain = gain,
             reverbEnabled = reverbEnabled,
             reverbPreset = reverbPreset,
             reverbWet = reverbWet,
+            volumeThresholdExpanded = volumeThresholdExpanded,
+            stereoEnabled = stereoEnabled,
+            stereoExpanded = stereoExpanded,
             orbitEnabled = orbitEnabled,
             orbitSpeed = orbitSpeed,
-            orbitDistance = orbitDistance
+            orbitDistance = orbitDistance,
+            orbitAzimuthDeg = orbitAzimuthDeg,
+            channelMode = channelMode,
+            volumeThresholdEnabled = vtEnabled,
+            volumeThresholdMinDb = vtMinDb,
+            volumeThresholdMaxDb = vtMaxDb,
+            speedPitchEnabled = speedPitchEnabled,
+            speedPitchExpanded = speedPitchExpanded,
+            equalizerExpanded = equalizerExpanded
         )
     }
 
@@ -135,9 +161,22 @@ class SettingsRepository @Inject constructor(
                 prefs[SettingsKeys.FX_REVERB_ENABLED] = settings.reverbEnabled
                 prefs[SettingsKeys.FX_REVERB_PRESET] = settings.reverbPreset
                 prefs[SettingsKeys.FX_REVERB_WET] = settings.reverbWet
+                prefs[SettingsKeys.FX_STEREO_ENABLED] = settings.stereoEnabled
                 prefs[SettingsKeys.FX_ORBIT_ENABLED] = settings.orbitEnabled
                 prefs[SettingsKeys.FX_ORBIT_SPEED] = settings.orbitSpeed
                 prefs[SettingsKeys.FX_ORBIT_DISTANCE] = settings.orbitDistance
+                prefs[SettingsKeys.FX_ORBIT_AZIMUTH_DEG] = settings.orbitAzimuthDeg
+                prefs[SettingsKeys.FX_CHANNEL_ENABLED] = settings.channelEnabled
+                prefs[SettingsKeys.FX_CHANNEL_MODE] = settings.channelMode
+                prefs[SettingsKeys.FX_VOLUME_THRESHOLD_ENABLED] = settings.volumeThresholdEnabled
+                prefs[SettingsKeys.FX_VOLUME_THRESHOLD_MIN_DB] = settings.volumeThresholdMinDb
+                prefs[SettingsKeys.FX_VOLUME_THRESHOLD_MAX_DB] = settings.volumeThresholdMaxDb
+                prefs[SettingsKeys.UI_FX_CHANNEL_EXPANDED] = settings.channelExpanded
+                prefs[SettingsKeys.UI_FX_VOLUME_THRESHOLD_EXPANDED] = settings.volumeThresholdExpanded
+                prefs[SettingsKeys.UI_FX_SPEED_PITCH_ENABLED] = settings.speedPitchEnabled
+                prefs[SettingsKeys.UI_FX_SPEED_PITCH_EXPANDED] = settings.speedPitchExpanded
+                prefs[SettingsKeys.UI_FX_STEREO_EXPANDED] = settings.stereoExpanded
+                prefs[SettingsKeys.UI_FX_EQUALIZER_EXPANDED] = settings.equalizerExpanded
             }
         }
     }

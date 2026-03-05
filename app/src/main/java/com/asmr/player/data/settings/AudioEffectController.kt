@@ -12,15 +12,28 @@ data class EqualizerSettings(
     val enabled: Boolean = false,
     val bandLevels: List<Int> = List(10) { 0 },
     val virtualizerStrength: Int = 0,
+    val channelEnabled: Boolean = false,
+    val channelExpanded: Boolean = true,
     val balance: Float = 0f,
     val presetName: String = "默认",
     val originalGain: Float = 1f,
     val reverbEnabled: Boolean = false,
     val reverbPreset: String = "无",
     val reverbWet: Int = 0,
+    val volumeThresholdExpanded: Boolean = true,
+    val stereoEnabled: Boolean = false,
+    val stereoExpanded: Boolean = true,
     val orbitEnabled: Boolean = false,
     val orbitSpeed: Float = 25f,
-    val orbitDistance: Float = 5f
+    val orbitDistance: Float = 5f,
+    val orbitAzimuthDeg: Float = 0f,
+    val channelMode: Int = 0,
+    val volumeThresholdEnabled: Boolean = false,
+    val volumeThresholdMinDb: Float = -24f,
+    val volumeThresholdMaxDb: Float = -6f,
+    val speedPitchEnabled: Boolean = true,
+    val speedPitchExpanded: Boolean = true,
+    val equalizerExpanded: Boolean = true
 )
 
 @Singleton
@@ -40,19 +53,45 @@ class AudioEffectController @Inject constructor(
         val orbitEnabled = prefs[SettingsKeys.FX_ORBIT_ENABLED] ?: false
         val orbitSpeed = prefs[SettingsKeys.FX_ORBIT_SPEED] ?: 25f
         val orbitDistance = prefs[SettingsKeys.FX_ORBIT_DISTANCE] ?: 5f
+        val channelMode = prefs[SettingsKeys.FX_CHANNEL_MODE] ?: 0
+        val channelEnabled = prefs[SettingsKeys.FX_CHANNEL_ENABLED] ?: (bal != 0f || channelMode != 0)
+        val channelExpanded = prefs[SettingsKeys.UI_FX_CHANNEL_EXPANDED] ?: true
+        val vtEnabled = prefs[SettingsKeys.FX_VOLUME_THRESHOLD_ENABLED] ?: false
+        val vtMinDb = prefs[SettingsKeys.FX_VOLUME_THRESHOLD_MIN_DB] ?: -24f
+        val vtMaxDb = prefs[SettingsKeys.FX_VOLUME_THRESHOLD_MAX_DB] ?: -6f
+        val volumeThresholdExpanded = prefs[SettingsKeys.UI_FX_VOLUME_THRESHOLD_EXPANDED] ?: true
+        val stereoEnabled = prefs[SettingsKeys.FX_STEREO_ENABLED] ?: false
+        val stereoExpanded = prefs[SettingsKeys.UI_FX_STEREO_EXPANDED] ?: true
+        val orbitAzimuthDeg = prefs[SettingsKeys.FX_ORBIT_AZIMUTH_DEG] ?: 0f
+        val speedPitchEnabled = prefs[SettingsKeys.UI_FX_SPEED_PITCH_ENABLED] ?: true
+        val speedPitchExpanded = prefs[SettingsKeys.UI_FX_SPEED_PITCH_EXPANDED] ?: true
+        val equalizerExpanded = prefs[SettingsKeys.UI_FX_EQUALIZER_EXPANDED] ?: true
         EqualizerSettings(
             enabled = enabled,
             bandLevels = levels,
             virtualizerStrength = virt,
+            channelEnabled = channelEnabled,
+            channelExpanded = channelExpanded,
             balance = bal,
             presetName = preset,
             originalGain = gain,
             reverbEnabled = reverbEnabled,
             reverbPreset = reverbPreset,
             reverbWet = reverbWet,
+            volumeThresholdExpanded = volumeThresholdExpanded,
+            stereoEnabled = stereoEnabled,
+            stereoExpanded = stereoExpanded,
             orbitEnabled = orbitEnabled,
             orbitSpeed = orbitSpeed,
-            orbitDistance = orbitDistance
+            orbitDistance = orbitDistance,
+            orbitAzimuthDeg = orbitAzimuthDeg,
+            channelMode = channelMode,
+            volumeThresholdEnabled = vtEnabled,
+            volumeThresholdMinDb = vtMinDb,
+            volumeThresholdMaxDb = vtMaxDb,
+            speedPitchEnabled = speedPitchEnabled,
+            speedPitchExpanded = speedPitchExpanded,
+            equalizerExpanded = equalizerExpanded
         )
     }
 

@@ -195,9 +195,16 @@ class PlayerViewModel @Inject constructor(
                         putBoolean("reverbEnabled", settings.reverbEnabled)
                         putString("reverbPreset", settings.reverbPreset)
                         putInt("reverbWet", settings.reverbWet)
+                        putBoolean("stereoEnabled", settings.stereoEnabled)
                         putBoolean("orbitEnabled", settings.orbitEnabled)
                         putFloat("orbitSpeed", settings.orbitSpeed)
                         putFloat("orbitDistance", settings.orbitDistance)
+                        putFloat("orbitAzimuthDeg", settings.orbitAzimuthDeg)
+                        putBoolean("channelEnabled", settings.channelEnabled)
+                        putInt("channelMode", settings.channelMode)
+                        putBoolean("volumeThresholdEnabled", settings.volumeThresholdEnabled)
+                        putFloat("volumeThresholdMinDb", settings.volumeThresholdMinDb)
+                        putFloat("volumeThresholdMaxDb", settings.volumeThresholdMaxDb)
                     }
                     playerConnection.sendCustomCommand("UPDATE_SESSION_EQ", bundle)
                 }
