@@ -31,7 +31,7 @@ Chinese version: [docs/landing_zh.md](docs/landing_zh.md)
 
 ## 📦 Downloads
 
-- Download from **GitHub Releases** (tag `v*`, latest: `v0.2.1`).
+- Download from **GitHub Releases** (tag `v*`, latest: `v0.2.2`).
 
 ---
 
