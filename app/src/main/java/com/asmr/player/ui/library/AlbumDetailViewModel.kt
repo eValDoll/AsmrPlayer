@@ -595,15 +595,34 @@ class AlbumDetailViewModel @Inject constructor(
                 val dlsiteInfo = dlsiteWorkInfo?.album
                 val dlsiteGalleryUrls = dlsiteWorkInfo?.galleryUrls.orEmpty()
                 
-                val circleWorks = dlsiteRecommendationsFromV2.circleWorks.takeIf { it.isNotEmpty() }
-                    ?: dlsiteWorkInfo?.recommendations?.circleWorks
-                    ?: emptyList()
-                val sameVoiceWorks = dlsiteRecommendationsFromV2.sameVoiceWorks.takeIf { it.isNotEmpty() }
-                    ?: dlsiteWorkInfo?.recommendations?.sameVoiceWorks
-                    ?: emptyList()
-                val alsoBoughtWorks = dlsiteRecommendationsFromV2.alsoBoughtWorks.takeIf { it.isNotEmpty() }
-                    ?: dlsiteWorkInfo?.recommendations?.alsoBoughtWorks
-                    ?: emptyList()
+                fun mergePreferNonBlank(
+                    primary: List<DlsiteRecommendedWork>,
+                    secondary: List<DlsiteRecommendedWork>
+                ): List<DlsiteRecommendedWork> {
+                    if (primary.isEmpty()) return secondary
+                    if (secondary.isEmpty()) return primary
+                    val secondaryById = secondary.associateBy { it.rjCode.trim().uppercase() }
+                    val merged = primary.map { p ->
+                        val s = secondaryById[p.rjCode.trim().uppercase()]
+                        if (s == null) {
+                            p
+                        } else {
+                            p.copy(
+                                title = p.title.ifBlank { s.title },
+                                coverUrl = p.coverUrl.ifBlank { s.coverUrl },
+                                ribbon = p.ribbon ?: s.ribbon
+                            )
+                        }
+                    }
+                    val existing = merged.mapTo(hashSetOf()) { it.rjCode.trim().uppercase() }
+                    val appended = secondary.filter { it.rjCode.trim().uppercase() !in existing }
+                    return (merged + appended).distinctBy { it.rjCode.trim().uppercase() }
+                }
+
+                val fallbackRecs = dlsiteWorkInfo?.recommendations ?: DlsiteRecommendations()
+                val circleWorks = mergePreferNonBlank(dlsiteRecommendationsFromV2.circleWorks, fallbackRecs.circleWorks)
+                val sameVoiceWorks = mergePreferNonBlank(dlsiteRecommendationsFromV2.sameVoiceWorks, fallbackRecs.sameVoiceWorks)
+                val alsoBoughtWorks = mergePreferNonBlank(dlsiteRecommendationsFromV2.alsoBoughtWorks, fallbackRecs.alsoBoughtWorks)
                 
                 val dlsiteRecommendationsRaw = DlsiteRecommendations(
                     circleWorks = circleWorks,
