@@ -6,25 +6,39 @@ plugins {
     id("androidx.baselineprofile")
 }
 
+import java.util.Properties
+
 android {
     namespace = "com.asmr.player"
     compileSdk = 34
 
+    val earaKeystoreProps =
+        Properties().apply {
+            val propsFile = rootProject.file("keystore.properties")
+            if (propsFile.isFile) {
+                propsFile.inputStream().use { load(it) }
+            }
+        }
+
     val earaReleaseStoreFile =
         System.getenv("EARA_RELEASE_STORE_FILE")
             ?: (project.findProperty("EARA_RELEASE_STORE_FILE") as? String)
+            ?: earaKeystoreProps.getProperty("EARA_RELEASE_STORE_FILE")
             ?: "eara-release.jks"
     val earaReleaseStorePassword =
         System.getenv("EARA_RELEASE_STORE_PASSWORD")
             ?: (project.findProperty("EARA_RELEASE_STORE_PASSWORD") as? String)
+            ?: earaKeystoreProps.getProperty("EARA_RELEASE_STORE_PASSWORD")
             ?: ""
     val earaReleaseKeyAlias =
         System.getenv("EARA_RELEASE_KEY_ALIAS")
             ?: (project.findProperty("EARA_RELEASE_KEY_ALIAS") as? String)
+            ?: earaKeystoreProps.getProperty("EARA_RELEASE_KEY_ALIAS")
             ?: ""
     val earaReleaseKeyPassword =
         System.getenv("EARA_RELEASE_KEY_PASSWORD")
             ?: (project.findProperty("EARA_RELEASE_KEY_PASSWORD") as? String)
+            ?: earaKeystoreProps.getProperty("EARA_RELEASE_KEY_PASSWORD")
             ?: ""
 
     signingConfigs {
