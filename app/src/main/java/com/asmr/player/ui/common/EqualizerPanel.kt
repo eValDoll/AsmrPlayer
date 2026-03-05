@@ -255,12 +255,16 @@ fun EqualizerPanel(
 
     fun updateVolumeThreshold(
         enabled: Boolean? = null,
+        mode: Int? = null,
         minDb: Float? = null,
-        maxDb: Float? = null
+        maxDb: Float? = null,
+        loudnessTargetDb: Float? = null
     ) {
         val nextEnabled = enabled ?: settings.volumeThresholdEnabled
+        val nextMode = (mode ?: settings.volumeThresholdMode).coerceIn(0, 1)
         var nextMin = minDb ?: settings.volumeThresholdMinDb
         var nextMax = maxDb ?: settings.volumeThresholdMaxDb
+        val nextLoudnessTargetDb = (loudnessTargetDb ?: settings.volumeLoudnessTargetDb).coerceIn(-60f, 0f)
         nextMin = nextMin.coerceIn(-60f, 0f)
         nextMax = nextMax.coerceIn(-60f, 0f)
         if (nextMin >= nextMax) {
@@ -273,8 +277,10 @@ fun EqualizerPanel(
         onSettingsChanged(
             settings.copy(
                 volumeThresholdEnabled = nextEnabled,
+                volumeThresholdMode = nextMode,
                 volumeThresholdMinDb = nextMin,
-                volumeThresholdMaxDb = nextMax
+                volumeThresholdMaxDb = nextMax,
+                volumeLoudnessTargetDb = nextLoudnessTargetDb
             )
         )
     }
@@ -331,55 +337,119 @@ fun EqualizerPanel(
         Text("音效器", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
 
         val vtEnabled = settings.volumeThresholdEnabled
+        val vtMode = settings.volumeThresholdMode
+        val defaultVtMode = 1
+        val defaultVtMinDb = -24f
+        val defaultVtMaxDb = -6f
+        val defaultVtTargetDb = -18f
         ModuleCard(
             title = "音量阈值",
             enabled = vtEnabled,
             onEnabledChange = { updateVolumeThreshold(enabled = it) },
             expanded = settings.volumeThresholdExpanded,
             onExpandedChange = { onSettingsChanged(settings.copy(volumeThresholdExpanded = it)) },
-            onReset = { updateVolumeThreshold(enabled = false, minDb = -24f, maxDb = -6f) },
-            resetEnabled = vtEnabled
+            onReset = { updateVolumeThreshold(mode = defaultVtMode, minDb = defaultVtMinDb, maxDb = defaultVtMaxDb, loudnessTargetDb = defaultVtTargetDb) },
+            resetEnabled = vtEnabled ||
+                settings.volumeThresholdMode != defaultVtMode ||
+                settings.volumeThresholdMinDb != defaultVtMinDb ||
+                settings.volumeThresholdMaxDb != defaultVtMaxDb ||
+                settings.volumeLoudnessTargetDb != defaultVtTargetDb
         ) {
-            Column {
-                Row {
-                    Text("最小阈值", style = MaterialTheme.typography.labelMedium, color = colorScheme.primary)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    InfoTip(
-                        key = "vt_min",
-                        title = "最小阈值",
-                        text = "当音量低于该值时，会自动放大到接近该阈值。"
-                    )
-                    Spacer(modifier = Modifier.weight(1f))
-                    Text(String.format("%.0f dBFS", settings.volumeThresholdMinDb), style = MaterialTheme.typography.labelSmall)
-                }
-                Slider(
-                    value = settings.volumeThresholdMinDb,
-                    onValueChange = { updateVolumeThreshold(minDb = it) },
-                    valueRange = -60f..0f,
-                    enabled = vtEnabled,
-                    colors = sliderColors
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("模式", style = MaterialTheme.typography.labelMedium, color = colorScheme.primary)
+                Spacer(modifier = Modifier.width(8.dp))
+                InfoTip(
+                    key = "vt_mode",
+                    title = "模式",
+                    text = "响度均衡：把整体响度拉向目标值，适合不同音频之间的音量统一；阈值：把响度限制在一个区间，更像自动增益+压制。"
                 )
             }
-
-            Column {
-                Row {
-                    Text("最大阈值", style = MaterialTheme.typography.labelMedium, color = colorScheme.primary)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    InfoTip(
-                        key = "vt_max",
-                        title = "最大阈值",
-                        text = "当音量高于该值时，会自动压制到不超过该阈值。"
+            val modeChipColors = FilterChipDefaults.filterChipColors(
+                selectedContainerColor = colorScheme.primary.copy(alpha = 0.18f),
+                selectedLabelColor = colorScheme.primary,
+                selectedLeadingIconColor = colorScheme.primary
+            )
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf(1 to "响度均衡", 0 to "阈值").forEach { (m, label) ->
+                    FilterChip(
+                        selected = vtMode == m,
+                        onClick = { updateVolumeThreshold(mode = m) },
+                        label = { Text(label) },
+                        enabled = true,
+                        colors = modeChipColors,
+                        border = FilterChipDefaults.filterChipBorder(
+                            enabled = true,
+                            selected = vtMode == m,
+                            borderColor = colorScheme.primary.copy(alpha = 0.22f),
+                            selectedBorderColor = colorScheme.primary
+                        )
                     )
-                    Spacer(modifier = Modifier.weight(1f))
-                    Text(String.format("%.0f dBFS", settings.volumeThresholdMaxDb), style = MaterialTheme.typography.labelSmall)
                 }
-                Slider(
-                    value = settings.volumeThresholdMaxDb,
-                    onValueChange = { updateVolumeThreshold(maxDb = it) },
-                    valueRange = -60f..0f,
-                    enabled = vtEnabled,
-                    colors = sliderColors
-                )
+            }
+
+            if (vtMode == 1) {
+                Column {
+                    Row {
+                        Text("目标响度", style = MaterialTheme.typography.labelMedium, color = colorScheme.primary)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        InfoTip(
+                            key = "vt_target",
+                            title = "目标响度",
+                            text = "把播放响度逐步拉向该目标值（变化更平滑，更适合不同音频之间的统一）。建议范围：-24 到 -14。"
+                        )
+                        Spacer(modifier = Modifier.weight(1f))
+                        Text(String.format("%.0f dBFS", settings.volumeLoudnessTargetDb), style = MaterialTheme.typography.labelSmall)
+                    }
+                    Slider(
+                        value = settings.volumeLoudnessTargetDb,
+                        onValueChange = { updateVolumeThreshold(loudnessTargetDb = it) },
+                        valueRange = -36f..-6f,
+                        enabled = vtEnabled,
+                        colors = sliderColors
+                    )
+                }
+            } else {
+                Column {
+                    Row {
+                        Text("最小阈值", style = MaterialTheme.typography.labelMedium, color = colorScheme.primary)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        InfoTip(
+                            key = "vt_min",
+                            title = "最小阈值",
+                            text = "当音量低于该值时，会自动放大到接近该阈值。"
+                        )
+                        Spacer(modifier = Modifier.weight(1f))
+                        Text(String.format("%.0f dBFS", settings.volumeThresholdMinDb), style = MaterialTheme.typography.labelSmall)
+                    }
+                    Slider(
+                        value = settings.volumeThresholdMinDb,
+                        onValueChange = { updateVolumeThreshold(minDb = it) },
+                        valueRange = -60f..0f,
+                        enabled = vtEnabled,
+                        colors = sliderColors
+                    )
+                }
+
+                Column {
+                    Row {
+                        Text("最大阈值", style = MaterialTheme.typography.labelMedium, color = colorScheme.primary)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        InfoTip(
+                            key = "vt_max",
+                            title = "最大阈值",
+                            text = "当音量高于该值时，会自动压制到不超过该阈值。"
+                        )
+                        Spacer(modifier = Modifier.weight(1f))
+                        Text(String.format("%.0f dBFS", settings.volumeThresholdMaxDb), style = MaterialTheme.typography.labelSmall)
+                    }
+                    Slider(
+                        value = settings.volumeThresholdMaxDb,
+                        onValueChange = { updateVolumeThreshold(maxDb = it) },
+                        valueRange = -60f..0f,
+                        enabled = vtEnabled,
+                        colors = sliderColors
+                    )
+                }
             }
         }
 

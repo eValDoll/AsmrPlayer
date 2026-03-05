@@ -49,8 +49,10 @@ object SettingsKeys {
     val FX_CHANNEL_ENABLED = booleanPreferencesKey("fx_channel_enabled")
     val FX_CHANNEL_MODE = intPreferencesKey("fx_channel_mode")
     val FX_VOLUME_THRESHOLD_ENABLED = booleanPreferencesKey("fx_volume_threshold_enabled")
+    val FX_VOLUME_THRESHOLD_MODE = intPreferencesKey("fx_volume_threshold_mode")
     val FX_VOLUME_THRESHOLD_MIN_DB = floatPreferencesKey("fx_volume_threshold_min_db")
     val FX_VOLUME_THRESHOLD_MAX_DB = floatPreferencesKey("fx_volume_threshold_max_db")
+    val FX_VOLUME_LOUDNESS_TARGET_DB = floatPreferencesKey("fx_volume_loudness_target_db")
 
     val FX_STEREO_ENABLED = booleanPreferencesKey("fx_stereo_enabled")
 

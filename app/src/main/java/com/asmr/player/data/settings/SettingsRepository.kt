@@ -62,8 +62,10 @@ class SettingsRepository @Inject constructor(
         val channelEnabled = prefs[SettingsKeys.FX_CHANNEL_ENABLED] ?: (bal != 0f || channelMode != 0)
         val channelExpanded = prefs[SettingsKeys.UI_FX_CHANNEL_EXPANDED] ?: true
         val vtEnabled = prefs[SettingsKeys.FX_VOLUME_THRESHOLD_ENABLED] ?: false
+        val vtMode = prefs[SettingsKeys.FX_VOLUME_THRESHOLD_MODE] ?: 1
         val vtMinDb = prefs[SettingsKeys.FX_VOLUME_THRESHOLD_MIN_DB] ?: -24f
         val vtMaxDb = prefs[SettingsKeys.FX_VOLUME_THRESHOLD_MAX_DB] ?: -6f
+        val loudnessTargetDb = prefs[SettingsKeys.FX_VOLUME_LOUDNESS_TARGET_DB] ?: -18f
         val volumeThresholdExpanded = prefs[SettingsKeys.UI_FX_VOLUME_THRESHOLD_EXPANDED] ?: true
         val stereoEnabled = prefs[SettingsKeys.FX_STEREO_ENABLED] ?: false
         val stereoExpanded = prefs[SettingsKeys.UI_FX_STEREO_EXPANDED] ?: true
@@ -92,8 +94,10 @@ class SettingsRepository @Inject constructor(
             orbitAzimuthDeg = orbitAzimuthDeg,
             channelMode = channelMode,
             volumeThresholdEnabled = vtEnabled,
+            volumeThresholdMode = vtMode,
             volumeThresholdMinDb = vtMinDb,
             volumeThresholdMaxDb = vtMaxDb,
+            volumeLoudnessTargetDb = loudnessTargetDb,
             speedPitchEnabled = speedPitchEnabled,
             speedPitchExpanded = speedPitchExpanded,
             equalizerExpanded = equalizerExpanded
@@ -169,8 +173,10 @@ class SettingsRepository @Inject constructor(
                 prefs[SettingsKeys.FX_CHANNEL_ENABLED] = settings.channelEnabled
                 prefs[SettingsKeys.FX_CHANNEL_MODE] = settings.channelMode
                 prefs[SettingsKeys.FX_VOLUME_THRESHOLD_ENABLED] = settings.volumeThresholdEnabled
+                prefs[SettingsKeys.FX_VOLUME_THRESHOLD_MODE] = settings.volumeThresholdMode
                 prefs[SettingsKeys.FX_VOLUME_THRESHOLD_MIN_DB] = settings.volumeThresholdMinDb
                 prefs[SettingsKeys.FX_VOLUME_THRESHOLD_MAX_DB] = settings.volumeThresholdMaxDb
+                prefs[SettingsKeys.FX_VOLUME_LOUDNESS_TARGET_DB] = settings.volumeLoudnessTargetDb
                 prefs[SettingsKeys.UI_FX_CHANNEL_EXPANDED] = settings.channelExpanded
                 prefs[SettingsKeys.UI_FX_VOLUME_THRESHOLD_EXPANDED] = settings.volumeThresholdExpanded
                 prefs[SettingsKeys.UI_FX_SPEED_PITCH_ENABLED] = settings.speedPitchEnabled

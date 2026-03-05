@@ -1182,11 +1182,11 @@ private fun PlaybackControls(
                 }
 
                 val sliceEnabled = sliceUiState.sliceModeEnabled
-                val hasSlices = sliceUiState.slices.isNotEmpty()
                 val targetBg = if (sliceEnabled) primaryColor.copy(alpha = 0.18f) else Color.Transparent
                 val bg by animateColorAsState(targetValue = targetBg, animationSpec = tween(240, easing = FastOutSlowInEasing), label = "sliceModeBg")
+                val baseTint = colorScheme.onSurface.copy(alpha = 0.8f)
                 val tint by animateColorAsState(
-                    targetValue = if (sliceEnabled) primaryColor else colorScheme.onSurface.copy(alpha = if (hasSlices) 0.8f else 0.45f),
+                    targetValue = if (sliceEnabled) primaryColor else baseTint,
                     animationSpec = tween(240, easing = FastOutSlowInEasing),
                     label = "sliceModeTint"
                 )
