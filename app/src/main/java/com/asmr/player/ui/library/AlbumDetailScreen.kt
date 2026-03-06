@@ -81,6 +81,7 @@ import com.asmr.player.cache.CacheImageModel
 import com.asmr.player.data.remote.dlsite.DlsiteLanguageEdition
 import com.asmr.player.ui.dlsite.DlsitePlayViewModel
 import com.asmr.player.util.DlsiteAntiHotlink
+import com.asmr.player.util.SmartSortKey
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import android.webkit.CookieManager
@@ -1766,7 +1767,7 @@ private fun AlbumAsmrOneTab(
                                         val folderPath = entry.path.substringBeforeLast('/', "")
                                         val siblingLeaves = leafTracks.filter { it.relativePath.substringBeforeLast('/', "") == folderPath }
                                         val queueLeaves = siblingLeaves.ifEmpty { leafTracks }
-                                        val tracks = queueLeaves.sortedBy { it.title.lowercase() }.map { it.toTrack() }
+                                        val tracks = queueLeaves.sortedBy { SmartSortKey.of(it.title) }.map { it.toTrack() }
                                         com.asmr.player.util.OnlineLyricsStore.replaceAll(
                                             queueLeaves.associate { it.url to it.subtitles }
                                         )
@@ -1977,7 +1978,7 @@ private fun siblingAudioTracksForEntry(index: LocalTreeIndex, entryPath: String)
     return node.children.values
         .asSequence()
         .filter { it.children.isEmpty() && it.absolutePath != null && it.fileType == TreeFileType.Audio && it.track != null }
-        .sortedBy { it.name.lowercase() }
+        .sortedBy { SmartSortKey.of(it.name) }
         .mapNotNull { it.track }
         .toList()
 }
@@ -1989,7 +1990,7 @@ private fun siblingPlayableNodesForEntry(index: LocalTreeIndex, entryPath: Strin
         .asSequence()
         .filter { it.children.isEmpty() && it.absolutePath != null && (it.fileType == TreeFileType.Audio || it.fileType == TreeFileType.Video) }
         .filter { it.fileType != TreeFileType.Audio || it.track != null }
-        .sortedBy { it.name.lowercase() }
+        .sortedBy { SmartSortKey.of(it.name) }
         .toList()
 }
 
@@ -2314,7 +2315,7 @@ private fun flattenLocalTreeIndex(
     index: LocalTreeIndex,
     expanded: Set<String>
 ): LocalTreeUiResult {
-    fun nodeSortKey(n: LocalTreeNode): String = n.name.lowercase()
+    fun nodeSortKey(n: LocalTreeNode): SmartSortKey = SmartSortKey.of(n.name)
     val out = mutableListOf<LocalTreeUiEntry>()
 
     fun flatten(node: LocalTreeNode, depth: Int) {
@@ -3514,7 +3515,7 @@ private fun AlbumDlsiteInfoTab(
                                                 val folderPath = entry.path.substringBeforeLast('/', "")
                                                 val siblingLeaves = asmrLeafTracks.filter { it.relativePath.substringBeforeLast('/', "") == folderPath }
                                                 val queueLeaves = siblingLeaves.ifEmpty { listOf(start) }
-                                                val tracks = queueLeaves.sortedBy { it.title.lowercase() }.map { it.toTrack() }
+                                                val tracks = queueLeaves.sortedBy { SmartSortKey.of(it.title) }.map { it.toTrack() }
                                                 com.asmr.player.util.OnlineLyricsStore.replaceAll(
                                                     queueLeaves.associate { it.url to it.subtitles }
                                                 )
@@ -3897,7 +3898,7 @@ private fun AlbumDlsitePlayTreeTab(
                                                 val videoOk = file.fileType == TreeFileType.Video && !file.url.isNullOrBlank()
                                                 audioOk || videoOk
                                             }
-                                            .sortedBy { it.title.lowercase() }
+                                            .sortedBy { SmartSortKey.of(it.title) }
                                             .toList()
 
                                         val paired = siblings.mapNotNull { file ->
@@ -4073,7 +4074,7 @@ private fun FilePreviewDialog(
             }
             parent.listFiles()
                 ?.filter { it.isFile && exts.contains(it.extension.lowercase()) }
-                ?.sortedBy { it.name.lowercase() }
+                ?.sortedBy { SmartSortKey.of(it.name) }
                 ?.map { it.absolutePath }
                 ?.ifEmpty { listOf(absolutePath) }
                 ?: listOf(absolutePath)
