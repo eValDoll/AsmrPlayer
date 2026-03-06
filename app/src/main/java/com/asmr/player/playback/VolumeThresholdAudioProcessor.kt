@@ -35,10 +35,25 @@ class VolumeThresholdAudioProcessor : BaseAudioProcessor() {
 
     private var passthrough = false
     private var currentGain = 1f
+    private var limiterGain = 1f
     private var sampleRateHz = 44_100
     private val peakSafety = 0.95f
     private val boostNoiseFloorDb = -75f
-    private var loudnessEmaPower = 0.0
+    private val gateOpenDb = -70f
+    private val gateCloseDb = -75f
+    private var gateOpen = false
+    private var momentaryEmaPower = 0.0
+    private var integratedEmaPower = 0.0
+    private var elapsedSec = 0.0
+
+    fun resetForNewItem() {
+        currentGain = 1f
+        limiterGain = 1f
+        gateOpen = false
+        momentaryEmaPower = 0.0
+        integratedEmaPower = 0.0
+        elapsedSec = 0.0
+    }
 
     fun setEnabled(enabled: Boolean) {
         this.enabled = enabled
@@ -67,9 +82,16 @@ class VolumeThresholdAudioProcessor : BaseAudioProcessor() {
         passthrough =
             (inputAudioFormat.encoding != androidx.media3.common.C.ENCODING_PCM_16BIT &&
                 inputAudioFormat.encoding != androidx.media3.common.C.ENCODING_PCM_FLOAT)
-        currentGain = 1f
-        loudnessEmaPower = 0.0
+        resetForNewItem()
         return inputAudioFormat
+    }
+
+    override fun onFlush() {
+        resetForNewItem()
+    }
+
+    override fun onReset() {
+        resetForNewItem()
     }
 
     override fun queueInput(inputBuffer: ByteBuffer) {
@@ -99,18 +121,28 @@ class VolumeThresholdAudioProcessor : BaseAudioProcessor() {
 
         val modeSnapshot = mode
         val minGain = 0.125f
+        if (db >= gateOpenDb) gateOpen = true
+        if (db <= gateCloseDb) gateOpen = false
+
+        if (dtSec > 0.0) elapsedSec += dtSec
+
         var desiredGain = when (modeSnapshot) {
             MODE_LOUDNESS -> {
-                if (dtSec > 0.0 && db > boostNoiseFloorDb) {
+                if (dtSec > 0.0 && gateOpen) {
                     val power = (rms * rms).toDouble()
-                    val tauSec = 1.5
-                    val alpha = exp(-dtSec / tauSec)
-                    loudnessEmaPower = if (loudnessEmaPower <= 0.0) power else (loudnessEmaPower * alpha + power * (1.0 - alpha))
+                    val alphaMomentary = exp(-dtSec / 0.4)
+                    val alphaIntegrated = exp(-dtSec / 3.0)
+                    momentaryEmaPower =
+                        if (momentaryEmaPower <= 0.0) power else (momentaryEmaPower * alphaMomentary + power * (1.0 - alphaMomentary))
+                    integratedEmaPower =
+                        if (integratedEmaPower <= 0.0) power else (integratedEmaPower * alphaIntegrated + power * (1.0 - alphaIntegrated))
                 }
-                val loudDb = if (loudnessEmaPower <= 1e-12) -120f else (10f * log10(loudnessEmaPower.toFloat()))
+                val loudPower =
+                    if (elapsedSec < 2.0) momentaryEmaPower.coerceAtLeast(0.0) else integratedEmaPower.coerceAtLeast(0.0)
+                val loudDb = if (loudPower <= 1e-12) -120f else (10f * log10(loudPower.toFloat()))
                 val deltaDb = loudnessTargetDb - loudDb
                 var g = dbToGain(deltaDb).coerceIn(minGain, 8f)
-                if (db <= boostNoiseFloorDb && g > 1f) g = 1f
+                if (!gateOpen && g > 1f) g = 1f
                 g
             }
             else -> {
@@ -118,7 +150,7 @@ class VolumeThresholdAudioProcessor : BaseAudioProcessor() {
                 val maxT = maxDb
                 val desiredGainDb = when {
                     db > maxT -> (maxT - db)
-                    db < minT && db > boostNoiseFloorDb -> (minT - db)
+                    db < minT && gateOpen -> (minT - db)
                     else -> 0f
                 }
                 dbToGain(desiredGainDb).coerceIn(minGain, 8f)
@@ -130,41 +162,53 @@ class VolumeThresholdAudioProcessor : BaseAudioProcessor() {
             desiredGain = minOf(desiredGain, peakCap)
         }
 
-        if (desiredGain == 1f && currentGain == 1f) {
+        if (!gateOpen && desiredGain > 1f) desiredGain = 1f
+        val attackMs = if (modeSnapshot == MODE_LOUDNESS) 300.0 else 30.0
+        val releaseMs = if (modeSnapshot == MODE_LOUDNESS) 3_000.0 else 200.0
+        val (maxUpDbPerSec, maxDownDbPerSec) = if (modeSnapshot == MODE_LOUDNESS) 12f to 24f else 6f to 18f
+        val gainEnd =
+            limitGainSlew(
+                current = currentGain,
+                target = smoothToward(currentGain, desiredGain, dtSec, attackMs, releaseMs),
+                dtSec = dtSec,
+                maxUpDbPerSec = maxUpDbPerSec,
+                maxDownDbPerSec = maxDownDbPerSec,
+            ).coerceIn(minGain, 8f)
+
+        if (gainEnd == 1f && currentGain == 1f && limiterGain == 1f) {
             outputBuffer.put(inputBuffer)
             outputBuffer.flip()
             return
         }
 
-        val attackMs = if (modeSnapshot == MODE_LOUDNESS) 300.0 else 30.0
-        val releaseMs = if (modeSnapshot == MODE_LOUDNESS) 3_000.0 else 200.0
-        val sr = sampleRateHz
-        val alphaAttack = if (sr > 0) exp(-1.0 / (sr.toDouble() * (attackMs / 1000.0))).toFloat() else 0f
-        val alphaRelease = if (sr > 0) exp(-1.0 / (sr.toDouble() * (releaseMs / 1000.0))).toFloat() else 0f
-
-        var gain = currentGain
+        val limiterThreshold = peakSafety
+        val limiterReleaseMs = 80.0
+        val limiterReleaseAlpha = if (sampleRateHz > 0) exp(-1.0 / (sampleRateHz.toDouble() * (limiterReleaseMs / 1000.0))).toFloat() else 0f
 
         if (encoding == androidx.media3.common.C.ENCODING_PCM_FLOAT) {
-            while (inputBuffer.remaining() >= 4 * channels) {
-                val alpha = if (desiredGain < gain) alphaAttack else alphaRelease
-                gain = (desiredGain + (gain - desiredGain) * alpha).coerceIn(minGain, 8f)
-                repeat(channels) {
-                    val v = inputBuffer.float
-                    outputBuffer.putFloat((v * gain).coerceIn(-1f, 1f))
-                }
-            }
+            processFloat(
+                inputBuffer = inputBuffer,
+                outputBuffer = outputBuffer,
+                channels = channels,
+                frameCount = frameCount,
+                gainStart = currentGain,
+                gainEnd = gainEnd,
+                limiterThreshold = limiterThreshold,
+                limiterReleaseAlpha = limiterReleaseAlpha,
+            )
         } else {
-            while (inputBuffer.remaining() >= 2 * channels) {
-                val alpha = if (desiredGain < gain) alphaAttack else alphaRelease
-                gain = (desiredGain + (gain - desiredGain) * alpha).coerceIn(minGain, 8f)
-                repeat(channels) {
-                    val v = inputBuffer.short
-                    val out = (v * gain).toInt().coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt()).toShort()
-                    outputBuffer.putShort(out)
-                }
-            }
+            processShort(
+                inputBuffer = inputBuffer,
+                outputBuffer = outputBuffer,
+                channels = channels,
+                frameCount = frameCount,
+                gainStart = currentGain,
+                gainEnd = gainEnd,
+                limiterThreshold = limiterThreshold,
+                limiterReleaseAlpha = limiterReleaseAlpha,
+            )
         }
-        currentGain = gain
+        currentGain = gainEnd
         outputBuffer.flip()
     }
 
@@ -204,5 +248,128 @@ class VolumeThresholdAudioProcessor : BaseAudioProcessor() {
     private fun dbToGain(db: Float): Float {
         val dbDouble = db.toDouble()
         return exp(dbDouble * ln(10.0) / 20.0).toFloat()
+    }
+
+    private fun smoothToward(current: Float, target: Float, dtSec: Double, attackMs: Double, releaseMs: Double): Float {
+        if (dtSec <= 0.0) return target
+        val tauSec = if (target < current) (attackMs / 1000.0) else (releaseMs / 1000.0)
+        if (tauSec <= 0.0) return target
+        val alpha = exp(-dtSec / tauSec).toFloat()
+        return target + (current - target) * alpha
+    }
+
+    private fun limitGainSlew(
+        current: Float,
+        target: Float,
+        dtSec: Double,
+        maxUpDbPerSec: Float,
+        maxDownDbPerSec: Float,
+    ): Float {
+        if (dtSec <= 0.0) return target
+        val maxUp = dbToGain((maxUpDbPerSec * dtSec).toFloat())
+        val maxDown = dbToGain((maxDownDbPerSec * dtSec).toFloat())
+        val minAllowed = (current / maxDown).coerceAtMost(current)
+        val maxAllowed = (current * maxUp).coerceAtLeast(current)
+        return target.coerceIn(minAllowed, maxAllowed)
+    }
+
+    private fun processFloat(
+        inputBuffer: ByteBuffer,
+        outputBuffer: ByteBuffer,
+        channels: Int,
+        frameCount: Int,
+        gainStart: Float,
+        gainEnd: Float,
+        limiterThreshold: Float,
+        limiterReleaseAlpha: Float,
+    ) {
+        var gL = limiterGain
+        val frames = frameCount.coerceAtLeast(1)
+        val inv = if (frames <= 1) 0f else (1f / (frames - 1).toFloat())
+        val tmp = FloatArray(channels)
+        for (frame in 0 until frames) {
+            if (inputBuffer.remaining() < 4 * channels) break
+            val t = frame * inv
+            val g = gainStart + (gainEnd - gainStart) * t
+
+            var peak = 0f
+            for (c in 0 until channels) {
+                val v = inputBuffer.float
+                tmp[c] = v
+                val av = kotlin.math.abs(v)
+                if (av > peak) peak = av
+            }
+
+            val predictedPeak = peak * g * gL
+            if (predictedPeak > limiterThreshold && predictedPeak > 1e-9f) {
+                val needed = (limiterThreshold / (peak * g)).coerceIn(0f, 1f)
+                gL = minOf(gL, needed)
+            } else {
+                gL = 1f + (gL - 1f) * limiterReleaseAlpha
+            }
+
+            for (c in 0 until channels) {
+                val out = tmp[c] * g * gL
+                outputBuffer.putFloat(softClip(out))
+            }
+        }
+        limiterGain = gL
+    }
+
+    private fun processShort(
+        inputBuffer: ByteBuffer,
+        outputBuffer: ByteBuffer,
+        channels: Int,
+        frameCount: Int,
+        gainStart: Float,
+        gainEnd: Float,
+        limiterThreshold: Float,
+        limiterReleaseAlpha: Float,
+    ) {
+        var gL = limiterGain
+        val frames = frameCount.coerceAtLeast(1)
+        val inv = if (frames <= 1) 0f else (1f / (frames - 1).toFloat())
+        val tmp = IntArray(channels)
+        for (frame in 0 until frames) {
+            if (inputBuffer.remaining() < 2 * channels) break
+            val t = frame * inv
+            val g = gainStart + (gainEnd - gainStart) * t
+
+            var peak = 0f
+            for (c in 0 until channels) {
+                val s = inputBuffer.short.toInt()
+                tmp[c] = s
+                val av = kotlin.math.abs(s).toFloat() / 32768f
+                if (av > peak) peak = av
+            }
+
+            val predictedPeak = peak * g * gL
+            if (predictedPeak > limiterThreshold && predictedPeak > 1e-9f) {
+                val needed = (limiterThreshold / (peak * g)).coerceIn(0f, 1f)
+                gL = minOf(gL, needed)
+            } else {
+                gL = 1f + (gL - 1f) * limiterReleaseAlpha
+            }
+
+            for (c in 0 until channels) {
+                val v = tmp[c].toFloat() / 32768f
+                val out = softClip(v * g * gL)
+                val sOut = (out * 32767f).toInt().coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt()).toShort()
+                outputBuffer.putShort(sOut)
+            }
+        }
+        limiterGain = gL
+    }
+
+    private fun softClip(v: Float): Float {
+        val a = kotlin.math.abs(v)
+        val t = 0.98f
+        if (a <= t) return v
+        val sign = if (v < 0f) -1f else 1f
+        val x = ((a - t) / (1f - t)).coerceIn(0f, 8f)
+        val k = 2.0
+        val shaped = (1f - exp((-k * x).toDouble()).toFloat()).coerceIn(0f, 1f)
+        val y = t + (1f - t) * shaped
+        return (sign * y).coerceIn(-1f, 1f)
     }
 }
