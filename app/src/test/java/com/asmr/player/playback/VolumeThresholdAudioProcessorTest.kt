@@ -74,6 +74,30 @@ class VolumeThresholdAudioProcessorTest {
         assertTrue("loudness not close to target: db=$db", db > -22f && db < -14f)
     }
 
+    @Test
+    fun resetForNewItemClearsCarryoverGain() {
+        val processor = VolumeThresholdAudioProcessor().apply { setEnabled(true) }
+        processor.setMode(VolumeThresholdAudioProcessor.MODE_LOUDNESS)
+        processor.setLoudnessTargetDb(-18f)
+        processor.configure(AudioFormat(48_000, 2, C.ENCODING_PCM_FLOAT))
+        processor.flush()
+
+        val framesPerBuffer = 4_800
+        val buffers = 30
+        val inSamples = FloatArray(framesPerBuffer * 2) { 0.05f }
+        var out = FloatArray(0)
+        repeat(buffers) {
+            out = processFloat(processor, inSamples)
+        }
+        val rmsBefore = computeRms(out)
+
+        processor.resetForNewItem()
+        val outAfter = processFloat(processor, inSamples)
+        val rmsAfter = computeRms(outAfter)
+
+        assertTrue("reset did not reduce gain enough: before=$rmsBefore after=$rmsAfter", rmsAfter < rmsBefore * 0.85f)
+    }
+
     private fun processFloat(processor: VolumeThresholdAudioProcessor, samples: FloatArray): FloatArray {
         val input = ByteBuffer.allocateDirect(samples.size * 4).order(ByteOrder.LITTLE_ENDIAN)
         for (v in samples) input.putFloat(v)

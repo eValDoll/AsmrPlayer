@@ -342,6 +342,7 @@ class PlaybackService : MediaSessionService() {
                 }
                 
                 // Reset track stats for new item
+                volumeThresholdAudioProcessor.resetForNewItem()
                 currentMediaId = mediaItem?.mediaId
                 currentTrackListenedMs = 0L
                 isCurrentTrackCounted = false
